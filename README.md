@@ -74,6 +74,7 @@ Once installed, Claude Code will automatically load these configurations. The sy
 ### Memory Management
 
 The system automatically sets up persistent memory using:
+
 - `engineering-log.md`: Chronological work journal
 - `architecture-decisions.md`: Design choices and rationale
 - `patterns-discovered.md`: Discovered code patterns
