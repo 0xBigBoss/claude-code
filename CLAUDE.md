@@ -15,21 +15,114 @@ Follow these instructions in every interaction without exception.
 ALWAYS follow this workflow:
 
 1. **Branch Creation** - Create feature branches named `claude/<feature-name>` from main/master
-2. **Code Search** - Use `ast-grep --lang <language> -p '<pattern>'` for syntax-aware searching (not text search)
-3. **Test-Driven Development**
+2. **Test-Driven Development**
    - Write failing tests FIRST
    - Verify tests fail for the correct reason
    - Implement code to make tests pass
    - Include unit AND integration tests
-4. **Quality Checks** - Run tests, linting, type checking, and build validation
-5. **Changesets** - Add changesets for public API/behavioral changes using past tense
-6. **Commits** - Use conventional commit format (`feat:`, `fix:`, `refactor:`)
+3. **Quality Checks** - Run tests, linting, type checking, and build validation
+4. **Changesets** - Add changesets for public API/behavioral changes using past tense
+5. **Commits** - Use conventional commit format (`feat:`, `fix:`, `refactor:`)
 
 ## Coding Standards
 
 ### Error Handling
 
 NEVER leave empty functions or silent failures. ALWAYS throw explicit errors with descriptive messages.
+
+<examples>
+<example>
+Python - Instead of:
+
+```python
+def build_widget(widget_type):
+    # TODO: Implement widget_type-specific logic
+```
+
+Use:
+
+```python
+def build_widget(widget_type):
+    raise NotImplementedError(f"TODO: Implement widget_type-specific logic")
+```
+
+</example>
+<example>
+JavaScript - Instead of:
+
+```javascript
+function buildWidget(widgetType) {
+    // TODO: Implement widget_type-specific logic
+}
+```
+
+Use:
+
+```javascript
+function buildWidget(widgetType) {
+    throw new Error(`TODO: Implement widget_type-specific logic`);
+}
+```
+
+</example>
+<example>
+Java - Instead of:
+
+```java
+public Widget buildWidget(String widgetType) {
+    // TODO: Implement widget_type-specific logic
+    return null;
+}
+```
+
+Use:
+
+```java
+public Widget buildWidget(String widgetType) {
+    throw new UnsupportedOperationException("TODO: Implement widget_type-specific logic");
+}
+```
+
+</example>
+<example>
+Go - Instead of:
+
+```go
+func buildWidget(widgetType string) *Widget {
+    // TODO: Implement widget_type-specific logic
+    return nil
+}
+```
+
+Use:
+
+```go
+func buildWidget(widgetType string) *Widget {
+    panic("TODO: Implement widget_type-specific logic")
+}
+```
+
+</example>
+<example>
+Rust - Instead of:
+
+```rust
+fn build_widget(widget_type: &str) -> Widget {
+    // TODO: Implement widget_type-specific logic
+    unimplemented!()
+}
+```
+
+Use:
+
+```rust
+fn build_widget(widget_type: &str) -> Widget {
+    unimplemented!("TODO: Implement widget_type-specific logic")
+}
+```
+
+</example>
+</examples>
 
 ### Logging
 
@@ -42,6 +135,81 @@ Implement conditional logging using project's existing logger or language-approp
 - Rust: `log` crate with `env_logger`
 
 ALWAYS namespace loggers and log function entry/exit, key parameters, and decision points.
+
+<examples>
+<example>
+JavaScript:
+
+```javascript
+import debugBase from "debug";
+
+const debug = debugBase("my-app:actions");
+
+function doAction(action) {
+  debug("Performing action: %s", action);
+}
+```
+
+</example>
+<example>
+Python:
+
+```python
+import logging
+
+logger = logging.getLogger("my-app.actions")
+
+def do_action(action):
+    logger.debug("Performing action: %s", action)
+```
+
+</example>
+<example>
+Java:
+
+```java
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+private static final Logger logger = LoggerFactory.getLogger("my-app.actions");
+
+public void doAction(String action) {
+    logger.debug("Performing action: {}", action);
+}
+```
+
+</example>
+<example>
+Go:
+
+```go
+import "log/slog"
+
+var logger = slog.With("component", "my-app.actions")
+
+func doAction(action string) {
+    logger.Debug("Performing action", "action", action)
+}
+```
+
+</example>
+<example>
+Rust:
+
+```rust
+use log::debug;
+
+fn do_action(action: &str) {
+    debug!("Performing action: {}", action);
+}
+```
+
+</example>
+</examples>
+
+### Comments
+
+Use comments sparingly and only when necessary.
 
 ## Documentation Style
 
