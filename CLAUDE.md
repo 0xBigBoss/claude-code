@@ -4,9 +4,11 @@ Follow these instructions in every interaction without exception.
 
 ## Core Principles
 
-1. **Always use available tools** - Search for documentation, verify assumptions, validate approaches
-2. **Ask clarifying questions immediately** - Request 1-2 specific details if the task is ambiguous
-3. **Maintain project memory** - Set up and continuously update `.memory/` files to preserve context between sessions
+1. **Work Idiomatically and Safely** - Understand and adopt project conventions, style, architecture before making changes. Prioritize project coherence over abstract "correctness"
+2. **Fail Fast with Visible Evidence** - Build simplest implementation/test to validate understanding. Use concrete results (tests, prototypes, code) as communication method rather than discussion
+3. **Always Use Available Tools** - Search for documentation, verify assumptions, validate approaches. Essential mechanism for executing evidence-based development
+4. **Verify All Changes with Project Tooling** - Run tests, linters, builds to prove changes work. Close feedback loop and ensure quality integration
+5. **Maintain Project Memory** - Set up and continuously update `.memory/` files to preserve context between sessions. Support all principles through context preservation
 
 ## Development Workflow
 
@@ -26,10 +28,13 @@ ALWAYS follow this workflow:
 ## Coding Standards
 
 ### Error Handling
+
 NEVER leave empty functions or silent failures. ALWAYS throw explicit errors with descriptive messages.
 
 ### Logging
+
 Implement conditional logging using project's existing logger or language-appropriate defaults:
+
 - JavaScript: `debuglog` or 'debug' package
 - Python: `logging` module
 - Java: SLF4J with Logback
@@ -41,48 +46,71 @@ ALWAYS namespace loggers and log function entry/exit, key parameters, and decisi
 ## Documentation Style
 
 ### Technical Documentation
+
 - Use third person: "The SDK provides..." NOT "We provide..."
 
 ### Instructions
+
 - Use second person: "You can install..." NOT "One can install..."
 
 ### NEVER use first person
+
 - ❌ "We implemented..."
 - ✅ "The feature implements..."
 
-## Project Memory & Engineering Notebook
+## Project Memory Bank System
 
-### ⚠️ CRITICAL SETUP - MUST DO IMMEDIATELY ⚠️
+### ⚠️ CRITICAL SETUP - MEMORY BANK INITIALIZATION ⚠️
 
-**FAILURE TO SET UP IMPORTS = FORGOTTEN MEMORIES BETWEEN SESSIONS**
+**Transform Claude from a stateless assistant into a persistent development partner**
 
-When starting work on ANY project, you MUST:
+When starting work on ANY project, you MUST establish a hierarchical memory bank:
 
 1. **Create memory folder and gitignore it:**
+
 ```bash
 mkdir -p .memory
 echo ".memory/" >> .gitignore
 ```
 
-2. **ADD THESE IMPORTS TO PROJECT CLAUDE.md - THIS IS NON-NEGOTIABLE:**
+2. **ADD THESE IMPORTS TO PROJECT CLAUDE.md - NON-NEGOTIABLE:**
+
 ```markdown
-# Project Memory Context
-@.memory/engineering-log.md
-@.memory/architecture-decisions.md
-@.memory/patterns-discovered.md
-@.memory/issues-solutions.md
-@.memory/todo-next-steps.md
+# Memory Bank Context (Load Order Matters)
+
+@.memory/projectbrief.md
+@.memory/productContext.md
+@.memory/activeContext.md
+@.memory/systemPatterns.md
+@.memory/techContext.md
+@.memory/progress.md
 ```
 
-**If you skip step 2, all memory updates will be lost between sessions!**
+**Skip step 2 = Complete memory loss between sessions**
 
-### Memory Management
+### Memory Bank Structure (Hierarchical Documentation)
 
-Create and maintain these files in `.memory/`:
-- **engineering-log.md** - Chronological work journal
-- **architecture-decisions.md** - Design choices and rationale  
-- **patterns-discovered.md** - Code patterns in the project
-- **issues-solutions.md** - Problems and their fixes
-- **todo-next-steps.md** - Pending tasks
+Create and maintain these core files in `.memory/` (files build upon each other):
 
-Update memory files after significant work. Use whatever format best captures the information - be concise but complete. The `.memory/` folder is your persistent engineering notebook that loads automatically via imports.
+#### Foundation Layer
+
+- **projectbrief.md** - Project foundation and high-level overview
+- **productContext.md** - Why the project exists, problem context, target users
+
+#### Current State Layer
+
+- **activeContext.md** - Current work focus, recent changes, immediate priorities
+- **progress.md** - Project status, completed milestones, known issues, blockers
+
+#### Technical Layer
+
+- **systemPatterns.md** - Architecture decisions, design patterns, code conventions
+- **techContext.md** - Technologies, dependencies, development setup, tooling
+
+### Memory Bank Principles
+
+1. **Treat every memory reset as documentation opportunity** - After reset, memory bank is the only link to previous work
+2. **Encourage organic documentation** - Let documentation emerge naturally during development
+3. **Maintain living documentation** - Update after significant changes using "update memory bank" commands
+4. **Build hierarchical context** - Files create complete project picture when read in order
+5. **Start simple, evolve naturally** - Begin with basic project brief, expand as needed

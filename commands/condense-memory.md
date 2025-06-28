@@ -1,28 +1,32 @@
-# Condense and Reorganize Engineering Memory
+# Condense and Reorganize Memory Bank
 
-You are tasked with condensing and reorganizing the `.memory/` files to maintain performance while preserving critical context. The engineering log has grown beyond 40k characters and needs intelligent consolidation.
+You are tasked with condensing and reorganizing the `.memory/` files to maintain performance while preserving critical context. When memory files exceed 30K characters, they need intelligent consolidation.
 
 ## Instructions:
 
-1. **Read all memory files** in `.memory/`:
-   - engineering-log.md
-   - architecture-decisions.md
-   - patterns-discovered.md
-   - issues-solutions.md
-   - todo-next-steps.md
+1. **Read ONLY these 6 memory files** in `.memory/` (NEVER create others):
+   - projectbrief.md
+   - productContext.md
+   - activeContext.md
+   - progress.md
+   - systemPatterns.md
+   - techContext.md
 
-2. **Analyze engineering-log.md** and:
-   - Extract architectural decisions → Move to architecture-decisions.md
-   - Extract discovered patterns → Move to patterns-discovered.md
-   - Extract issue/solution pairs → Move to issues-solutions.md
-   - Extract pending tasks → Move to todo-next-steps.md
+   ⚠️ **CRITICAL**: Do NOT create or reference any other memory files.
 
-3. **Condense engineering-log.md** by:
-   - Keep only the last 2-3 of detailed entries
-   - Create a "Historical Summary" section at the top with key milestones
+2. **Identify the largest file(s)** and redistribute content:
+   - Move current work details → activeContext.md
+   - Move completed work → progress.md
+   - Move architectural decisions → systemPatterns.md
+   - Move technology changes → techContext.md
+   - Keep foundational info in projectbrief.md and productContext.md
+
+3. **Condense oversized files** by:
+   - Keep only the last 2-3 detailed entries
+   - Create "Historical Summary" sections with key milestones
    - Remove redundant information already captured in other files
    - Preserve critical context and decision rationale
-   - Target size: Under 15K characters (leaving room for growth)
+   - **Target size: Under 20K characters** (leaving 10K growth room from 30K limit)
 
 4. **Deduplicate across files**:
    - Remove duplicate entries
@@ -38,15 +42,17 @@ You are tasked with condensing and reorganizing the `.memory/` files to maintain
 6. **Final validation**:
    - Verify all files are properly formatted
    - Check that total context remains accessible
-   - Ensure engineering-log.md is under 15k chars
-   - Confirm all TODOs are captured in todo-next-steps.md
+   - **Ensure ALL files are under 20K characters**
+   - Confirm no unauthorized memory files exist
+   - Verify only the 6 standard memory files are present
 
 ## Output Format:
 
 After reorganization, provide a summary showing:
-- Original engineering-log.md size
-- New engineering-log.md size
-- Number of items moved to each file
+- Original file sizes for all files over 30K characters
+- New file sizes for all condensed files
+- Number of items moved between files
 - Any critical decisions or patterns preserved
+- Confirmation that only 6 standard memory files exist
 
 Remember: The goal is intelligent compression, not deletion. Preserve project understanding while improving performance.
