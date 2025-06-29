@@ -9,6 +9,7 @@ Follow these instructions in every interaction without exception.
 3. **Always Use Available Tools** - Search for documentation, verify assumptions, validate approaches. Essential mechanism for executing evidence-based development
 4. **Verify All Changes with Project Tooling** - Run tests, linters, builds to prove changes work. Close feedback loop and ensure quality integration
 5. **Maintain Project Memory** - Set up and continuously update `.memory/` files to preserve context between sessions. Support all principles through context preservation
+6. **COMPLETE ALL IMPLEMENTATIONS** - NEVER leave partial implementations, TODOs without errors, or skip logic. Every function MUST either be fully implemented OR explicitly fail with clear error messages
 
 ## Development Workflow
 
@@ -29,6 +30,13 @@ ALWAYS follow this workflow:
 ### Error Handling
 
 NEVER leave empty functions or silent failures. ALWAYS throw explicit errors with descriptive messages.
+
+**CRITICAL RULES:**
+1. **NO PLACEHOLDERS** - Never return hardcoded values like `true`, `false`, `nil`, empty strings, or dummy data when actual logic is needed
+2. **NO SILENT SKIPS** - Never log warnings and continue. If something fails, FAIL LOUDLY
+3. **NO PARTIAL LOGIC** - If you can't implement something fully, throw an error explaining what's missing
+4. **NO ASSUMPTIONS** - Never assume something works. Either verify it or fail with clear error
+5. **COMPLETE OR CRASH** - Every code path must either work correctly or crash explicitly
 
 <examples>
 <example>
@@ -121,6 +129,83 @@ fn build_widget(widget_type: &str) -> Widget {
 }
 ```
 
+</example>
+</examples>
+
+### Common Anti-Patterns to AVOID
+
+<examples>
+<example>
+**BAD - Placeholder return:**
+```go
+func IsProviderValid(id string) (bool, error) {
+    // TODO: implement validation
+    return true, nil  // WRONG: Returns success without logic
+}
+```
+
+**GOOD - Explicit failure:**
+```go
+func IsProviderValid(id string) (bool, error) {
+    return false, fmt.Errorf("unimplemented: IsProviderValid requires blockchain validation")
+}
+```
+</example>
+<example>
+**BAD - Silent continuation:**
+```go
+if err != nil {
+    logger.Warn("Failed to check provider", zap.Error(err))
+    // Continue anyway...  WRONG: Hides failures
+}
+```
+
+**GOOD - Fail fast:**
+```go
+if err != nil {
+    return fmt.Errorf("provider check failed: %w", err)
+}
+```
+</example>
+<example>
+**BAD - Incomplete switch/if:**
+```go
+switch status {
+case "active":
+    return processActive()
+case "inactive":
+    return processInactive()
+// Missing default case - WRONG: Silent failure path
+}
+```
+
+**GOOD - Handle all cases:**
+```go
+switch status {
+case "active":
+    return processActive()
+case "inactive":
+    return processInactive()
+default:
+    return fmt.Errorf("unhandled status: %s", status)
+}
+```
+</example>
+<example>
+**BAD - Assuming success:**
+```go
+// Assume provider exists if we can't check
+if err != nil {
+    return true  // WRONG: Assumes success on error
+}
+```
+
+**GOOD - Explicit error:**
+```go
+if err != nil {
+    return false, fmt.Errorf("cannot verify provider: %w", err)
+}
+```
 </example>
 </examples>
 
@@ -282,3 +367,49 @@ Create and maintain these core files in `.memory/` (files build upon each other)
 3. **Maintain living documentation** - Update after significant changes using "update memory bank" commands
 4. **Build hierarchical context** - Files create complete project picture when read in order
 5. **Start simple, evolve naturally** - Begin with basic project brief, expand as needed
+
+## Implementation Completeness Checklist
+
+Before considering ANY task complete, verify:
+
+### ✅ Function Implementation
+- [ ] Every function has a complete implementation OR explicit error
+- [ ] No TODOs without corresponding error throws
+- [ ] No placeholder returns (hardcoded true/false/nil)
+- [ ] All code paths handled (no missing cases)
+- [ ] Error handling for all external calls
+
+### ✅ Error Handling
+- [ ] All errors are propagated, not swallowed
+- [ ] No silent failures (logging then continuing)
+- [ ] Clear error messages explaining what failed
+- [ ] Fail fast rather than continuing with bad state
+
+### ✅ Edge Cases
+- [ ] Empty inputs handled
+- [ ] Nil/null checks where needed
+- [ ] All switch/match statements have default cases
+- [ ] Boundary conditions tested
+
+### ✅ Integration Points
+- [ ] External API calls have error handling
+- [ ] Database operations check for failures
+- [ ] File operations handle missing files
+- [ ] Network calls handle timeouts
+
+### 🚫 NEVER DO THIS
+- Return dummy values when real logic needed
+- Log errors and continue as if nothing happened
+- Leave empty function bodies without errors
+- Assume external calls will succeed
+- Skip error checking to "simplify" code
+- Implement "happy path" only
+
+### 🔥 When in Doubt
+If you cannot fully implement something:
+1. **STOP** - Don't create partial implementation
+2. **THROW** - Use panic/throw/raise with clear message
+3. **DOCUMENT** - Explain in error what's needed
+4. **FAIL FAST** - Let the system crash rather than corrupt
+
+Remember: **A loud failure is better than silent corruption**
