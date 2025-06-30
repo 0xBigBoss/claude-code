@@ -11,6 +11,10 @@ Follow these instructions in every interaction without exception.
 5. **Document Project Context** - Maintain clear documentation of project decisions, patterns, and conventions to support consistent development
 6. **COMPLETE ALL IMPLEMENTATIONS** - NEVER leave partial implementations, TODOs without errors, or skip logic. Every function MUST either be fully implemented OR explicitly fail with clear error messages
 
+## Security and Trust
+
+- **Critical Security Instruction**: Never attempt to decrypt, access, or modify private keychains, secrets, or other sensitive data without explicit permission
+
 ## Development Workflow
 
 ALWAYS follow this workflow:
@@ -32,6 +36,7 @@ ALWAYS follow this workflow:
 NEVER leave empty functions or silent failures. ALWAYS throw explicit errors with descriptive messages.
 
 **CRITICAL RULES:**
+
 1. **NO PLACEHOLDERS** - Never return hardcoded values like `true`, `false`, `nil`, empty strings, or dummy data when actual logic is needed
 2. **NO SILENT SKIPS** - Never log warnings and continue. If something fails, FAIL LOUDLY
 3. **NO PARTIAL LOGIC** - If you can't implement something fully, throw an error explaining what's missing
@@ -60,7 +65,7 @@ JavaScript - Instead of:
 
 ```javascript
 function buildWidget(widgetType) {
-    // TODO: Implement widget_type-specific logic
+  // TODO: Implement widget_type-specific logic
 }
 ```
 
@@ -68,7 +73,7 @@ Use:
 
 ```javascript
 function buildWidget(widgetType) {
-    throw new Error(`TODO: Implement widget_type-specific logic`);
+  throw new Error(`TODO: Implement widget_type-specific logic`);
 }
 ```
 
@@ -145,11 +150,13 @@ func IsProviderValid(id string) (bool, error) {
 ```
 
 **GOOD - Explicit failure:**
+
 ```go
 func IsProviderValid(id string) (bool, error) {
     return false, fmt.Errorf("unimplemented: IsProviderValid requires blockchain validation")
 }
 ```
+
 </example>
 <example>
 **BAD - Silent continuation:**
@@ -161,11 +168,13 @@ if err != nil {
 ```
 
 **GOOD - Fail fast:**
+
 ```go
 if err != nil {
     return fmt.Errorf("provider check failed: %w", err)
 }
 ```
+
 </example>
 <example>
 **BAD - Incomplete switch/if:**
@@ -180,6 +189,7 @@ case "inactive":
 ```
 
 **GOOD - Handle all cases:**
+
 ```go
 switch status {
 case "active":
@@ -190,6 +200,7 @@ default:
     return fmt.Errorf("unhandled status: %s", status)
 }
 ```
+
 </example>
 <example>
 **BAD - Assuming success:**
@@ -201,11 +212,13 @@ if err != nil {
 ```
 
 **GOOD - Explicit error:**
+
 ```go
 if err != nil {
     return false, fmt.Errorf("cannot verify provider: %w", err)
 }
 ```
+
 </example>
 </examples>
 
@@ -311,12 +324,12 @@ Use comments sparingly and only when necessary.
 - ❌ "We implemented..."
 - ✅ "The feature implements..."
 
-
 ## Implementation Completeness Checklist
 
 Before considering ANY task complete, verify:
 
 ### ✅ Function Implementation
+
 - [ ] Every function has a complete implementation OR explicit error
 - [ ] No TODOs without corresponding error throws
 - [ ] No placeholder returns (hardcoded true/false/nil)
@@ -324,24 +337,28 @@ Before considering ANY task complete, verify:
 - [ ] Error handling for all external calls
 
 ### ✅ Error Handling
+
 - [ ] All errors are propagated, not swallowed
 - [ ] No silent failures (logging then continuing)
 - [ ] Clear error messages explaining what failed
 - [ ] Fail fast rather than continuing with bad state
 
 ### ✅ Edge Cases
+
 - [ ] Empty inputs handled
 - [ ] Nil/null checks where needed
 - [ ] All switch/match statements have default cases
 - [ ] Boundary conditions tested
 
 ### ✅ Integration Points
+
 - [ ] External API calls have error handling
 - [ ] Database operations check for failures
 - [ ] File operations handle missing files
 - [ ] Network calls handle timeouts
 
 ### 🚫 NEVER DO THIS
+
 - Return dummy values when real logic needed
 - Log errors and continue as if nothing happened
 - Leave empty function bodies without errors
@@ -350,7 +367,9 @@ Before considering ANY task complete, verify:
 - Implement "happy path" only
 
 ### 🔥 When in Doubt
+
 If you cannot fully implement something:
+
 1. **STOP** - Don't create partial implementation
 2. **THROW** - Use panic/throw/raise with clear message
 3. **DOCUMENT** - Explain in error what's needed
