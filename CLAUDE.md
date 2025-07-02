@@ -45,6 +45,28 @@ parent-directory/
     └── experiment-branch/
 ```
 
+### Working with Meta-repos and Submodule Worktrees
+
+When working in meta-repos (workspace repositories that contain submodules):
+
+- **Meta-repo as workspace**: It's acceptable to create worktrees inside a meta-repo directory when it's being used as a workspace container
+- **Submodule worktrees**: When creating worktrees for submodules that need to be worked on independently (not connected as a submodule), follow the standard sibling pattern
+- **Example**: In a meta-repo `canton-foundation/`, you can create `canton-monorepo.worktrees/` inside it for independent work on the `canton-monorepo` submodule
+
+Example meta-repo structure:
+
+```
+workspace/                       # Meta-repo (workspace)
+├── monorepo/                    # Submodule (connected)
+├── monorepo.worktrees/          # Worktrees for independent work
+│   ├── feature-x/
+│   └── bugfix-y/
+└── other-submodule.worktrees/   # Worktrees for independent work
+└── other-submodule/             # Submodule (connected)
+```
+
+**Key distinction**: When the parent directory is a meta-repo being used as a workspace, creating worktree directories inside it is appropriate and expected
+
 ### Error Handling
 
 NEVER leave empty functions or silent failures. ALWAYS throw explicit errors with descriptive messages.
