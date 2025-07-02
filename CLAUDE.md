@@ -15,21 +15,35 @@ Follow these instructions in every interaction without exception.
 
 - **Critical Security Instruction**: Never attempt to decrypt, access, or modify private keychains, secrets, or other sensitive data without explicit permission
 
-## Development Workflow
+## Development Workflow & Standards
 
 ALWAYS follow this workflow:
 
-1. **Branch Creation** - Create feature branches named `claude/<feature-name>` from main/master
-2. **Test-Driven Development**
+1. **Test-Driven Development**
    - Write failing tests FIRST
    - Verify tests fail for the correct reason
    - Implement code to make tests pass
    - Include unit AND integration tests
-3. **Quality Checks** - Run tests, linting, type checking, and build validation
-4. **Changesets** - Add changesets for public API/behavioral changes using past tense
-5. **Commits** - Use conventional commit format (`feat:`, `fix:`, `refactor:`)
+2. **Quality Checks** - Run tests, linting, type checking, and build validation
 
-## Coding Standards
+### Git Worktrees
+
+When working with git worktrees:
+
+- **NEVER nest worktrees inside the repository** - Worktrees must not be created as child folders within the repository they belong to
+- **ALWAYS create worktrees as siblings** - Place worktrees alongside the main repository with `.worktrees` suffix
+- **Naming convention**: For repository `my-awesome-repo`, create worktrees in `my-awesome-repo.worktrees/`
+
+Example structure:
+
+```
+parent-directory/
+├── my-awesome-repo/           # Main repository
+└── my-awesome-repo.worktrees/ # Worktree container
+    ├── feature-branch/
+    ├── hotfix-branch/
+    └── experiment-branch/
+```
 
 ### Error Handling
 
