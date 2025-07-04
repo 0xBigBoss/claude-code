@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=PreToolUse python3 /Users/allen/.claude/scripts/usage-tracker.py"
+            "command": "CLAUDE_HOOK_TYPE=PreToolUse uv run --directory /Users/allen/.claude/scripts python /Users/allen/.claude/scripts/usage-tracker.py"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=PostToolUse python3 /Users/allen/.claude/scripts/usage-tracker.py"
+            "command": "CLAUDE_HOOK_TYPE=PostToolUse uv run --directory /Users/allen/.claude/scripts python /Users/allen/.claude/scripts/usage-tracker.py"
           }
         ]
       }
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=Stop python3 /Users/allen/.claude/scripts/usage-tracker.py"
+            "command": "CLAUDE_HOOK_TYPE=Stop uv run --directory /Users/allen/.claude/scripts python /Users/allen/.claude/scripts/usage-tracker.py"
           }
         ]
       }
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=SubagentStop python3 /Users/allen/.claude/scripts/usage-tracker.py"
+            "command": "CLAUDE_HOOK_TYPE=SubagentStop uv run --directory /Users/allen/.claude/scripts python /Users/allen/.claude/scripts/usage-tracker.py"
           }
         ]
       }
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=Notification python3 /Users/allen/.claude/scripts/usage-tracker.py"
+            "command": "CLAUDE_HOOK_TYPE=Notification uv run --directory /Users/allen/.claude/scripts python /Users/allen/.claude/scripts/usage-tracker.py"
           }
         ]
       }
