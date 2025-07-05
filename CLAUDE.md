@@ -345,6 +345,113 @@ fn do_action(action: &str) {
 
 Use comments sparingly and only when necessary.
 
+## Screenshot Analysis with Peekaboo CLI
+
+### Overview
+
+Peekaboo is a macOS utility for capturing screenshots and analyzing them with AI vision models. The CLI tool is available in PATH and provides powerful screenshot capture and AI-powered analysis capabilities.
+
+### Basic Usage
+
+#### Capturing Screenshots
+
+```bash
+# Capture screenshot of frontmost application
+peekaboo image --path screenshot.png
+
+# Capture screenshot of specific application
+peekaboo image --app Safari --path safari-screenshot.png
+
+# Capture entire screen
+peekaboo image --mode screen --path fullscreen.png
+
+# Capture specific screen (for multi-monitor setups)
+peekaboo image --mode screen --screen 0 --path monitor1.png
+```
+
+#### Analyzing Screenshots with AI
+
+```bash
+# Analyze existing screenshot
+peekaboo analyze screenshot.png "What error is shown?"
+
+# Analyze with specific prompt
+peekaboo analyze /path/to/image.png "Describe the UI elements visible"
+
+# Capture and analyze in one workflow
+peekaboo image --app Terminal --path /tmp/terminal.png && \
+  peekaboo analyze /tmp/terminal.png "What commands are visible?"
+```
+
+#### Listing Applications and Windows
+
+```bash
+# List all applications
+peekaboo list
+
+# List with window details
+peekaboo list --windows
+```
+
+### Claude Code Integration Patterns
+
+When working with screenshots in Claude Code:
+
+1. **UI Bug Investigation**
+
+   ```bash
+   # Capture the problematic UI
+   peekaboo image --app "MyApp" --path /tmp/bug-screenshot.png
+
+   # Analyze with Claude via Read tool
+   # Claude can then view the screenshot using the Read tool
+   ```
+
+2. **Error Message Analysis**
+
+   ```bash
+   # Capture error dialog
+   peekaboo image --path /tmp/error.png
+
+   # Get AI analysis
+   peekaboo analyze /tmp/error.png "What is the exact error message and stack trace?"
+   ```
+
+3. **UI Testing Verification**
+
+   ```bash
+   # Capture test results
+   peekaboo image --app "Test Runner" --path /tmp/test-results.png
+
+   # Verify test status
+   peekaboo analyze /tmp/test-results.png "Are all tests passing? List any failures."
+   ```
+
+### Best Practices
+
+1. **Privacy**: Be mindful of sensitive information in screenshots
+2. **AI Prompts**: Be specific in analysis prompts for better results
+3. **Performance**: Local AI models (Ollama) provide privacy but may be slower
+
+### Common Workflows
+
+1. **Debug Visual Issues**
+
+   - Capture the problematic UI state
+   - Use Read tool to view the screenshot in Claude Code
+   - Analyze layout, styling, or rendering issues
+
+2. **Document UI States**
+
+   - Capture different application states
+   - Store screenshots with descriptive names
+   - Reference in documentation or bug reports
+
+3. **Monitor Long-Running Processes**
+   - Periodically capture process status windows
+   - Analyze progress or detect errors
+   - Automate with shell scripts if needed
+
 ## Documentation Style
 
 ### Technical Documentation
