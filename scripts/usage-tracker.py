@@ -217,7 +217,12 @@ def main():
                 hook_type = 'PreToolUse'
         
         # Handle different hook types
-        if hook_type in ['PreToolUse', 'PostToolUse']:
+        if hook_type == 'PreToolUse':
+            # Only ensure session exists for pre-tool use, don't log usage yet
+            log_session_event(input_data, 'start')
+        
+        elif hook_type == 'PostToolUse':
+            # Log tool usage only after completion to avoid duplicates
             log_tool_usage(input_data)
             log_session_event(input_data, 'start')  # Ensure session exists
         
