@@ -47,7 +47,7 @@ parent-directory/
 
 ### Working with Meta-repos and Submodule Worktrees
 
-When working in meta-repos (workspace repositories that contain submodules):
+When working in meta-repos (workspace repositories that contain submodules or other repositories):
 
 - **Meta-repo as workspace**: It's acceptable to create worktrees inside a meta-repo directory when it's being used as a workspace container
 - **Submodule worktrees**: When creating worktrees for submodules that need to be worked on independently (not connected as a submodule), follow the standard sibling pattern
@@ -350,6 +350,8 @@ Use comments sparingly and only when necessary.
 ### Overview
 
 Peekaboo is a macOS utility for capturing screenshots and analyzing them with AI vision models. The CLI tool is available in PATH and provides powerful screenshot capture and AI-powered analysis capabilities.
+
+**IMPORTANT**: Prefer Peekaboo CLI analysis instead of directly reading the image files to preserve your context and token usage unless it is absolutely necessary to read the image file directly.
 
 ### Basic Usage
 
