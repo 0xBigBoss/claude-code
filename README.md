@@ -7,6 +7,7 @@ A comprehensive configuration system for [Claude Code](https://docs.anthropic.co
 - **Intelligent Development Workflow**: Implements test-driven development, automated quality checks, and proper branching strategies
 - **Project Memory Management**: Automatic context preservation between sessions using `.memory/` files
 - **Specialized Commands**: Pre-built commands for memory condensation, first-principles development, and plan implementation
+- **Expert Subagents**: Seven specialized AI subagents inspired by programming legends for focused expertise
 - **Quality Assurance**: Built-in support for linting, type checking, and testing workflows
 - **Documentation Standards**: Consistent technical writing guidelines
 
@@ -18,6 +19,14 @@ A comprehensive configuration system for [Claude Code](https://docs.anthropic.co
   - `first-principles.md`: First-principles development approach
   - `implement-plan.md`: Plan execution framework
   - `refine-plan.md`: Plan refinement and validation
+- **agents/**: Specialized subagents inspired by programming legends
+  - `knuth-analyst.md`: Algorithm analysis with mathematical rigor
+  - `torvalds-pragmatist.md`: No-nonsense code quality enforcement
+  - `hamilton-reliability.md`: Ultra-reliable defensive programming
+  - `carmack-optimizer.md`: Performance optimization mastery
+  - `hickey-simplifier.md`: Complexity elimination and design
+  - `liskov-architect.md`: Abstraction and type hierarchy design
+  - `hopper-debugger.md`: Systematic debugging and developer experience
 
 ## Installation
 
@@ -40,9 +49,13 @@ mkdir -p ~/.claude-backup
 # Create .claude directory
 mkdir -p ~/.claude
 
-# Create symlinks to enable the configuration
+# Option 1: Use the install script (recommended)
+./scripts/install-symlinks.sh
+
+# Option 2: Create symlinks manually
 ln -sf "$(pwd)/CLAUDE.md" ~/.claude/CLAUDE.md
 ln -sf "$(pwd)/commands" ~/.claude/commands
+ln -sf "$(pwd)/agents" ~/.claude/agents
 ```
 
 ## Usage
@@ -60,6 +73,20 @@ Once installed, Claude Code will automatically load these configurations. The sy
 2. **Development**: Follows TDD principles with automated quality checks
 3. **Memory Management**: Uses the `condense-memory` command when context grows too large
 4. **Plan Execution**: Leverage `implement-plan` and `refine-plan` for complex projects
+
+### Specialized Subagents
+
+The configuration includes seven expert subagents, each inspired by a programming legend:
+
+- **knuth-analyst**: For algorithm analysis requiring mathematical rigor and correctness proofs
+- **torvalds-pragmatist**: For code reviews demanding brutal honesty and practical solutions
+- **hamilton-reliability**: For mission-critical code requiring ultra-reliable error handling
+- **carmack-optimizer**: For performance optimization with evidence-based improvements
+- **hickey-simplifier**: For reducing complexity and improving system design
+- **liskov-architect**: For proper abstraction design and type hierarchies
+- **hopper-debugger**: For systematic debugging and improving developer experience
+
+Each subagent operates with strict anti-hallucination guidelines, requiring concrete evidence and verification for all claims.
 
 ## Configuration Details
 

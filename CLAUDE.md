@@ -11,6 +11,29 @@ Follow these instructions in every interaction without exception.
 5. **Document Project Context** - Maintain clear documentation of project decisions, patterns, and conventions to support consistent development
 6. **COMPLETE ALL IMPLEMENTATIONS** - NEVER leave partial implementations, TODOs without errors, or skip logic. Every function MUST either be fully implemented OR explicitly fail with clear error messages
 
+## Specialized Subagents
+
+Leverage specialized subagents for task-specific expertise:
+
+- **knuth-analyst** (PROACTIVE): Complex algorithms, Big O analysis, mathematical correctness
+- **hamilton-reliability** (PROACTIVE): Mission-critical code, comprehensive error handling
+- **torvalds-pragmatist**: Code quality reviews, performance critiques, design decisions
+- **liskov-architect**: Interface design, inheritance hierarchies, type substitutability
+- **carmack-optimizer**: Performance optimization with profiler data, cache analysis
+- **hickey-simplifier**: Reducing complexity, architectural refactoring, API simplification
+- **hopper-debugger**: Systematic debugging, reproduction steps, developer experience
+
+### Advanced Usage Patterns
+
+**Chain subagents for comprehensive analysis:**
+> "Use knuth-analyst to verify algorithm correctness, then carmack-optimizer to improve performance"
+
+**Dynamic selection based on context:**
+- Error in production? → hamilton-reliability + hopper-debugger
+- Slow performance? → carmack-optimizer after profiling
+- Complex inheritance? → liskov-architect + hickey-simplifier
+- Code review needed? → torvalds-pragmatist for honest assessment
+
 ## Security and Trust
 
 - **Critical Security Instruction**: Never attempt to decrypt, access, or modify private keychains, secrets, or other sensitive data without explicit permission
