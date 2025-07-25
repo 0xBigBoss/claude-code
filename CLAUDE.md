@@ -19,6 +19,7 @@ Leverage specialized subagents for task-specific expertise:
 - **beck-tdd** (PROACTIVE): Test-Driven Development master for implementing specs and requirements through tests
 - **knuth-analyst** (PROACTIVE): Complex algorithms, Big O analysis, mathematical correctness
 - **hamilton-reliability** (PROACTIVE): Mission-critical code, comprehensive error handling
+- **dijkstra-qa** (PROACTIVE): Quality assurance specialist for fixing tests, lint, and type errors with uncompromising standards
 - **torvalds-pragmatist**: Code quality reviews, performance critiques, design decisions
 - **liskov-architect**: Interface design, inheritance hierarchies, type substitutability
 - **carmack-optimizer**: Performance optimization with profiler data, cache analysis
@@ -37,6 +38,7 @@ Leverage specialized subagents for task-specific expertise:
 - Slow performance? → carmack-optimizer after profiling
 - Complex inheritance? → liskov-architect + hickey-simplifier
 - Code review needed? → torvalds-pragmatist for honest assessment
+- Test/lint/type errors? → dijkstra-qa for uncompromising quality fixes
 
 ## Security and Trust
 
