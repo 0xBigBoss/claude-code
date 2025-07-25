@@ -15,6 +15,7 @@ Follow these instructions in every interaction without exception.
 
 Leverage specialized subagents for task-specific expertise:
 
+- **beck-tdd** (PROACTIVE): Test-Driven Development master for implementing specs and requirements through tests
 - **knuth-analyst** (PROACTIVE): Complex algorithms, Big O analysis, mathematical correctness
 - **hamilton-reliability** (PROACTIVE): Mission-critical code, comprehensive error handling
 - **torvalds-pragmatist**: Code quality reviews, performance critiques, design decisions
@@ -29,6 +30,7 @@ Leverage specialized subagents for task-specific expertise:
 > "Use knuth-analyst to verify algorithm correctness, then carmack-optimizer to improve performance"
 
 **Dynamic selection based on context:**
+- Implementing from specs? → beck-tdd for test-first development
 - Error in production? → hamilton-reliability + hopper-debugger
 - Slow performance? → carmack-optimizer after profiling
 - Complex inheritance? → liskov-architect + hickey-simplifier
