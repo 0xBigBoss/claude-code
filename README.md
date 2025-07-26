@@ -7,7 +7,7 @@ A comprehensive configuration system for [Claude Code](https://docs.anthropic.co
 - **Intelligent Development Workflow**: Implements test-driven development, automated quality checks, and proper branching strategies
 - **Project Memory Management**: Automatic context preservation between sessions using `.memory/` files
 - **Specialized Commands**: Pre-built commands for memory condensation, first-principles development, and plan implementation
-- **Expert Subagents**: Seven specialized AI subagents inspired by programming legends for focused expertise
+- **Expert Subagents**: Eleven specialized AI subagents inspired by programming legends for focused expertise
 - **Quality Assurance**: Built-in support for linting, type checking, and testing workflows
 - **Documentation Standards**: Consistent technical writing guidelines
 
@@ -20,6 +20,8 @@ A comprehensive configuration system for [Claude Code](https://docs.anthropic.co
   - `implement-plan.md`: Plan execution framework
   - `refine-plan.md`: Plan refinement and validation
 - **agents/**: Specialized subagents inspired by programming legends
+  - `thompson-explorer.md`: Systematic codebase exploration and discovery
+  - `beck-tdd.md`: Test-Driven Development mastery
   - `knuth-analyst.md`: Algorithm analysis with mathematical rigor
   - `torvalds-pragmatist.md`: No-nonsense code quality enforcement
   - `hamilton-reliability.md`: Ultra-reliable defensive programming
@@ -27,6 +29,8 @@ A comprehensive configuration system for [Claude Code](https://docs.anthropic.co
   - `hickey-simplifier.md`: Complexity elimination and design
   - `liskov-architect.md`: Abstraction and type hierarchy design
   - `hopper-debugger.md`: Systematic debugging and developer experience
+  - `dijkstra-qa.md`: Uncompromising quality assurance
+  - `bernstein-auditor.md`: Security vulnerability analysis and defensive hardening
 
 ## Installation
 
@@ -76,8 +80,10 @@ Once installed, Claude Code will automatically load these configurations. The sy
 
 ### Specialized Subagents
 
-The configuration includes seven expert subagents, each inspired by a programming legend:
+The configuration includes eleven expert subagents, each inspired by a programming legend:
 
+- **thompson-explorer**: For systematic codebase exploration, understanding legacy code, and discovering hidden dependencies
+- **beck-tdd**: For Test-Driven Development, implementing features from specs through tests-first approach
 - **knuth-analyst**: For algorithm analysis requiring mathematical rigor and correctness proofs
 - **torvalds-pragmatist**: For code reviews demanding brutal honesty and practical solutions
 - **hamilton-reliability**: For mission-critical code requiring ultra-reliable error handling
@@ -85,8 +91,23 @@ The configuration includes seven expert subagents, each inspired by a programmin
 - **hickey-simplifier**: For reducing complexity and improving system design
 - **liskov-architect**: For proper abstraction design and type hierarchies
 - **hopper-debugger**: For systematic debugging and improving developer experience
+- **dijkstra-qa**: For uncompromising quality assurance, fixing tests, lint errors, and type issues
+- **bernstein-auditor**: For security vulnerability analysis, defensive code hardening, and threat modeling
 
 Each subagent operates with strict anti-hallucination guidelines, requiring concrete evidence and verification for all claims.
+
+### SDLC Subagent Flow
+
+For comprehensive software development lifecycle coverage, chain subagents in this sequence:
+
+1. **thompson-explorer** → Explore and understand the codebase
+2. **beck-tdd** → Write tests and implement features
+3. **knuth-analyst** → Verify algorithmic correctness
+4. **dijkstra-qa** → Ensure quality standards
+5. **hamilton-reliability** → Add defensive programming and error handling
+6. **bernstein-auditor** → Security review and vulnerability analysis
+
+This flow ensures thorough understanding, proper implementation, uncompromising quality, and security hardening.
 
 ## Configuration Details
 

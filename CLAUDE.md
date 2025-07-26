@@ -25,6 +25,7 @@ Leverage specialized subagents for task-specific expertise:
 - **carmack-optimizer**: Performance optimization with profiler data, cache analysis
 - **hickey-simplifier**: Reducing complexity, architectural refactoring, API simplification
 - **hopper-debugger**: Systematic debugging, reproduction steps, developer experience
+- **bernstein-auditor** (PROACTIVE): Security auditor for vulnerability analysis, defensive code hardening, and threat modeling
 
 ### Advanced Usage Patterns
 
@@ -39,6 +40,18 @@ Leverage specialized subagents for task-specific expertise:
 - Complex inheritance? → liskov-architect + hickey-simplifier
 - Code review needed? → torvalds-pragmatist for honest assessment
 - Test/lint/type errors? → dijkstra-qa for uncompromising quality fixes
+- Security concerns? → bernstein-auditor for vulnerability analysis and hardening
+
+**SDLC Subagent Flow:**
+For comprehensive software development lifecycle coverage, chain these subagents:
+1. **thompson-explorer** → Explore and understand the codebase
+2. **beck-tdd** → Write tests and implement features  
+3. **knuth-analyst** → Verify algorithmic correctness
+4. **dijkstra-qa** → Ensure quality standards
+5. **hamilton-reliability** → Add defensive programming and error handling
+6. **bernstein-auditor** → Security review and vulnerability analysis
+
+This flow ensures thorough understanding, proper implementation, uncompromising quality, and security hardening.
 
 ## Security and Trust
 
