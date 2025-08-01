@@ -1,59 +1,7 @@
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=PreToolUse uv run --directory /Users/allen/.claude/scripts python /Users/allen/.claude/scripts/usage-tracker.py"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=PostToolUse uv run --directory /Users/allen/.claude/scripts python /Users/allen/.claude/scripts/usage-tracker.py"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=Stop uv run --directory /Users/allen/.claude/scripts python /Users/allen/.claude/scripts/usage-tracker.py"
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=SubagentStop uv run --directory /Users/allen/.claude/scripts python /Users/allen/.claude/scripts/usage-tracker.py"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=Notification uv run --directory /Users/allen/.claude/scripts python /Users/allen/.claude/scripts/usage-tracker.py"
-          }
-        ]
-      }
-    ]
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {},
+  "feedbackSurveyState": {
+    "lastShownTime": 1754068116834
   }
 }
