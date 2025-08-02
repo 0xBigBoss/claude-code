@@ -82,19 +82,20 @@ Once installed, Claude Code will automatically load these configurations. The sy
 
 The configuration includes eleven expert subagents, each inspired by a programming legend:
 
-- **thompson-explorer**: For systematic codebase exploration, understanding legacy code, and discovering hidden dependencies
-- **beck-tdd**: For Test-Driven Development, implementing features from specs through tests-first approach
-- **knuth-analyst**: For algorithm analysis requiring mathematical rigor and correctness proofs
-- **torvalds-pragmatist**: For code reviews demanding brutal honesty and practical solutions
-- **hamilton-reliability**: For mission-critical code requiring ultra-reliable error handling
-- **carmack-optimizer**: For performance optimization with evidence-based improvements
-- **hickey-simplifier**: For reducing complexity and improving system design
-- **liskov-architect**: For proper abstraction design and type hierarchies
-- **hopper-debugger**: For systematic debugging and improving developer experience
-- **dijkstra-qa**: For uncompromising quality assurance, fixing tests, lint errors, and type issues
-- **bernstein-auditor**: For security vulnerability analysis, defensive code hardening, and threat modeling
+- 🔐 **bernstein-auditor**: Security paranoia king who thinks every line of code is sus until proven otherwise. Makes your apps harder to hack than Fort Knox.
+- 🕵️ **thompson-explorer**: Old school detective who greps everything because "code don't lie but documentation do." Maps codebases like an archaeologist.
+- 🧪 **beck-tdd**: Test-first zealot who writes tests before code because YOLO isn't a development strategy. Makes code bulletproof through discipline.
+- 🧮 **knuth-analyst**: Math genius who proves algorithms are correct with actual math instead of vibes. Complexity analysis gives them life.
+- 🚀 **hamilton-reliability**: Astronaut-grade engineer who codes like lives depend on it (because they did). Zero tolerance for "it works on my machine."
+- 😤 **torvalds-pragmatist**: No-BS code reviewer who roasts bad code harder than Twitter roasts celebrities. "Talk is cheap, show me the code."
+- 🏗️ **liskov-architect**: Type system perfectionist who makes inheritance hierarchies so clean they spark joy. Substitutability is their religion.
+- ⚡ **carmack-optimizer**: Performance wizard who makes code faster than a TikTok trend going viral. Every microsecond matters, no cap.
+- ✨ **hickey-simplifier**: Complexity assassin who deletes code like Marie Kondo organizes closets. Simple is the ultimate flex.
+- 🐛 **hopper-debugger**: Bug hunter who finds issues like they're hunting Easter eggs. Makes error messages actually helpful instead of cryptic.
+- ✅ **dijkstra-qa**: Quality control perfectionist who treats lint warnings like personal attacks. Zero tolerance for messy code.
+- 🗑️ **moore-minimalist**: Digital Marie Kondo who deletes code that doesn't spark joy. "The best code is no code" hits different when they say it.
 
-Each subagent operates with strict anti-hallucination guidelines, requiring concrete evidence and verification for all claims.
+Each agent is ready to drop in and fix your code instead of just talking about it! They operate with strict anti-hallucination guidelines, requiring concrete evidence and verification for all claims.
 
 ### SDLC Subagent Flow
 
