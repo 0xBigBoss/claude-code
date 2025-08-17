@@ -275,13 +275,103 @@ fn findLastTimestamp(allocator: Allocator, lines: [][]const u8) !?i64 {
     return null;
 }
 
-/// Format path with home directory abbreviation (writes directly to writer)
+/// Abbreviate a path segment intelligently
+fn abbreviateSegment(allocator: Allocator, segment: []const u8) ![]const u8 {
+    if (segment.len <= 5) return try allocator.dupe(u8, segment);
+    
+    // Check if segment contains separators
+    if (std.mem.indexOfAny(u8, segment, "-_") == null) {
+        // No separators, just take first few characters for very long names
+        if (segment.len > 8) {
+            return try allocator.dupe(u8, segment[0..3]);
+        } else {
+            return try allocator.dupe(u8, segment);
+        }
+    }
+    
+    var result = std.ArrayList(u8).init(allocator);
+    
+    var parts = std.mem.splitAny(u8, segment, "-_");
+    var first = true;
+    
+    while (parts.next()) |part| {
+        if (part.len == 0) continue;
+        
+        if (!first) try result.append('-');
+        
+        if (part.len >= 3 and std.mem.eql(u8, part[0..2], "0x")) {
+            try result.appendSlice(part[0..3]);
+        } else if (part.len <= 3) {
+            try result.appendSlice(part);
+        } else {
+            try result.append(part[0]);
+        }
+        
+        first = false;
+    }
+    
+    if (result.items.len == 0) {
+        result.deinit();
+        return try allocator.dupe(u8, segment);
+    }
+    
+    return try result.toOwnedSlice();
+}
+
+/// Format path with home directory abbreviation and intelligent shortening
 fn formatPath(writer: anytype, path: []const u8) !void {
     const home = std.posix.getenv("HOME") orelse "";
     if (home.len > 0 and std.mem.startsWith(u8, path, home)) {
         try writer.print("~{s}", .{path[home.len..]});
     } else {
         try writer.print("{s}", .{path});
+    }
+}
+
+/// Format path with intelligent shortening for statusline display
+fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8) !void {
+    const home = std.posix.getenv("HOME") orelse "";
+    var display_path = path;
+    var has_home = false;
+    
+    if (std.mem.startsWith(u8, path, "~/")) {
+        display_path = path[1..]; // Remove the "~" but keep the "/"
+        has_home = true;
+    } else if (home.len > 0 and std.mem.startsWith(u8, path, home)) {
+        display_path = path[home.len..];
+        has_home = true;
+    }
+    
+    var segments = std.ArrayList([]const u8).init(allocator);
+    defer segments.deinit();
+    
+    var parts = std.mem.splitScalar(u8, display_path, '/');
+    while (parts.next()) |part| {
+        if (part.len > 0) {
+            try segments.append(part);
+        }
+    }
+    
+    if (segments.items.len <= 3) {
+        if (has_home) try writer.print("~", .{});
+        try writer.print("{s}", .{display_path});
+        return;
+    }
+    
+    if (has_home) try writer.print("~", .{});
+    
+    for (segments.items, 0..) |segment, i| {
+        try writer.print("/", .{});
+        
+        if (i == segments.items.len - 1) {
+            try writer.print("{s}", .{segment});
+        } else if (i == 0 and segment.len <= 10) {
+            try writer.print("{s}", .{segment});
+        } else {
+            const abbreviated = try abbreviateSegment(allocator, segment);
+            defer allocator.free(abbreviated);
+            try writer.print("{s}", .{abbreviated});
+        }
     }
 }
 
@@ -395,7 +485,7 @@ pub fn main() !void {
     if (current_dir == null) {
         try writer.print("~{s}", .{colors.reset});
     } else {
-        try formatPath(writer, current_dir.?);
+        try formatPathShort(allocator, writer, current_dir.?);
 
         // Check git status
         if (isGitRepo(allocator, current_dir.?)) {
@@ -553,4 +643,61 @@ test "JSON parsing with minimal data" {
     try std.testing.expectEqualStrings("/tmp", parsed.value.workspace.?.current_dir.?);
     try std.testing.expect(parsed.value.model == null);
     try std.testing.expect(parsed.value.session_id == null);
+}
+
+test "abbreviateSegment function" {
+    const allocator = std.testing.allocator;
+    
+    {
+        const result = try abbreviateSegment(allocator, "0xbigboss");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("0xb", result);
+    }
+    
+    {
+        const result = try abbreviateSegment(allocator, "canton-network");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("c-n", result);
+    }
+    
+    {
+        const result = try abbreviateSegment(allocator, "decentralized-canton-sync");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("d-c-s", result);
+    }
+    
+    {
+        const result = try abbreviateSegment(allocator, "short");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("short", result);
+    }
+    
+    {
+        const result = try abbreviateSegment(allocator, "api");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("api", result);
+    }
+}
+
+test "formatPathShort with long path" {
+    const allocator = std.testing.allocator;
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+    
+    try formatPathShort(allocator, writer, "/Users/test/0xbigboss/canton-network/canton-foundation/decentralized-canton-sync/token-standard");
+    
+    const result = stream.getWritten();
+    try std.testing.expect(result.len < 50);
+    try std.testing.expect(std.mem.endsWith(u8, result, "token-standard"));
+}
+
+test "formatPathShort with short path" {
+    const allocator = std.testing.allocator;
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+    
+    try formatPathShort(allocator, writer, "/home/user/project");
+    try std.testing.expectEqualStrings("/home/user/project", stream.getWritten());
 }
