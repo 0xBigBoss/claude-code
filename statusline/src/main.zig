@@ -437,7 +437,7 @@ pub fn main() !void {
 
     // Output the complete statusline at once
     const output = output_stream.getWritten();
-    
+
     // Debug logging
     if (debug_mode) {
         const debug_file = std.fs.cwd().createFile("/tmp/statusline-debug.log", .{ .truncate = false }) catch null;
@@ -448,7 +448,109 @@ pub fn main() !void {
             file.writer().print("[{d}] Output: {s}\n", .{ timestamp, output }) catch {};
         }
     }
-    
+
     const stdout = std.io.getStdOut().writer();
     stdout.print("{s}\n", .{output}) catch {};
+}
+
+test "ModelType detects models correctly" {
+    try std.testing.expectEqual(ModelType.opus, ModelType.fromName("Claude Opus 4.1"));
+    try std.testing.expectEqual(ModelType.opus, ModelType.fromName("Opus"));
+    try std.testing.expectEqual(ModelType.sonnet, ModelType.fromName("Claude Sonnet 3.5"));
+    try std.testing.expectEqual(ModelType.sonnet, ModelType.fromName("Sonnet"));
+    try std.testing.expectEqual(ModelType.haiku, ModelType.fromName("Claude Haiku"));
+    try std.testing.expectEqual(ModelType.haiku, ModelType.fromName("Haiku"));
+    try std.testing.expectEqual(ModelType.unknown, ModelType.fromName("GPT-4"));
+}
+
+test "ModelType abbreviations" {
+    try std.testing.expectEqualStrings("Opus", ModelType.opus.abbreviation());
+    try std.testing.expectEqualStrings("Sonnet", ModelType.sonnet.abbreviation());
+    try std.testing.expectEqualStrings("Haiku", ModelType.haiku.abbreviation());
+    try std.testing.expectEqualStrings("?", ModelType.unknown.abbreviation());
+}
+
+test "ContextUsage color thresholds" {
+    const low = ContextUsage{ .percentage = 30.0 };
+    const medium = ContextUsage{ .percentage = 60.0 };
+    const high = ContextUsage{ .percentage = 80.0 };
+    const critical = ContextUsage{ .percentage = 95.0 };
+
+    try std.testing.expectEqualStrings(colors.gray, low.color());
+    try std.testing.expectEqualStrings(colors.yellow, medium.color());
+    try std.testing.expectEqualStrings(colors.orange, high.color());
+    try std.testing.expectEqualStrings(colors.red, critical.color());
+}
+
+test "GitStatus parsing" {
+    const git_output = " M file1.txt\nA  file2.txt\n D file3.txt\n?? file4.txt\n";
+    const status = GitStatus.parse(git_output);
+
+    try std.testing.expectEqual(@as(u32, 1), status.added);
+    try std.testing.expectEqual(@as(u32, 1), status.modified);
+    try std.testing.expectEqual(@as(u32, 1), status.deleted);
+    try std.testing.expectEqual(@as(u32, 1), status.untracked);
+    try std.testing.expect(!status.isEmpty());
+}
+
+test "GitStatus empty" {
+    const empty_status = GitStatus{};
+    try std.testing.expect(empty_status.isEmpty());
+}
+
+test "formatPath basic functionality" {
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    try formatPath(writer, "/tmp/test/project");
+    try std.testing.expectEqualStrings("/tmp/test/project", stream.getWritten());
+}
+
+test "JSON parsing with fixture data" {
+    const allocator = std.testing.allocator;
+
+    const opus_json =
+        \\{
+        \\  "hook_event_name": "Status",
+        \\  "session_id": "test123",
+        \\  "model": {
+        \\    "id": "claude-opus-4-1",
+        \\    "display_name": "Opus"
+        \\  },
+        \\  "workspace": {
+        \\    "current_dir": "/Users/allen/test"
+        \\  }
+        \\}
+    ;
+
+    const parsed = try json.parseFromSlice(StatuslineInput, allocator, opus_json, .{
+        .ignore_unknown_fields = true,
+    });
+    defer parsed.deinit();
+
+    try std.testing.expectEqualStrings("Opus", parsed.value.model.?.display_name.?);
+    try std.testing.expectEqualStrings("/Users/allen/test", parsed.value.workspace.?.current_dir.?);
+    try std.testing.expectEqualStrings("test123", parsed.value.session_id.?);
+}
+
+test "JSON parsing with minimal data" {
+    const allocator = std.testing.allocator;
+
+    const minimal_json =
+        \\{
+        \\  "workspace": {
+        \\    "current_dir": "/tmp"
+        \\  }
+        \\}
+    ;
+
+    const parsed = try json.parseFromSlice(StatuslineInput, allocator, minimal_json, .{
+        .ignore_unknown_fields = true,
+    });
+    defer parsed.deinit();
+
+    try std.testing.expectEqualStrings("/tmp", parsed.value.workspace.?.current_dir.?);
+    try std.testing.expect(parsed.value.model == null);
+    try std.testing.expect(parsed.value.session_id == null);
 }
