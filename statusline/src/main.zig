@@ -305,7 +305,7 @@ fn getGitBranch(allocator: Allocator, dir: []const u8) ![]const u8 {
     var fba = std.heap.FixedBufferAllocator.init(&buf);
     const temp_alloc = fba.allocator();
 
-    const cmd = try temp_alloc.dupeZ(u8, "git branch --show-current");
+    const cmd = try temp_alloc.dupeZ(u8, "git symbolic-ref -q --short HEAD || git describe --tags --exact-match");
 
     return execCommand(allocator, cmd, dir) catch try allocator.dupe(u8, "");
 }
