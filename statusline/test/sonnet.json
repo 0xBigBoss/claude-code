@@ -1,0 +1,12 @@
+{
+  "hook_event_name": "Status",
+  "session_id": "test456",
+  "model": {
+    "id": "claude-sonnet-3-5",
+    "display_name": "Sonnet"
+  },
+  "workspace": {
+    "current_dir": "/home/user/project"
+  },
+  "version": "1.0.0"
+}
