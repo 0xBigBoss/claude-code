@@ -350,7 +350,8 @@ pub fn main() !void {
     const input_json = try stdin.readAllAlloc(allocator, 1024 * 1024);
 
     const parsed = json.parseFromSlice(StatuslineInput, allocator, input_json, .{}) catch {
-        std.debug.print("{s}~{s}", .{ colors.cyan, colors.reset });
+        const stdout = std.io.getStdOut().writer();
+        stdout.print("{s}~{s}", .{ colors.cyan, colors.reset }) catch {};
         return;
     };
 
@@ -411,5 +412,6 @@ pub fn main() !void {
 
     // Output the complete statusline at once
     const output = output_stream.getWritten();
-    std.debug.print("{s}", .{output});
+    const stdout = std.io.getStdOut().writer();
+    stdout.print("{s}\n", .{output}) catch {};
 }
