@@ -336,12 +336,15 @@ pub fn main() !void {
 
     var short_mode = false;
     var show_pr_status = true;
+    var debug_mode = false;
 
     for (args[1..]) |arg| {
         if (std.mem.eql(u8, arg, "--short")) {
             short_mode = true;
         } else if (std.mem.eql(u8, arg, "--skip-pr-status")) {
             show_pr_status = false;
+        } else if (std.mem.eql(u8, arg, "--debug")) {
+            debug_mode = true;
         }
     }
 
@@ -349,9 +352,31 @@ pub fn main() !void {
     const stdin = std.io.getStdIn().reader();
     const input_json = try stdin.readAllAlloc(allocator, 1024 * 1024);
 
-    const parsed = json.parseFromSlice(StatuslineInput, allocator, input_json, .{}) catch {
+    // Debug logging
+    if (debug_mode) {
+        const debug_file = std.fs.cwd().createFile("/tmp/statusline-debug.log", .{ .truncate = false }) catch null;
+        if (debug_file) |file| {
+            defer file.close();
+            file.seekFromEnd(0) catch {};
+            const timestamp = std.time.timestamp();
+            file.writer().print("[{d}] Input JSON: {s}\n", .{ timestamp, input_json }) catch {};
+        }
+    }
+
+    const parsed = json.parseFromSlice(StatuslineInput, allocator, input_json, .{
+        .ignore_unknown_fields = true,
+    }) catch |err| {
+        if (debug_mode) {
+            const debug_file = std.fs.cwd().createFile("/tmp/statusline-debug.log", .{ .truncate = false }) catch null;
+            if (debug_file) |file| {
+                defer file.close();
+                file.seekFromEnd(0) catch {};
+                const timestamp = std.time.timestamp();
+                file.writer().print("[{d}] Parse error: {any}\n", .{ timestamp, err }) catch {};
+            }
+        }
         const stdout = std.io.getStdOut().writer();
-        stdout.print("{s}~{s}", .{ colors.cyan, colors.reset }) catch {};
+        stdout.print("{s}~{s}\n", .{ colors.cyan, colors.reset }) catch {};
         return;
     };
 
@@ -412,6 +437,18 @@ pub fn main() !void {
 
     // Output the complete statusline at once
     const output = output_stream.getWritten();
+    
+    // Debug logging
+    if (debug_mode) {
+        const debug_file = std.fs.cwd().createFile("/tmp/statusline-debug.log", .{ .truncate = false }) catch null;
+        if (debug_file) |file| {
+            defer file.close();
+            file.seekFromEnd(0) catch {};
+            const timestamp = std.time.timestamp();
+            file.writer().print("[{d}] Output: {s}\n", .{ timestamp, output }) catch {};
+        }
+    }
+    
     const stdout = std.io.getStdOut().writer();
     stdout.print("{s}\n", .{output}) catch {};
 }
