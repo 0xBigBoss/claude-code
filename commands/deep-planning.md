@@ -2,7 +2,7 @@
 allowed-tools: Read, Grep, Glob, LS, TodoWrite, Task, Bash
 argument-hint: [feature-or-task-description]
 description: Comprehensive pre-implementation planning with systematic investigation
-model: opus
+model: claude-opus-4-1-20250805
 ---
 
 # Deep Planning Mode

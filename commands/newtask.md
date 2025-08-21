@@ -2,7 +2,7 @@
 allowed-tools: Read, Grep, Glob, LS, TodoWrite
 argument-hint: [task-description]
 description: Create detailed context summary for continuing work on a task
-model: opus
+model: claude-opus-4-1-20250805
 ---
 
 # New Task Context Creation
@@ -16,6 +16,7 @@ Create a comprehensive context summary for the task: "$ARGUMENTS"
 Generate a detailed summary that captures:
 
 ### Current Work Context
+
 - **Task Description**: What you're working on
 - **Current Status**: Where you left off
 - **Key Technical Concepts**: Important technologies, frameworks, or patterns involved
@@ -23,18 +24,21 @@ Generate a detailed summary that captures:
 - **Code Snippets**: Important code blocks or configurations
 
 ### Problem-Solving Progress
+
 - **Understanding Achieved**: What you've learned about the problem
 - **Approaches Tried**: Solutions attempted and their outcomes
 - **Blockers Encountered**: Any obstacles or challenges faced
 - **Research Findings**: Key insights from documentation or investigation
 
 ### Next Steps
+
 - **Immediate Tasks**: What needs to be done next
 - **Dependencies**: Any prerequisites or requirements
 - **Testing Strategy**: How to validate the solution
 - **Alternative Approaches**: Other options to consider
 
 ### Implementation Notes
+
 - **Architecture Decisions**: Important design choices made
 - **Code Patterns**: Specific patterns or conventions to follow
 - **Configuration Details**: Environment setup or configuration requirements
