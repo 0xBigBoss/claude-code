@@ -20,7 +20,7 @@ First, conduct a thorough, methodical investigation of the codebase to understan
 - **Test Infrastructure**: How testing is currently handled
 - **Configuration**: Build systems, environment setup, deployment considerations
 
-*Investigate systematically without making assumptions. Use Read, Grep, Glob, and LS tools extensively.*
+_Investigate systematically without making assumptions. Use Read, Grep, Glob, and LS tools extensively._
 
 ## Phase 2: Clarifying Questions
 
@@ -40,11 +40,13 @@ Create a detailed, structured implementation plan in markdown format:
 ### 📋 Implementation Plan: [Task Name]
 
 #### Overview
+
 - **Objective**: Clear statement of what will be built
 - **Approach**: High-level strategy and methodology
 - **Success Metrics**: How success will be measured
 
 #### Architecture & Design
+
 - **Component Structure**: How code will be organized
 - **Data Flow**: How information moves through the system
 - **API Design**: Interface definitions and contracts
@@ -53,16 +55,19 @@ Create a detailed, structured implementation plan in markdown format:
 #### Detailed Implementation Steps
 
 1. **Setup & Preparation**
+
    - [ ] Environment configuration
    - [ ] Dependency management
    - [ ] Initial file structure
 
 2. **Core Implementation**
+
    - [ ] [Specific implementation step 1]
    - [ ] [Specific implementation step 2]
    - [ ] [Continue with granular steps...]
 
 3. **Testing Strategy**
+
    - [ ] Unit test implementation
    - [ ] Integration testing
    - [ ] End-to-end validation
@@ -73,11 +78,13 @@ Create a detailed, structured implementation plan in markdown format:
    - [ ] Final review and optimization
 
 #### Risk Assessment
+
 - **Technical Risks**: Potential implementation challenges
 - **Dependencies**: External factors that could affect timeline
 - **Mitigation Strategies**: How to handle identified risks
 
 #### Timeline Estimate
+
 - **Phase 1**: [Time estimate] - [Description]
 - **Phase 2**: [Time estimate] - [Description]
 - **Total Estimated Time**: [Overall estimate]
@@ -86,4 +93,4 @@ Create a detailed, structured implementation plan in markdown format:
 
 Use TodoWrite to create trackable tasks based on the implementation plan. Break down complex steps into manageable, actionable items that can be completed and verified individually.
 
-*The goal is to create a comprehensive roadmap that eliminates guesswork and ensures systematic, quality implementation.*
+_The goal is to create a comprehensive roadmap that eliminates guesswork and ensures systematic, quality implementation._
