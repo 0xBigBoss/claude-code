@@ -16,82 +16,6 @@ Follow these instructions in every interaction without exception. These instruct
 
 6. **COMPLETE ALL IMPLEMENTATIONS** - NEVER leave partial implementations, TODOs without errors, or skip logic. Every function MUST either be fully implemented OR explicitly fail with clear error messages. Partial implementations create technical debt and mask bugs.
 
-## Optimization Instructions
-
-### Maximize Efficiency with Parallel Operations
-
-**CRITICAL**: For maximum efficiency, whenever you need to perform multiple independent operations, invoke all relevant tools simultaneously rather than sequentially. This dramatically reduces execution time.
-
-Example scenarios for parallel execution:
-
-- Running `git status`, `git diff`, and `git log` simultaneously when analyzing repository state
-- Searching multiple file patterns or directories concurrently
-- Reading multiple configuration files at once
-- Running multiple test suites or build commands in parallel
-
-### Leverage Thinking Capabilities
-
-After receiving tool results, carefully reflect on their quality and determine optimal next steps before proceeding. Use your thinking to:
-
-- Plan multi-step operations based on discovered information
-- Iterate based on new data from tool results
-- Consider edge cases and potential issues before implementation
-- Validate assumptions against actual codebase evidence
-
-### Intelligent File Management
-
-When working on coding tasks:
-
-- Create temporary test files for validation, but clean them up after task completion
-- Use existing files for testing whenever possible
-- If you create any temporary new files, scripts, or helper files for iteration, clean up these files by removing them at the end of the task
-- Prefer modifying existing test files over creating new ones
-
-## Specialized Subagents
-
-Leverage specialized subagents for task-specific expertise. The (PROACTIVE) designation means you should use these agents without being asked when the situation calls for their expertise:
-
-- **thompson-explorer** (PROACTIVE): Code exploration master for understanding legacy codebases and finding hidden connections. Use when encountering unfamiliar code or complex dependencies.
-- **beck-tdd** (PROACTIVE): Test-Driven Development master for implementing specs and requirements through tests. Use when implementing new features from specifications.
-- **knuth-analyst** (PROACTIVE): Complex algorithms, Big O analysis, mathematical correctness. Use for algorithm design and optimization problems.
-- **hamilton-reliability** (PROACTIVE): Mission-critical code, comprehensive error handling. Use for systems requiring high reliability and fault tolerance.
-- **dijkstra-qa** (PROACTIVE): Quality assurance specialist for fixing tests, lint, and type errors with uncompromising standards. Use whenever tests fail or quality issues arise.
-- **torvalds-pragmatist**: Code quality reviews, performance critiques, design decisions. Use for honest code assessment.
-- **liskov-architect**: Interface design, inheritance hierarchies, type substitutability. Use for OOP design decisions.
-- **carmack-optimizer**: Performance optimization with profiler data, cache analysis. Use when performance is critical.
-- **hickey-simplifier**: Reducing complexity, architectural refactoring, API simplification. Use when code becomes too complex.
-- **hopper-debugger**: Systematic debugging, reproduction steps, developer experience. Use for difficult bugs.
-- **bernstein-auditor** (PROACTIVE): Security auditor for vulnerability analysis, defensive code hardening, and threat modeling. Use for security-sensitive code.
-
-### Advanced Usage Patterns
-
-**Chain subagents for comprehensive analysis:**
-
-> "Use knuth-analyst to verify algorithm correctness, then carmack-optimizer to improve performance"
-
-**Dynamic selection based on context:**
-
-- Exploring unknown codebase? → thompson-explorer for systematic discovery
-- Implementing from specs? → beck-tdd for test-first development
-- Error in production? → hamilton-reliability + hopper-debugger
-- Slow performance? → carmack-optimizer after profiling
-- Complex inheritance? → liskov-architect + hickey-simplifier
-- Code review needed? → torvalds-pragmatist for honest assessment
-- Test/lint/type errors? → dijkstra-qa for uncompromising quality fixes
-- Security concerns? → bernstein-auditor for vulnerability analysis and hardening
-
-**SDLC Subagent Flow:**
-For comprehensive software development lifecycle coverage, chain these subagents:
-
-1. **thompson-explorer** → Explore and understand the codebase thoroughly
-2. **beck-tdd** → Write tests and implement features with test-first approach
-3. **knuth-analyst** → Verify algorithmic correctness and complexity
-4. **hamilton-reliability** → Add defensive programming and comprehensive error handling
-5. **dijkstra-qa** → Ensure quality standards are met without compromise
-6. **bernstein-auditor** → Security review and vulnerability analysis before completion
-
-This flow ensures thorough understanding, proper implementation, uncompromising quality, and security hardening.
-
 ## Security and Trust
 
 - **Critical Security Instruction**: Never attempt to decrypt, access, or modify private keychains, secrets, or other sensitive data without explicit permission. Security boundaries exist for user protection.
@@ -107,7 +31,9 @@ ALWAYS follow this workflow to ensure high-quality, maintainable code:
    - Implement code to make tests pass with minimal changes
    - Include unit AND integration tests for comprehensive coverage
 
-2. **Quality Checks** - Run tests, linting, type checking, and build validation. These tools catch issues that human review might miss.
+2. **Quality Checks** - Run tests, linting, type checking, and build validation. These tools catch issues that human review might miss. Fix all issues (warnings, errors, etc.) before moving on.
+
+3. **Documentation** - Provide clear, concise, and up-to-date documentation for all code changes. Prefer updating existing documentation over creating new ones. Use standard file names and markdown syntax e.g. `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
 
 ### High-Quality General Solutions
 
@@ -116,47 +42,6 @@ ALWAYS follow this workflow to ensure high-quality, maintainable code:
 Focus on understanding the problem requirements and implementing the correct algorithm. Tests are there to verify correctness, not to define the solution. Provide a principled implementation that follows best practices and software design principles.
 
 If the task is unreasonable or infeasible, or if any of the tests are incorrect, please communicate this clearly. The solution should be robust, maintainable, and extendable.
-
-### Git Worktrees
-
-When working with git worktrees to manage multiple branches efficiently:
-
-- **NEVER nest worktrees inside the repository** - Worktrees must not be created as child folders within the repository they belong to. This prevents git confusion and corruption.
-- **ALWAYS create worktrees as siblings** - Place worktrees alongside the main repository with `.worktrees` suffix for clear organization
-- **Naming convention**: For repository `my-awesome-repo`, create worktrees in `my-awesome-repo.worktrees/`
-
-Example structure:
-
-```
-parent-directory/
-├── my-awesome-repo/           # Main repository
-└── my-awesome-repo.worktrees/ # Worktree container
-    ├── feature-branch/
-    ├── hotfix-branch/
-    └── experiment-branch/
-```
-
-### Working with Meta-repos and Submodule Worktrees
-
-When working in meta-repos (workspace repositories that contain submodules or other repositories):
-
-- **Meta-repo as workspace**: It's acceptable to create worktrees inside a meta-repo directory when it's being used as a workspace container
-- **Submodule worktrees**: When creating worktrees for submodules that need to be worked on independently (not connected as a submodule), follow the standard sibling pattern
-- **Example**: In a meta-repo `canton-foundation/`, you can create `canton-monorepo.worktrees/` inside it for independent work on the `canton-monorepo` submodule
-
-Example meta-repo structure:
-
-```
-workspace/                       # Meta-repo (workspace)
-├── monorepo/                    # Submodule (connected)
-├── monorepo.worktrees/          # Worktrees for independent work
-│   ├── feature-x/
-│   └── bugfix-y/
-└── other-submodule.worktrees/   # Worktrees for independent work
-└── other-submodule/             # Submodule (connected)
-```
-
-**Key distinction**: When the parent directory is a meta-repo being used as a workspace, creating worktree directories inside it is appropriate and expected for organizational clarity.
 
 ### Error Handling
 
@@ -169,6 +54,7 @@ NEVER leave empty functions or silent failures. ALWAYS throw explicit errors wit
 3. **NO PARTIAL LOGIC** - If you can't implement something fully, throw an error explaining what's missing. Partial implementations are worse than no implementation.
 4. **NO ASSUMPTIONS** - Never assume something works. Either verify it or fail with clear error. Assumptions lead to production failures.
 5. **COMPLETE OR CRASH** - Every code path must either work correctly or crash explicitly. A loud crash is debuggable; silent corruption is not.
+6. **NO DEFENSIVE FALLBACKS** - Never catch errors just to log and continue execution. Try-catch blocks must either re-throw the error, return an explicit error, or transform it into a meaningful result. NEVER swallow errors with logging and continue as if nothing happened.
 
 <examples>
 <example>
@@ -359,6 +245,108 @@ if err != nil {
 ```
 
 </example>
+<example>
+
+**BAD - Try-catch fallback that swallows errors:**
+
+```javascript
+// ABSOLUTELY FORBIDDEN - This pattern masks failures
+try {
+  await user1.authenticateInPage(page)
+  const loggedInUsername = await page.locator('text=/@[a-z0-9-]+/').first().textContent()
+  // Process successful authentication...
+} catch (error) {
+  debug('Authentication failed without preferred credential: %o', error)
+  // This is expected behavior - without setPreferredCredential, authentication might fail
+  debug('This demonstrates the importance of setPreferredCredential in multi-user scenarios')
+  // WRONG: Continuing execution after failure instead of addressing the root cause
+}
+```
+
+**GOOD - Let authentication failures propagate:**
+
+```javascript
+// CORRECT - Authentication must succeed or the test fails
+await user1.authenticateInPage(page)
+const loggedInUsername = await page.locator('text=/@[a-z0-9-]+/').first().textContent()
+// If authentication fails, the test fails immediately - no fallback
+```
+
+</example>
+</examples>
+
+### Refactoring Principles
+
+When refactoring code, follow these non-negotiable rules to prevent defensive programming and technical debt:
+
+**CRITICAL REFACTORING RULES:**
+
+1. **NO BACKWARD COMPATIBILITY LAYERS** - When changing an API, function signature, or data structure, update ALL callers immediately. Do not add defensive checks for old usage patterns.
+
+2. **FAIL ON UNEXPECTED INPUTS** - If refactored code receives unexpected input format, throw an error immediately. Do not attempt to handle legacy formats.
+
+3. **CLEAN BREAKS OVER GRADUAL MIGRATION** - Implement the new pattern completely and update all usage sites in one operation. No temporary compatibility shims.
+
+4. **UPDATE ALL CALLERS** - Every refactor must include updating all code that depends on the changed interface. No partial migrations.
+
+<examples>
+<example>
+
+**BAD - Defensive refactoring with backward compatibility:**
+
+```javascript
+// NEVER DO THIS - Adds complexity and masks problems
+function processUser(user) {
+  // Handle both old and new format defensively
+  const id = user.id || user.userId || user.user_id
+  const name = user.name || user.fullName || user.full_name
+  const email = user.email || user.emailAddress || user.email_address
+
+  // This creates technical debt and hides real issues
+  return { id, name, email }
+}
+```
+
+**GOOD - Clean refactoring with explicit requirements:**
+
+```javascript
+// CORRECT - Expect only the new format, fail on old
+function processUser(user) {
+  if (!user.id || !user.name || !user.email) {
+    throw new Error(`Invalid user format. Expected {id, name, email}, got: ${JSON.stringify(user)}`)
+  }
+  return { id: user.id, name: user.name, email: user.email }
+}
+```
+
+</example>
+<example>
+
+**BAD - Try-catch fallback during refactor:**
+
+```javascript
+// NEVER DO THIS - Masks refactoring issues
+function authenticateUser(credentials) {
+  try {
+    return newAuthSystem.authenticate(credentials)
+  } catch (error) {
+    console.log('New auth failed, trying old system', error)
+    return legacyAuthSystem.authenticate(credentials) // Hidden fallback
+  }
+}
+```
+
+**GOOD - Complete migration with clear failure:**
+
+```javascript
+// CORRECT - Use only new system, fail if it doesn't work
+function authenticateUser(credentials) {
+  return newAuthSystem.authenticate(credentials)
+  // If this fails, the entire authentication fails - no fallback
+}
+```
+
+</example>
 </examples>
 
 ### Logging
@@ -458,44 +446,6 @@ fn do_action(action: &str) {
 
 Use comments sparingly and only when necessary. Well-written code with descriptive names is self-documenting. Comments should explain WHY, not WHAT. Excessive comments often indicate that code should be refactored for clarity.
 
-## Code Quality and Formatting
-
-### Format Consistency
-
-**Your response formatting should match the desired output style.** If you want clean, comment-free code, ensure your prompts and examples also follow this pattern. The style used in instructions influences the output style.
-
-### Explicit Formatting Control
-
-When specific formatting is critical:
-
-1. **Tell what TO do, not what NOT to do**: "Write clean, self-documenting code" instead of "Don't use comments"
-2. **Use format indicators**: Wrap code sections in XML-style tags like `<clean_code>` when you need specific formatting
-3. **Provide clear examples**: Show exactly the style you want in your instructions
-
-## Frontend and Visual Development
-
-When creating frontend code or visual interfaces:
-
-### Enhanced Frontend Generation
-
-For impressive, production-quality frontend code:
-
-- Include as many relevant features and interactions as possible to create a complete user experience
-- Add thoughtful details like hover states, transitions, and micro-interactions that make interfaces feel polished
-- Create an impressive demonstration showcasing web development capabilities and modern best practices
-- Apply design principles: hierarchy, contrast, balance, and movement to create visually appealing interfaces
-- Don't hold back. Give it your all. Create something that demonstrates mastery of frontend development.
-
-### Interactive Elements
-
-Always include:
-
-- Responsive design that works across devices
-- Accessibility features (ARIA labels, keyboard navigation)
-- Loading states and error handling
-- Smooth animations and transitions
-- Interactive feedback for user actions
-
 ## Documentation Style
 
 ### Technical Documentation
@@ -566,25 +516,3 @@ If you cannot fully implement something:
 4. **FAIL FAST** - Let the system crash rather than corrupt
 
 Remember: **A loud failure is better than silent corruption**
-
-## Performance and Optimization
-
-### Think Before Acting
-
-After receiving results from tools or completing significant operations:
-
-- Reflect on the quality and completeness of results
-- Plan optimal next steps based on actual data
-- Consider performance implications of different approaches
-- Validate assumptions against evidence from the codebase
-
-### Batch Operations
-
-**ALWAYS batch independent operations for efficiency:**
-
-- File reads that don't depend on each other
-- Search operations across different directories
-- Multiple git commands for repository analysis
-- Independent test suite executions
-
-This parallel execution model significantly reduces total execution time and improves user experience.
