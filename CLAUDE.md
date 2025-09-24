@@ -272,7 +272,9 @@ fn build_widget(widget_type: &str) -> Widget {
 
 <examples>
 <example>
+
 **BAD - Placeholder return:**
+
 ```go
 func IsProviderValid(id string) (bool, error) {
     // TODO: implement validation
@@ -290,7 +292,9 @@ func IsProviderValid(id string) (bool, error) {
 
 </example>
 <example>
+
 **BAD - Silent continuation:**
+
 ```go
 if err != nil {
     logger.Warn("Failed to check provider", zap.Error(err))
@@ -308,7 +312,9 @@ if err != nil {
 
 </example>
 <example>
+
 **BAD - Incomplete switch/if:**
+
 ```go
 switch status {
 case "active":
@@ -334,7 +340,9 @@ default:
 
 </example>
 <example>
+
 **BAD - Assuming success:**
+
 ```go
 // Assume provider exists if we can't check
 if err != nil {
