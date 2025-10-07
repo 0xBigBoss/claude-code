@@ -349,6 +349,116 @@ function authenticateUser(credentials) {
 </example>
 </examples>
 
+### Naming and Code Organization
+
+Avoid the **qualifier anti-pattern** (also called "hedging naming") - adding suffixes like `-simple`, `-new`, `-v2`, `-old`, `_backup`, `_tmp` to avoid committing to a change.
+
+**When This Happens:**
+- Refactoring but not confident enough to replace the original
+- Wanting "both versions just in case"
+- In transition but haven't decided which approach wins
+- Afraid to delete the old code
+
+**Why It's Problematic:**
+1. **Ambiguity** - Which version should users/developers use?
+2. **Decay** - Qualifiers lose meaning over time ("new" becomes old, "simple" becomes complex)
+3. **Technical Debt** - Both versions need maintenance or the unused one rots
+4. **Indecision Smell** - Signals lack of commitment to an approach
+5. **Proliferation** - Leads to `foo.sh`, `foo-v2.sh`, `foo-final.sh`, `foo-final-actually.sh`
+
+**Root Cause:** Avoiding a decision. Instead of replacing or properly versioning, parallel implementations are created.
+
+**The Solution:**
+- **Commit to one approach** - Choose the better implementation and replace the old one
+- **Delete old code** - Trust version control to preserve history
+- **Use proper versioning** - If both versions must coexist, use semantic versioning or feature flags
+- **Refactor completely** - Follow the refactoring principles above: clean breaks, update all callers
+
+<examples>
+<example>
+
+**BAD - Hedging with qualifiers:**
+
+```
+src/
+  auth.js          # Which one is current?
+  auth-new.js      # Is this production-ready?
+  auth-simple.js   # When to use this?
+  auth-v2.js       # Is this newer than auth-new.js?
+  auth-old.js      # Why still here?
+```
+
+**GOOD - Single source of truth:**
+
+```
+src/
+  auth.js          # The current, production implementation
+```
+
+If the old code is important:
+- It exists in git history (`git log -- auth.js`)
+- Document migration in commit message
+- Remove it from the codebase
+
+</example>
+<example>
+
+**BAD - Qualifier functions:**
+
+```javascript
+function calculatePriceSimple(items) {
+  return items.reduce((sum, item) => sum + item.price, 0)
+}
+
+function calculatePrice(items) {
+  // Complex logic with tax, discounts, etc.
+  // When should we use the simple version?
+}
+
+function calculatePriceNew(items) {
+  // Even newer logic - which is correct?
+}
+```
+
+**GOOD - Clear, purposeful naming:**
+
+```javascript
+function calculateSubtotal(items) {
+  return items.reduce((sum, item) => sum + item.price, 0)
+}
+
+function calculateTotal(items, taxRate, discountCode) {
+  const subtotal = calculateSubtotal(items)
+  const discount = applyDiscount(subtotal, discountCode)
+  const tax = calculateTax(subtotal - discount, taxRate)
+  return subtotal - discount + tax
+}
+```
+
+</example>
+<example>
+
+**BAD - Backup files in codebase:**
+
+```
+config.yaml
+config.yaml.backup
+config.yaml.old
+config-backup-2024-03-15.yaml
+```
+
+**GOOD - Use version control:**
+
+```
+config.yaml  # Current version
+# Previous versions in git history
+```
+
+</example>
+</examples>
+
+**Remember:** Qualifiers in names are code smells indicating indecision. Make the decision, commit to it, and delete the alternative. Version control preserves history - use it.
+
 ### Logging
 
 Implement conditional logging using project's existing logger or language-appropriate defaults. Logging provides visibility into system behavior without using a debugger:

@@ -6,6 +6,7 @@
     "type": "command",
     "command": "statusline"
   },
+  "alwaysThinkingEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1754076652911
   }

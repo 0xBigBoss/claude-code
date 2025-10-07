@@ -2,7 +2,6 @@
 allowed-tools: Read, Grep, Glob, LS, TodoWrite
 argument-hint: [task-description]
 description: Create detailed context summary for continuing work on a task
-model: claude-opus-4-1-20250805
 ---
 
 # New Task Context Creation
