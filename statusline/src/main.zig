@@ -117,6 +117,14 @@ const GitStatus = struct {
     }
 };
 
+/// Read all content from a reader (replacement for readAllAlloc in Zig 0.15.1)
+fn readAllAlloc(allocator: Allocator, reader: *std.Io.Reader) ![]u8 {
+    var aw: std.Io.Writer.Allocating = .init(allocator);
+    defer aw.deinit();
+    _ = try reader.streamRemaining(&aw.writer);
+    return aw.toOwnedSlice();
+}
+
 /// Execute a shell command and return trimmed output
 fn execCommand(allocator: Allocator, command: [:0]const u8, cwd: ?[]const u8) ![]const u8 {
     const argv = [_][:0]const u8{ "sh", "-c", command };
@@ -129,7 +137,10 @@ fn execCommand(allocator: Allocator, command: [:0]const u8, cwd: ?[]const u8) ![
     try child.spawn();
 
     const stdout = child.stdout.?;
-    const raw_output = try stdout.reader().readAllAlloc(allocator, 1024 * 1024);
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_reader = stdout.readerStreaming(&stdout_buffer);
+    const reader = &stdout_reader.interface;
+    const raw_output = try readAllAlloc(allocator, reader);
     defer allocator.free(raw_output);
 
     _ = try child.wait();
@@ -153,12 +164,12 @@ fn calculateContextUsage(allocator: Allocator, transcript_path: ?[]const u8) !Co
     defer allocator.free(content);
 
     // Process only last 50 lines for performance
-    var lines = std.ArrayList([]const u8).init(allocator);
-    defer lines.deinit();
+    var lines = try std.ArrayList([]const u8).initCapacity(allocator, 0);
+    defer lines.deinit(allocator);
 
     var line_iter = std.mem.splitScalar(u8, content, '\n');
     while (line_iter.next()) |line| {
-        if (line.len > 0) try lines.append(line);
+        if (line.len > 0) try lines.append(allocator, line);
     }
 
     const start_idx = if (lines.items.len > 50) lines.items.len - 50 else 0;
@@ -220,12 +231,12 @@ fn formatSessionDuration(allocator: Allocator, transcript_path: ?[]const u8, wri
     const content = file.readToEndAlloc(allocator, 10 * 1024 * 1024) catch return false;
     defer allocator.free(content);
 
-    var lines = std.ArrayList([]const u8).init(allocator);
-    defer lines.deinit();
+    var lines = try std.ArrayList([]const u8).initCapacity(allocator, 0);
+    defer lines.deinit(allocator);
 
     var line_iter = std.mem.splitScalar(u8, content, '\n');
     while (line_iter.next()) |line| {
-        if (line.len > 0) try lines.append(line);
+        if (line.len > 0) try lines.append(allocator, line);
     }
 
     if (lines.items.len < 2) return false;
@@ -289,33 +300,33 @@ fn abbreviateSegment(allocator: Allocator, segment: []const u8) ![]const u8 {
         }
     }
     
-    var result = std.ArrayList(u8).init(allocator);
-    
+    var result = try std.ArrayList(u8).initCapacity(allocator, 0);
+
     var parts = std.mem.splitAny(u8, segment, "-_");
     var first = true;
-    
+
     while (parts.next()) |part| {
         if (part.len == 0) continue;
-        
-        if (!first) try result.append('-');
-        
+
+        if (!first) try result.append(allocator, '-');
+
         if (part.len >= 3 and std.mem.eql(u8, part[0..2], "0x")) {
-            try result.appendSlice(part[0..3]);
+            try result.appendSlice(allocator, part[0..3]);
         } else if (part.len <= 3) {
-            try result.appendSlice(part);
+            try result.appendSlice(allocator, part);
         } else {
-            try result.append(part[0]);
+            try result.append(allocator, part[0]);
         }
-        
+
         first = false;
     }
-    
+
     if (result.items.len == 0) {
-        result.deinit();
+        result.deinit(allocator);
         return try allocator.dupe(u8, segment);
     }
-    
-    return try result.toOwnedSlice();
+
+    return try result.toOwnedSlice(allocator);
 }
 
 /// Format path with home directory abbreviation and intelligent shortening
@@ -342,13 +353,13 @@ fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8) !voi
         has_home = true;
     }
     
-    var segments = std.ArrayList([]const u8).init(allocator);
-    defer segments.deinit();
-    
+    var segments = try std.ArrayList([]const u8).initCapacity(allocator, 0);
+    defer segments.deinit(allocator);
+
     var parts = std.mem.splitScalar(u8, display_path, '/');
     while (parts.next()) |part| {
         if (part.len > 0) {
-            try segments.append(part);
+            try segments.append(allocator, part);
         }
     }
     
@@ -439,8 +450,10 @@ pub fn main() !void {
     }
 
     // Read and parse JSON input
-    const stdin = std.io.getStdIn().reader();
-    const input_json = try stdin.readAllAlloc(allocator, 1024 * 1024);
+    var stdin_buffer: [8192]u8 = undefined;
+    var stdin_reader = std.fs.File.stdin().readerStreaming(&stdin_buffer);
+    const stdin = &stdin_reader.interface;
+    const input_json = try readAllAlloc(allocator, stdin);
 
     // Debug logging
     if (debug_mode) {
@@ -449,7 +462,11 @@ pub fn main() !void {
             defer file.close();
             file.seekFromEnd(0) catch {};
             const timestamp = std.time.timestamp();
-            file.writer().print("[{d}] Input JSON: {s}\n", .{ timestamp, input_json }) catch {};
+            var file_buffer: [1024]u8 = undefined;
+            var file_writer = file.writerStreaming(&file_buffer);
+            const debug_writer = &file_writer.interface;
+            debug_writer.print("[{d}] Input JSON: {s}\n", .{ timestamp, input_json }) catch {};
+            debug_writer.flush() catch {};
         }
     }
 
@@ -462,11 +479,18 @@ pub fn main() !void {
                 defer file.close();
                 file.seekFromEnd(0) catch {};
                 const timestamp = std.time.timestamp();
-                file.writer().print("[{d}] Parse error: {any}\n", .{ timestamp, err }) catch {};
+                var file_buffer: [1024]u8 = undefined;
+                var file_writer = file.writerStreaming(&file_buffer);
+                const debug_writer = &file_writer.interface;
+                debug_writer.print("[{d}] Parse error: {any}\n", .{ timestamp, err }) catch {};
+                debug_writer.flush() catch {};
             }
         }
-        const stdout = std.io.getStdOut().writer();
+        var stdout_buffer: [256]u8 = undefined;
+        var stdout_writer_wrapper = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer_wrapper.interface;
         stdout.print("{s}~{s}\n", .{ colors.cyan, colors.reset }) catch {};
+        stdout.flush() catch {};
         return;
     };
 
@@ -535,12 +559,19 @@ pub fn main() !void {
             defer file.close();
             file.seekFromEnd(0) catch {};
             const timestamp = std.time.timestamp();
-            file.writer().print("[{d}] Output: {s}\n", .{ timestamp, output }) catch {};
+            var file_buffer: [1024]u8 = undefined;
+            var file_writer = file.writerStreaming(&file_buffer);
+            const debug_writer = &file_writer.interface;
+            debug_writer.print("[{d}] Output: {s}\n", .{ timestamp, output }) catch {};
+            debug_writer.flush() catch {};
         }
     }
 
-    const stdout = std.io.getStdOut().writer();
+    var stdout_buffer: [256]u8 = undefined;
+    var stdout_writer_wrapper = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer_wrapper.interface;
     stdout.print("{s}\n", .{output}) catch {};
+    stdout.flush() catch {};
 }
 
 test "ModelType detects models correctly" {
