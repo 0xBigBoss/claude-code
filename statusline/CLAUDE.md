@@ -88,7 +88,7 @@ The code is optimized for minimal latency with single-threaded execution and rel
 
 ## Development Notes
 
-- Minimum Zig version: 0.14.1
+- Minimum Zig version: 0.15.1
 - No external dependencies
 - Cross-platform compatible (POSIX environments)
 - ANSI color codes for terminal output
