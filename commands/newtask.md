@@ -2,6 +2,7 @@
 allowed-tools: Read, Grep, Glob, LS, TodoWrite
 argument-hint: [task-description]
 description: Create detailed context summary for continuing work on a task
+model: haiku
 ---
 
 # New Task Context Creation
