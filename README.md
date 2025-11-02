@@ -6,8 +6,8 @@ A comprehensive configuration system for [Claude Code](https://docs.anthropic.co
 
 - **Intelligent Development Workflow**: Implements test-driven development, automated quality checks, and proper branching strategies
 - **Project Memory Management**: Automatic context preservation between sessions using `.memory/` files
-- **Specialized Commands**: Pre-built commands for memory condensation, first-principles development, and plan implementation
-- **Expert Subagents**: Eleven specialized AI subagents inspired by programming legends for focused expertise
+- **Specialized Commands**: Pre-built commands for git workflows and issue resolution
+- **Expert Subagents**: Two specialized AI subagents for focused expertise in testing and quality assurance
 - **Quality Assurance**: Built-in support for linting, type checking, and testing workflows
 - **Documentation Standards**: Consistent technical writing guidelines
 
@@ -15,22 +15,11 @@ A comprehensive configuration system for [Claude Code](https://docs.anthropic.co
 
 - **CLAUDE.md**: Core operating instructions and development principles
 - **commands/**: Specialized command templates
-  - `condense-memory.md`: Memory management and reorganization
-  - `first-principles.md`: First-principles development approach
-  - `implement-plan.md`: Plan execution framework
-  - `refine-plan.md`: Plan refinement and validation
-- **agents/**: Specialized subagents inspired by programming legends
-  - `thompson-explorer.md`: Systematic codebase exploration and discovery
-  - `beck-tdd.md`: Test-Driven Development mastery
-  - `knuth-analyst.md`: Algorithm analysis with mathematical rigor
-  - `torvalds-pragmatist.md`: No-nonsense code quality enforcement
-  - `hamilton-reliability.md`: Ultra-reliable defensive programming
-  - `carmack-optimizer.md`: Performance optimization mastery
-  - `hickey-simplifier.md`: Complexity elimination and design
-  - `liskov-architect.md`: Abstraction and type hierarchy design
-  - `hopper-debugger.md`: Systematic debugging and developer experience
-  - `dijkstra-qa.md`: Uncompromising quality assurance
-  - `bernstein-auditor.md`: Security vulnerability analysis and defensive hardening
+  - `git-commit.md`: Git commit workflow automation
+  - `fix-issue.md`: Issue resolution workflow
+- **agents/**: Specialized subagents for focused development tasks
+  - `tdd.md`: Test-Driven Development implementation
+  - `qa.md`: Quality assurance and error resolution
 
 ## Installation
 
@@ -75,40 +64,26 @@ Once installed, Claude Code will automatically load these configurations. The sy
 
 1. **Project Setup**: Automatically creates `.memory/` folder and imports for context preservation
 2. **Development**: Follows TDD principles with automated quality checks
-3. **Memory Management**: Uses the `condense-memory` command when context grows too large
-4. **Plan Execution**: Leverage `implement-plan` and `refine-plan` for complex projects
+3. **Git Workflows**: Automated commit message generation and issue resolution
 
 ### Specialized Subagents
 
-The configuration includes eleven expert subagents, each inspired by a programming legend:
+The configuration includes two specialized subagents for focused development tasks:
 
-- 🔐 **bernstein-auditor**: Security paranoia king who thinks every line of code is sus until proven otherwise. Makes your apps harder to hack than Fort Knox.
-- 🕵️ **thompson-explorer**: Old school detective who greps everything because "code don't lie but documentation do." Maps codebases like an archaeologist.
-- 🧪 **beck-tdd**: Test-first zealot who writes tests before code because YOLO isn't a development strategy. Makes code bulletproof through discipline.
-- 🧮 **knuth-analyst**: Math genius who proves algorithms are correct with actual math instead of vibes. Complexity analysis gives them life.
-- 🚀 **hamilton-reliability**: Astronaut-grade engineer who codes like lives depend on it (because they did). Zero tolerance for "it works on my machine."
-- 😤 **torvalds-pragmatist**: No-BS code reviewer who roasts bad code harder than Twitter roasts celebrities. "Talk is cheap, show me the code."
-- 🏗️ **liskov-architect**: Type system perfectionist who makes inheritance hierarchies so clean they spark joy. Substitutability is their religion.
-- ⚡ **carmack-optimizer**: Performance wizard who makes code faster than a TikTok trend going viral. Every microsecond matters, no cap.
-- ✨ **hickey-simplifier**: Complexity assassin who deletes code like Marie Kondo organizes closets. Simple is the ultimate flex.
-- 🐛 **hopper-debugger**: Bug hunter who finds issues like they're hunting Easter eggs. Makes error messages actually helpful instead of cryptic.
-- ✅ **dijkstra-qa**: Quality control perfectionist who treats lint warnings like personal attacks. Zero tolerance for messy code.
-- 🗑️ **moore-minimalist**: Digital Marie Kondo who deletes code that doesn't spark joy. "The best code is no code" hits different when they say it.
+- **tdd**: Test-Driven Development implementation. Use when implementing features from specifications or requirements. Follows strict Red-Green-Refactor cycles with verification at each step.
 
-Each agent is ready to drop in and fix your code instead of just talking about it! They operate with strict anti-hallucination guidelines, requiring concrete evidence and verification for all claims.
+- **qa**: Quality assurance and error resolution. Use to fix failing tests, lint errors, type errors, and maintain code quality standards. Takes an uncompromising approach to eliminating quality violations.
+
+Each agent operates with strict verification requirements, requiring concrete evidence and validation for all actions.
 
 ### SDLC Subagent Flow
 
 For comprehensive software development lifecycle coverage, chain subagents in this sequence:
 
-1. **thompson-explorer** → Explore and understand the codebase
-2. **beck-tdd** → Write tests and implement features
-3. **knuth-analyst** → Verify algorithmic correctness
-4. **dijkstra-qa** → Ensure quality standards
-5. **hamilton-reliability** → Add defensive programming and error handling
-6. **bernstein-auditor** → Security review and vulnerability analysis
+1. **tdd** → Implement features using test-driven development
+2. **qa** → Validate code quality and resolve all errors
 
-This flow ensures thorough understanding, proper implementation, uncompromising quality, and security hardening.
+This flow ensures verified implementation and uncompromising quality.
 
 ## Configuration Details
 
