@@ -12,7 +12,7 @@ Follow these instructions in every interaction without exception. These instruct
 
 4. **Verify All Changes with Project Tooling** - Run tests, linters, builds to prove changes work. Close feedback loop and ensure quality integration. Verification prevents regression and maintains code quality standards.
 
-5. **Document Project Context** - Maintain clear documentation of project decisions, patterns, and conventions to support consistent development. Future developers (including yourself) rely on this context.
+5. **Document Project Context** - Maintain clear documentation of project decisions, patterns, and conventions to support consistent development. Future developers (including yourself) rely on this context. Prefer inline documentation (code comments) over external documentation (READMEs, wikis, etc.) when possible.
 
 6. **COMPLETE ALL IMPLEMENTATIONS** - NEVER leave partial implementations, TODOs without errors, or skip logic. Every function MUST either be fully implemented OR explicitly fail with clear error messages. Partial implementations create technical debt and mask bugs.
 
@@ -33,7 +33,7 @@ ALWAYS follow this workflow to ensure high-quality, maintainable code:
 
 2. **Quality Checks** - Run tests, linting, type checking, and build validation. These tools catch issues that human review might miss. Fix all issues (warnings, errors, etc.) before moving on.
 
-3. **Documentation** - Provide clear, concise, and up-to-date documentation for all code changes. Prefer updating existing documentation over creating new ones. Use standard file names and markdown syntax e.g. `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
+3. **Documentation** - Provide clear, concise, and up-to-date documentation for all code changes. Add inline documentation (code comments) to explain complex logic or non-obvious decisions. Public methods, classes, and APIs require documentation regarding the purpose, inputs, outputs, and any gotchas when working with the functions. Prefer updating existing documentation over creating new ones. Use standard file names and markdown syntax e.g. `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
 
 ### High-Quality General Solutions
 
@@ -58,14 +58,7 @@ NEVER leave empty functions or silent failures. ALWAYS throw explicit errors wit
 
 <examples>
 <example>
-Python - Instead of:
-
-```python
-def build_widget(widget_type):
-    # TODO: Implement widget_type-specific logic
-```
-
-Use:
+Python:
 
 ```python
 def build_widget(widget_type):
@@ -74,15 +67,7 @@ def build_widget(widget_type):
 
 </example>
 <example>
-JavaScript - Instead of:
-
-```javascript
-function buildWidget(widgetType) {
-  // TODO: Implement widget_type-specific logic
-}
-```
-
-Use:
+JavaScript:
 
 ```javascript
 function buildWidget(widgetType) {
@@ -94,16 +79,7 @@ function buildWidget(widgetType) {
 
 </example>
 <example>
-Java - Instead of:
-
-```java
-public Widget buildWidget(String widgetType) {
-    // TODO: Implement widget_type-specific logic
-    return null;
-}
-```
-
-Use:
+Java:
 
 ```java
 public Widget buildWidget(String widgetType) {
@@ -115,16 +91,7 @@ public Widget buildWidget(String widgetType) {
 
 </example>
 <example>
-Go - Instead of:
-
-```go
-func buildWidget(widgetType string) *Widget {
-    // TODO: Implement widget_type-specific logic
-    return nil
-}
-```
-
-Use:
+Go:
 
 ```go
 func buildWidget(widgetType string) *Widget {
@@ -134,16 +101,7 @@ func buildWidget(widgetType string) *Widget {
 
 </example>
 <example>
-Rust - Instead of:
-
-```rust
-fn build_widget(widget_type: &str) -> Widget {
-    // TODO: Implement widget_type-specific logic
-    unimplemented!()
-}
-```
-
-Use:
+Rust:
 
 ```rust
 fn build_widget(widget_type: &str) -> Widget {
@@ -154,21 +112,11 @@ fn build_widget(widget_type: &str) -> Widget {
 </example>
 </examples>
 
-### Common Anti-Patterns to AVOID
+### Error Handling Patterns
 
 <examples>
 <example>
-
-**BAD - Placeholder return:**
-
-```go
-func IsProviderValid(id string) (bool, error) {
-    // TODO: implement validation
-    return true, nil  // WRONG: Returns success without logic
-}
-```
-
-**GOOD - Explicit failure:**
+Explicit failure for unimplemented functions:
 
 ```go
 func IsProviderValid(id string) (bool, error) {
@@ -178,17 +126,7 @@ func IsProviderValid(id string) (bool, error) {
 
 </example>
 <example>
-
-**BAD - Silent continuation:**
-
-```go
-if err != nil {
-    logger.Warn("Failed to check provider", zap.Error(err))
-    // Continue anyway...  WRONG: Hides failures
-}
-```
-
-**GOOD - Fail fast:**
+Fail fast on errors:
 
 ```go
 if err != nil {
@@ -198,20 +136,7 @@ if err != nil {
 
 </example>
 <example>
-
-**BAD - Incomplete switch/if:**
-
-```go
-switch status {
-case "active":
-    return processActive()
-case "inactive":
-    return processInactive()
-// Missing default case - WRONG: Silent failure path
-}
-```
-
-**GOOD - Handle all cases:**
+Handle all cases in switch statements:
 
 ```go
 switch status {
@@ -226,17 +151,7 @@ default:
 
 </example>
 <example>
-
-**BAD - Assuming success:**
-
-```go
-// Assume provider exists if we can't check
-if err != nil {
-    return true  // WRONG: Assumes success on error
-}
-```
-
-**GOOD - Explicit error:**
+Propagate errors explicitly:
 
 ```go
 if err != nil {
@@ -246,29 +161,15 @@ if err != nil {
 
 </example>
 <example>
-
-**BAD - Try-catch fallback that swallows errors:**
-
-```javascript
-// ABSOLUTELY FORBIDDEN - This pattern masks failures
-try {
-  await user1.authenticateInPage(page)
-  const loggedInUsername = await page.locator('text=/@[a-z0-9-]+/').first().textContent()
-  // Process successful authentication...
-} catch (error) {
-  debug('Authentication failed without preferred credential: %o', error)
-  // This is expected behavior - without setPreferredCredential, authentication might fail
-  debug('This demonstrates the importance of setPreferredCredential in multi-user scenarios')
-  // WRONG: Continuing execution after failure instead of addressing the root cause
-}
-```
-
-**GOOD - Let authentication failures propagate:**
+Let failures propagate without fallbacks:
 
 ```javascript
-// CORRECT - Authentication must succeed or the test fails
-await user1.authenticateInPage(page)
-const loggedInUsername = await page.locator('text=/@[a-z0-9-]+/').first().textContent()
+// Authentication must succeed or the test fails
+await user1.authenticateInPage(page);
+const loggedInUsername = await page
+  .locator("text=/@[a-z0-9-]+/")
+  .first()
+  .textContent();
 // If authentication fails, the test fails immediately - no fallback
 ```
 
@@ -291,57 +192,30 @@ When refactoring code, follow these non-negotiable rules to prevent defensive pr
 
 <examples>
 <example>
-
-**BAD - Defensive refactoring with backward compatibility:**
-
-```javascript
-// NEVER DO THIS - Adds complexity and masks problems
-function processUser(user) {
-  // Handle both old and new format defensively
-  const id = user.id || user.userId || user.user_id
-  const name = user.name || user.fullName || user.full_name
-  const email = user.email || user.emailAddress || user.email_address
-
-  // This creates technical debt and hides real issues
-  return { id, name, email }
-}
-```
-
-**GOOD - Clean refactoring with explicit requirements:**
+Clean refactoring with explicit requirements:
 
 ```javascript
-// CORRECT - Expect only the new format, fail on old
+// Expect only the new format, fail on old
 function processUser(user) {
   if (!user.id || !user.name || !user.email) {
-    throw new Error(`Invalid user format. Expected {id, name, email}, got: ${JSON.stringify(user)}`)
+    throw new Error(
+      `Invalid user format. Expected {id, name, email}, got: ${JSON.stringify(
+        user
+      )}`
+    );
   }
-  return { id: user.id, name: user.name, email: user.email }
+  return { id: user.id, name: user.name, email: user.email };
 }
 ```
 
 </example>
 <example>
-
-**BAD - Try-catch fallback during refactor:**
-
-```javascript
-// NEVER DO THIS - Masks refactoring issues
-function authenticateUser(credentials) {
-  try {
-    return newAuthSystem.authenticate(credentials)
-  } catch (error) {
-    console.log('New auth failed, trying old system', error)
-    return legacyAuthSystem.authenticate(credentials) // Hidden fallback
-  }
-}
-```
-
-**GOOD - Complete migration with clear failure:**
+Complete migration with clear failure:
 
 ```javascript
-// CORRECT - Use only new system, fail if it doesn't work
+// Use only new system, fail if it doesn't work
 function authenticateUser(credentials) {
-  return newAuthSystem.authenticate(credentials)
+  return newAuthSystem.authenticate(credentials);
   // If this fails, the entire authentication fails - no fallback
 }
 ```
@@ -354,12 +228,14 @@ function authenticateUser(credentials) {
 Avoid the **qualifier anti-pattern** (also called "hedging naming") - adding suffixes like `-simple`, `-new`, `-v2`, `-old`, `_backup`, `_tmp` to avoid committing to a change.
 
 **When This Happens:**
+
 - Refactoring but not confident enough to replace the original
 - Wanting "both versions just in case"
 - In transition but haven't decided which approach wins
 - Afraid to delete the old code
 
 **Why It's Problematic:**
+
 1. **Ambiguity** - Which version should users/developers use?
 2. **Decay** - Qualifiers lose meaning over time ("new" becomes old, "simple" becomes complex)
 3. **Technical Debt** - Both versions need maintenance or the unused one rots
@@ -369,6 +245,7 @@ Avoid the **qualifier anti-pattern** (also called "hedging naming") - adding suf
 **Root Cause:** Avoiding a decision. Instead of replacing or properly versioning, parallel implementations are created.
 
 **The Solution:**
+
 - **Commit to one approach** - Choose the better implementation and replace the old one
 - **Delete old code** - Trust version control to preserve history
 - **Use proper versioning** - If both versions must coexist, use semantic versioning or feature flags
@@ -376,78 +253,39 @@ Avoid the **qualifier anti-pattern** (also called "hedging naming") - adding suf
 
 <examples>
 <example>
-
-**BAD - Hedging with qualifiers:**
-
-```
-src/
-  auth.js          # Which one is current?
-  auth-new.js      # Is this production-ready?
-  auth-simple.js   # When to use this?
-  auth-v2.js       # Is this newer than auth-new.js?
-  auth-old.js      # Why still here?
-```
-
-**GOOD - Single source of truth:**
+Single source of truth in file structure:
 
 ```
 src/
   auth.js          # The current, production implementation
 ```
 
-If the old code is important:
-- It exists in git history (`git log -- auth.js`)
+Trust version control for history:
+
+- Previous versions exist in git history (`git log -- auth.js`)
 - Document migration in commit message
-- Remove it from the codebase
+- Remove old versions from the codebase
 
 </example>
 <example>
-
-**BAD - Qualifier functions:**
-
-```javascript
-function calculatePriceSimple(items) {
-  return items.reduce((sum, item) => sum + item.price, 0)
-}
-
-function calculatePrice(items) {
-  // Complex logic with tax, discounts, etc.
-  // When should we use the simple version?
-}
-
-function calculatePriceNew(items) {
-  // Even newer logic - which is correct?
-}
-```
-
-**GOOD - Clear, purposeful naming:**
+Clear, purposeful naming:
 
 ```javascript
 function calculateSubtotal(items) {
-  return items.reduce((sum, item) => sum + item.price, 0)
+  return items.reduce((sum, item) => sum + item.price, 0);
 }
 
 function calculateTotal(items, taxRate, discountCode) {
-  const subtotal = calculateSubtotal(items)
-  const discount = applyDiscount(subtotal, discountCode)
-  const tax = calculateTax(subtotal - discount, taxRate)
-  return subtotal - discount + tax
+  const subtotal = calculateSubtotal(items);
+  const discount = applyDiscount(subtotal, discountCode);
+  const tax = calculateTax(subtotal - discount, taxRate);
+  return subtotal - discount + tax;
 }
 ```
 
 </example>
 <example>
-
-**BAD - Backup files in codebase:**
-
-```
-config.yaml
-config.yaml.backup
-config.yaml.old
-config-backup-2024-03-15.yaml
-```
-
-**GOOD - Use version control:**
+Use version control for file history:
 
 ```
 config.yaml  # Current version
@@ -463,7 +301,7 @@ config.yaml  # Current version
 
 Implement conditional logging using project's existing logger or language-appropriate defaults. Logging provides visibility into system behavior without using a debugger:
 
-- JavaScript: `debuglog` or 'debug' package
+- JavaScript: `debug` or `pino` package
 - Python: `logging` module
 - Java: SLF4J with Logback
 - Go: `log/slog`
