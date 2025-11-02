@@ -1,28 +1,28 @@
-# Claude Code Operating Instructions
+# Team Development Guidelines
 
-Follow these instructions in every interaction without exception. These instructions are optimized for Claude Code to deliver precise, high-quality code assistance.
+These guidelines establish our team's standards for delivering precise, high-quality code. All team members should follow these practices to ensure consistency and maintainability across our codebase.
 
 ## Core Principles
 
-1. **Work Idiomatically and Safely** - Understand and adopt project conventions, style, architecture before making changes. Prioritize project coherence over abstract "correctness". This ensures your contributions integrate seamlessly and maintain the project's established patterns.
+1. **Work Idiomatically and Safely** - Understand and adopt project conventions, style, and architecture before making changes. Prioritize project coherence over abstract "correctness". This ensures contributions integrate seamlessly and maintain the project's established patterns.
 
-2. **Fail Fast with Visible Evidence** - Build simplest implementation/test to validate understanding. Use concrete results (tests, prototypes, code) as communication method rather than discussion. Quick feedback loops prevent wasted effort and ensure correctness early.
+2. **Fail Fast with Visible Evidence** - Build the simplest implementation/test to validate understanding. Use concrete results (tests, prototypes, code) as the primary communication method rather than lengthy discussions. Quick feedback loops prevent wasted effort and ensure correctness early.
 
-3. **Always Use Available Tools** - Search for documentation, verify assumptions, validate approaches. Essential mechanism for executing evidence-based development. Tool usage prevents assumptions and ensures accuracy in every decision.
+3. **Always Use Available Tools** - Search documentation, verify assumptions, and validate approaches before implementing. This evidence-based development approach prevents assumptions and ensures accuracy in every decision.
 
-4. **Verify All Changes with Project Tooling** - Run tests, linters, builds to prove changes work. Close feedback loop and ensure quality integration. Verification prevents regression and maintains code quality standards.
+4. **Verify All Changes with Project Tooling** - Run tests, linters, and builds to prove changes work. Close the feedback loop and ensure quality integration. Verification prevents regression and maintains code quality standards.
 
-5. **Document Project Context** - Maintain clear documentation of project decisions, patterns, and conventions to support consistent development. Future developers (including yourself) rely on this context. Prefer inline documentation (code comments) over external documentation (READMEs, wikis, etc.) when possible.
+5. **Document Project Context** - Maintain clear documentation of project decisions, patterns, and conventions to support consistent development. Future developers (including yourself) rely on this context. Prefer inline documentation (code comments) over external documentation when possible.
 
-6. **COMPLETE ALL IMPLEMENTATIONS** - NEVER leave partial implementations, TODOs without errors, or skip logic. Every function MUST either be fully implemented OR explicitly fail with clear error messages. Partial implementations create technical debt and mask bugs.
+6. **COMPLETE ALL IMPLEMENTATIONS** - Never leave partial implementations, TODOs without errors, or skip logic. Every function must either be fully implemented OR explicitly fail with clear error messages. Partial implementations create technical debt and mask bugs.
 
 ## Security and Trust
 
-- **Critical Security Instruction**: Never attempt to decrypt, access, or modify private keychains, secrets, or other sensitive data without explicit permission. Security boundaries exist for user protection.
+- **Critical Security Principle**: Never decrypt, access, or modify private keychains, secrets, or other sensitive data without explicit authorization. Security boundaries exist for everyone's protection.
 
 ## Development Workflow & Standards
 
-ALWAYS follow this workflow to ensure high-quality, maintainable code:
+Follow this workflow to ensure high-quality, maintainable code:
 
 1. **Test-Driven Development**
 
@@ -33,26 +33,26 @@ ALWAYS follow this workflow to ensure high-quality, maintainable code:
 
 2. **Quality Checks** - Run tests, linting, type checking, and build validation. These tools catch issues that human review might miss. Fix all issues (warnings, errors, etc.) before moving on.
 
-3. **Documentation** - Provide clear, concise, and up-to-date documentation for all code changes. Add inline documentation (code comments) to explain complex logic or non-obvious decisions. Public methods, classes, and APIs require documentation regarding the purpose, inputs, outputs, and any gotchas when working with the functions. Prefer updating existing documentation over creating new ones. Use standard file names and markdown syntax e.g. `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
+3. **Documentation** - Provide clear, concise, and up-to-date documentation for all code changes. Add inline documentation (code comments) to explain complex logic or non-obvious decisions. Public methods, classes, and APIs require documentation regarding purpose, inputs, outputs, and any gotchas. Prefer updating existing documentation over creating new ones. Use standard file names like `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
 
 ### High-Quality General Solutions
 
-**CRITICAL**: Please write a high quality, general purpose solution. Implement a solution that works correctly for all valid inputs, not just the test cases. Do not hard-code values or create solutions that only work for specific test inputs. Instead, implement the actual logic that solves the problem generally.
+**CRITICAL**: Write high-quality, general-purpose solutions. Implement solutions that work correctly for all valid inputs, not just the test cases. Do not hard-code values or create solutions that only work for specific test inputs. Instead, implement the actual logic that solves the problem generally.
 
-Focus on understanding the problem requirements and implementing the correct algorithm. Tests are there to verify correctness, not to define the solution. Provide a principled implementation that follows best practices and software design principles.
+Focus on understanding the problem requirements and implementing the correct algorithm. Tests verify correctness; they don't define the solution. Provide principled implementations that follow best practices and software design principles.
 
-If the task is unreasonable or infeasible, or if any of the tests are incorrect, please communicate this clearly. The solution should be robust, maintainable, and extendable.
+If a task is unreasonable or infeasible, or if tests are incorrect, communicate this clearly to the team. Solutions should be robust, maintainable, and extendable.
 
 ### Error Handling
 
-NEVER leave empty functions or silent failures. ALWAYS throw explicit errors with descriptive messages. Proper error handling is critical because it makes debugging possible and prevents data corruption.
+Never leave empty functions or silent failures. Always throw explicit errors with descriptive messages. Proper error handling is critical because it makes debugging possible and prevents data corruption.
 
 **CRITICAL RULES:**
 
 1. **NO PLACEHOLDERS** - Never return hardcoded values like `true`, `false`, `nil`, empty strings, or dummy data when actual logic is needed. These mask bugs and create false confidence.
 2. **NO SILENT SKIPS** - Never log warnings and continue. If something fails, FAIL LOUDLY. Silent failures accumulate into system-wide issues.
 3. **NO PARTIAL LOGIC** - If you can't implement something fully, throw an error explaining what's missing. Partial implementations are worse than no implementation.
-4. **NO ASSUMPTIONS** - Never assume something works. Either verify it or fail with clear error. Assumptions lead to production failures.
+4. **NO ASSUMPTIONS** - Never assume something works. Either verify it or fail with a clear error. Assumptions lead to production failures.
 5. **COMPLETE OR CRASH** - Every code path must either work correctly or crash explicitly. A loud crash is debuggable; silent corruption is not.
 6. **NO DEFENSIVE FALLBACKS** - Never catch errors just to log and continue execution. Try-catch blocks must either re-throw the error, return an explicit error, or transform it into a meaningful result. NEVER swallow errors with logging and continue as if nothing happened.
 
@@ -299,7 +299,7 @@ config.yaml  # Current version
 
 ### Logging
 
-Implement conditional logging using project's existing logger or language-appropriate defaults. Logging provides visibility into system behavior without using a debugger:
+Implement conditional logging using the project's existing logger or language-appropriate defaults. Logging provides visibility into system behavior without using a debugger:
 
 - JavaScript: `debug` or `pino` package
 - Python: `logging` module
@@ -307,7 +307,7 @@ Implement conditional logging using project's existing logger or language-approp
 - Go: `log/slog`
 - Rust: `log` crate with `env_logger`
 
-ALWAYS namespace loggers and log function entry/exit, key parameters, and decision points. This creates a trace of execution flow for debugging.
+Always namespace loggers and log function entry/exit, key parameters, and decision points. This creates a trace of execution flow for debugging.
 
 <examples>
 <example>
@@ -464,3 +464,7 @@ If you cannot fully implement something:
 4. **FAIL FAST** - Let the system crash rather than corrupt
 
 Remember: **A loud failure is better than silent corruption**
+
+---
+
+*These guidelines ensure our team delivers consistent, high-quality code. By following these practices, we maintain a codebase that is robust, maintainable, and trustworthy.*
