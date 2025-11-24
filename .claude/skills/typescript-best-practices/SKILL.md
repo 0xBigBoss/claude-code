@@ -1,52 +1,67 @@
 ---
 name: typescript-best-practices
-description: TypeScript guardrails and examples; use when writing or reviewing TS code to enforce strict typing, exhaustive handling, fail-fast errors/logging.
+description: TypeScript code quality patterns for strict typing, exhaustive switch handling, and debug logging. Use when writing, reviewing, or debugging TypeScript code.
 ---
 
 # TypeScript Best Practices
 
-Use when implementing or reviewing TypeScript.
-
 ## Instructions
-- Use `strict` typing; avoid `any`. Model data with interfaces/types; prefer readonly where possible.
-- Fail loudly on unexpected cases; exhaustive `switch` with `default` that throws. No placeholder returns.
-- Propagate errors; do not `catch` just to log. If you catch, rethrow or return a meaningful error.
-- Handle edge cases: empty arrays, null/undefined inputs, boundary values.
-- Async: prefer `await`; avoid fire-and-forget. Wrap external calls with contextual errors.
-- Tests: update/add focused tests when changing logic; avoid hard-coded outputs aimed at tests only.
+
+- Enable `strict` mode; model data with interfaces and types. Strong typing catches bugs at compile time.
+- Every code path returns a value or throws; use exhaustive `switch` with `never` checks in default. Unhandled cases become compile errors.
+- Propagate errors with context; catching requires re-throwing or returning a meaningful result. Hidden failures delay debugging.
+- Handle edge cases explicitly: empty arrays, null/undefined inputs, boundary values. Defensive checks prevent runtime surprises.
+- Use `await` for async calls; wrap external calls with contextual error messages. Unhandled rejections crash Node processes.
+- Add or update focused tests when changing logic; test behavior, not implementation details.
 
 ## Examples
-- Explicit failure:
+
+Explicit failure for unimplemented logic:
 ```ts
 export function buildWidget(widgetType: string): never {
-  throw new Error(`TODO: Implement widget_type-specific logic for type: ${widgetType}`);
+  throw new Error(`buildWidget not implemented for type: ${widgetType}`);
 }
 ```
-- Exhaustive handling:
+
+Exhaustive switch with never check:
 ```ts
 type Status = "active" | "inactive";
 
-export function process(status: Status): string {
+export function processStatus(status: Status): string {
   switch (status) {
     case "active":
-      return "go";
+      return "processing";
     case "inactive":
-      return "stop";
-    default:
-      const _exhaustiveCheck: never = status;
-      throw new Error(`Unhandled status: ${status satisfies never}`);
+      return "skipped";
+    default: {
+      const _exhaustive: never = status;
+      throw new Error(`unhandled status: ${_exhaustive}`);
+    }
   }
 }
 ```
-- Logging with context:
+
+Wrap external calls with context:
+```ts
+export async function fetchWidget(id: string): Promise<Widget> {
+  const response = await fetch(`/api/widgets/${id}`);
+  if (!response.ok) {
+    throw new Error(`fetch widget ${id} failed: ${response.status}`);
+  }
+  return response.json();
+}
+```
+
+Debug logging with namespaced logger:
 ```ts
 import debug from "debug";
 
-const log = debug("my-app:actions");
+const log = debug("myapp:widgets");
 
-export async function doAction(action: string) {
-  log("Performing action: %s", action);
-  // ... implementation ...
-  log("Action completed: %s", action);
+export function createWidget(name: string): Widget {
+  log("creating widget: %s", name);
+  const widget = { id: crypto.randomUUID(), name };
+  log("created widget: %s", widget.id);
+  return widget;
 }
 ```
