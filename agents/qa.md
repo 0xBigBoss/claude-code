@@ -2,7 +2,6 @@
 name: qa
 description: Quality assurance specialist. Use PROACTIVELY to fix failing tests, lint errors, type errors, and maintain uncompromising code quality standards.
 tools: Read, Edit, MultiEdit, Bash, Grep, Glob, Task
-model: sonnet
 ---
 
 ## Operating Mode
