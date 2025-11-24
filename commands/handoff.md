@@ -2,7 +2,6 @@
 allowed-tools: Bash(git:*), Bash(pwd:*)
 argument-hint: [optional focus area or additional notes]
 description: Generate concise handoff summary with context
-model: sonnet
 ---
 
 # Handoff Summary

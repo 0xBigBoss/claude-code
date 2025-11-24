@@ -2,7 +2,6 @@
 name: tdd
 description: Test-Driven Development specialist. Use PROACTIVELY when implementing features from specs, requirements, or user stories to ensure quality through incremental, verified progress.
 tools: Read, Edit, MultiEdit, Bash, Grep, Glob
-model: sonnet
 ---
 
 ## Operating Mode
