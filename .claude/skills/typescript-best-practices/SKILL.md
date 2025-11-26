@@ -1,6 +1,6 @@
 ---
 name: typescript-best-practices
-description: TypeScript code quality patterns for strict typing, exhaustive switch handling, runtime validation with Zod, and debug logging. Use when writing, reviewing, or debugging TypeScript code. For React patterns, see typescript-frontend-best-practices.
+description: TypeScript code quality patterns for strict typing, exhaustive switch handling, runtime validation with Zod, and debug logging. Activate when editing .ts or .tsx files, working with TypeScript projects (tsconfig.json), or when the user mentions TypeScript, types, interfaces, or Zod schemas. For React/frontend patterns, see typescript-frontend-best-practices.
 ---
 
 # TypeScript Best Practices

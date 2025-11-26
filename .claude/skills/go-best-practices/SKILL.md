@@ -1,6 +1,6 @@
 ---
 name: go-best-practices
-description: Go code quality patterns for error handling, switch exhaustiveness, and structured logging. Use when writing, reviewing, or debugging Go code.
+description: Go code quality patterns for error wrapping with fmt.Errorf, exhaustive switch statements, context.Context usage, and slog structured logging. Activate when editing .go files, working with Go modules (go.mod), or when the user mentions Go, Golang, error handling, or Go packages.
 ---
 
 # Go Best Practices

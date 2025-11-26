@@ -1,6 +1,6 @@
 ---
 name: typescript-frontend-best-practices
-description: React patterns, React Query data fetching, hooks, and component architecture. Use when writing, reviewing, or debugging React/TypeScript frontend code. See also: typescript-best-practices for Zod schemas and type patterns.
+description: React component patterns, React Query data fetching, custom hooks, useEffect best practices, and frontend architecture. Activate when editing .tsx files, React components, or when the user mentions React, hooks, useQuery, useMutation, components, or frontend UI. Use alongside typescript-best-practices for Zod validation patterns.
 ---
 
 # TypeScript Frontend Best Practices
