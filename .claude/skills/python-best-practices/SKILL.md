@@ -1,6 +1,6 @@
 ---
 name: python-best-practices
-description: Python code quality patterns for exception propagation with 'from err', match statement exhaustiveness, pathlib file handling, and debug logging. Activate when editing .py files, working with Python projects (pyproject.toml, requirements.txt), or when the user mentions Python, exceptions, or Python modules.
+description: Provides Python code quality patterns for exception propagation with 'from err', match statement exhaustiveness, pathlib file handling, and debug logging. Activates when editing .py files, working with Python projects (pyproject.toml, requirements.txt), or when the user mentions Python, exceptions, or Python modules.
 ---
 
 # Python Best Practices
