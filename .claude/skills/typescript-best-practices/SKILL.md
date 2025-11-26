@@ -1,6 +1,6 @@
 ---
 name: typescript-best-practices
-description: TypeScript code quality patterns for strict typing, exhaustive switch handling, and debug logging. Use when writing, reviewing, or debugging TypeScript code.
+description: TypeScript code quality patterns for strict typing, exhaustive switch handling, runtime validation with Zod, and debug logging. Use when writing, reviewing, or debugging TypeScript code. For React patterns, see typescript-frontend-best-practices.
 ---
 
 # TypeScript Best Practices
@@ -64,4 +64,66 @@ export function createWidget(name: string): Widget {
   log("created widget: %s", widget.id);
   return widget;
 }
+```
+
+## Runtime Validation with Zod
+
+- Define schemas as single source of truth; infer TypeScript types with `z.infer<>`. Avoid duplicating types and schemas.
+- Use `safeParse` for user input where failure is expected; use `parse` at trust boundaries where invalid data is a bug.
+- Compose schemas with `.extend()`, `.pick()`, `.omit()`, `.merge()` for DRY definitions.
+- Add `.transform()` for data normalization at parse time (trim strings, parse dates).
+- Include descriptive error messages; use `.refine()` for custom validation logic.
+
+### Examples
+
+Schema as source of truth with type inference:
+```ts
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string().email(),
+  name: z.string().min(1),
+  createdAt: z.string().transform((s) => new Date(s)),
+});
+
+type User = z.infer<typeof UserSchema>;
+```
+
+Return parse results to callers (never swallow errors):
+```ts
+import { z, SafeParseReturnType } from "zod";
+
+export function parseUserInput(raw: unknown): SafeParseReturnType<unknown, User> {
+  return UserSchema.safeParse(raw);
+}
+
+// Caller handles both success and error:
+const result = parseUserInput(formData);
+if (!result.success) {
+  setErrors(result.error.flatten().fieldErrors);
+  return;
+}
+await submitUser(result.data);
+```
+
+Strict parsing at trust boundaries:
+```ts
+export async function fetchUser(id: string): Promise<User> {
+  const response = await fetch(`/api/users/${id}`);
+  if (!response.ok) {
+    throw new Error(`fetch user ${id} failed: ${response.status}`);
+  }
+  const data = await response.json();
+  return UserSchema.parse(data); // throws if API contract violated
+}
+```
+
+Schema composition:
+```ts
+const CreateUserSchema = UserSchema.omit({ id: true, createdAt: true });
+const UpdateUserSchema = CreateUserSchema.partial();
+const UserWithPostsSchema = UserSchema.extend({
+  posts: z.array(PostSchema),
+});
 ```
