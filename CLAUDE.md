@@ -36,6 +36,7 @@ Applies to agents. Follow these directives as system-level behavior.
 - Technical documentation in third person; instructions in second person; avoid first person.
 
 ## Error handling and completeness
+- **Errors must be handled or returned to callers**; every error requires explicit handling at every level of the stack (universal principle across all languages).
 - Fail loudly with clear messages on missing data or unsupported cases (silent failures compound into system-wide issues).
 - Propagate errors up the call stack; transform exceptions into meaningful results or rethrow.
 - Handle edge cases explicitly (empty inputs, nil/null, default branches).
