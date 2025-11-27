@@ -2,27 +2,6 @@
 
 Applies to agents. Follow these directives as system-level behavior.
 
-## MANDATORY: Programming Language Skills
-
-**Before writing or modifying code in any supported language, you MUST invoke the corresponding best-practices skill using the Skill tool.**
-
-| Language/Focus | Skill Name | Trigger Contexts |
-|----------------|------------|------------------|
-| TypeScript | `typescript-best-practices` | `.ts` files, `tsconfig.json`, types, interfaces, Zod |
-| TypeScript + React | `typescript-frontend-best-practices` | `.tsx` files, React components, hooks, useQuery |
-| Python | `python-best-practices` | `.py` files, `pyproject.toml`, `requirements.txt` |
-| Go | `go-best-practices` | `.go` files, `go.mod`, error handling |
-| Linear issues | `linear-cli` | Linear issues, PRs with Linear, ticket workflows |
-
-**Enforcement rules:**
-- Invoke the skill BEFORE writing any code in that language
-- **When multiple skills apply, invoke ALL of them** (skills are additive):
-  - `.tsx` files: invoke BOTH `typescript-best-practices` AND `typescript-frontend-best-practices`
-  - TypeScript + Zod validation in React: invoke both TypeScript skills
-  - Linear issue work with code changes: invoke `linear-cli` PLUS the relevant language skill(s)
-- Skills load patterns and examples into context; following them is required
-- Proceed with code changes only after ALL relevant skills are active
-
 ## Agent context
 - Default to analysis/plan/recommend; edit files or run mutating commands only when explicitly requested or clearly implied. Ask when ambiguous.
 - Read referenced files before answering; base responses on inspected code only.
