@@ -16,9 +16,12 @@ Applies to agents. Follow these directives as system-level behavior.
 
 **Enforcement rules:**
 - Invoke the skill BEFORE writing any code in that language
-- If multiple skills apply (e.g., TypeScript + React), invoke both
+- **When multiple skills apply, invoke ALL of them** (skills are additive):
+  - `.tsx` files: invoke BOTH `typescript-best-practices` AND `typescript-frontend-best-practices`
+  - TypeScript + Zod validation in React: invoke both TypeScript skills
+  - Linear issue work with code changes: invoke `linear-cli` PLUS the relevant language skill(s)
 - Skills load patterns and examples into context; following them is required
-- Do not proceed with code changes until the relevant skill is active
+- Proceed with code changes only after ALL relevant skills are active
 
 ## Agent context
 - Default to analysis/plan/recommend; edit files or run mutating commands only when explicitly requested or clearly implied. Ask when ambiguous.
