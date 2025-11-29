@@ -12,4 +12,4 @@ description: Create a git commit
 
 ## Your task
 
-Based on the above changes, create a single git commit.
+Review the changes in the repo and prepare logical, organized, clean and descriptive git commits using conventional commits.
