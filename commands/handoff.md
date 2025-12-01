@@ -1,53 +1,59 @@
 ---
-allowed-tools: Bash(git:*), Bash(pwd:*)
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Write
 argument-hint: [optional focus area or additional notes]
 description: Generate concise handoff summary with context
 ---
 
-# Handoff Summary
+# Generate Teammate Handoff Prompt
 
-## Current Context
+Generate a prompt for handing off work to another AI agent (Codex, Claude Code) for code review and verification. The receiving agent has no context from this session, so the prompt must be self-contained and actionable.
+
+## Git Context
 
 **Working Directory**: !`pwd`
 
-**Git Status**: !`git status -sb`
+**Branch**: !`git branch --show-current 2>/dev/null || echo "detached/unknown"`
 
-**Recent Commits**: !`git log --oneline -5 2>/dev/null || echo "Not a git repo"`
+**Uncommitted changes**: !`git diff --stat 2>/dev/null || echo "None"`
 
-**Uncommitted Changes**: !`git diff --stat HEAD 2>/dev/null || echo "No git changes"`
+**Staged changes**: !`git diff --cached --stat 2>/dev/null || echo "None"`
 
-## Your Task
+**Recent commits (last 4 hours)**: !`git log --oneline -5 --since="4 hours ago" 2>/dev/null || echo "None"`
 
-Create ultra-concise handoff. Sacrifice grammar for brevity. Use bullet points, fragments, abbreviations.
+## Session Context
 
-**CRITICAL**: Start with one-line summary capturing session essence (8-12 words max).
+Review the conversation history from this session to understand:
+- What task was requested
+- What approach was taken
+- Any decisions made or tradeoffs discussed
+- Known issues or incomplete items
 
-Focus on:
-- **DONE**: Key accomplishments this session (2-3 bullets max)
-- **STATE**: Current system state, key files changed
-- **NEXT**: Pending work, blockers, decisions needed
-- **NOTES**: Critical context or decisions (if any)
+## Additional Focus
 
 $ARGUMENTS
 
-**Output format**:
+## Task
+
+Write a handoff prompt to `/tmp/handoff-<shortname>.md` where `<shortname>` is derived from the branch name or directory (e.g., `sen-69`, `fix-auth`, `api-refactor`).
+
+The prompt must be standalone and actionable for an agent with zero prior context. Use this structure:
+
 ```
-## [One-line critical summary of session]
+You are a senior engineer reviewing a teammate's work. Read, review, verify and test the changes.
 
-DONE:
-- [accomplishment]
-- [accomplishment]
+## Context
+[2-4 sentences: what was done, why, and the approach taken. Be specific enough that a fresh agent understands the scope.]
 
-STATE:
-- [current state]
-- [key changes]
+## Changes
+[List key files modified with brief description of each change]
 
-NEXT:
-- [pending item]
-- [blocker/decision]
+## Verification
+[Specific commands to run: tests, linters, build, manual checks. Include expected outcomes.]
 
-NOTES:
-- [critical context if any]
+## Focus Areas
+[What to look for: edge cases, potential issues, areas needing careful review. If user provided focus notes above, incorporate them here.]
 ```
 
-Keep it under 200 words total. Omit sections if empty.
+After writing the file, copy to clipboard: `cat /tmp/handoff-<shortname>.md | pbcopy`
+
+Confirm: "Handoff prompt copied to clipboard. Paste into your next agent session."
