@@ -16,6 +16,20 @@ Applies to agents. Follow these directives as system-level behavior.
 - Document project context inline when needed; complete implementations or fail explicitly with descriptive errors (partial work masks bugs).
 - Security: require explicit authorization before accessing secrets/keychains.
 
+## Language and tool skills (mandatory)
+
+Before modifying code in the following contexts, read the corresponding skill file and apply its patterns:
+
+| Context | Skill File |
+|---------|------------|
+| Python (.py, pyproject.toml, requirements.txt) | `~/.claude/skills/python-best-practices/SKILL.md` |
+| TypeScript (.ts, tsconfig.json) | `~/.claude/skills/typescript-best-practices/SKILL.md` |
+| TypeScript React (.tsx, React components) | `~/.claude/skills/typescript-frontend-best-practices/SKILL.md` |
+| Go (.go, go.mod) | `~/.claude/skills/go-best-practices/SKILL.md` |
+| Tilt (Tiltfile, tilt commands) | `~/.claude/skills/tilt/SKILL.md` |
+
+This is mandatory. Read the skill file before making changes; follow its guidelines throughout the task.
+
 ## Tool use
 - Prefer project-standard tools; default to `rg` for search.
 - Read relevant files before responding; cite paths.
