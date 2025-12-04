@@ -6,7 +6,7 @@ Fix the Linear issue specified by the identifier (e.g., ENG-123).
 
 1. **Fetch issue details** using the linear-cli skill:
    ```bash
-   linear issue view $ARGUMENTS --json
+   linear issue view $ARGUMENTS --fields identifier,title,state,assignee,priority,url,description,parent,sub_issues,comments --json
    ```
 
 2. **Understand the issue**: Read the title, description, and any comments to fully understand what needs to be fixed.
