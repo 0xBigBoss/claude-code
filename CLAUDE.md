@@ -15,6 +15,7 @@ Applies to agents. Follow these directives as system-level behavior.
 - Verify changes with project tooling (tests, linters, builds) before claiming done.
 - Document project context inline when needed; complete implementations or fail explicitly with descriptive errors (partial work masks bugs).
 - Security: require explicit authorization before accessing secrets/keychains.
+- Extract configuration immediately; magic numbers, URLs, ports, timeouts, and feature flags belong in config, not code.
 
 ## Language and tool skills (mandatory)
 

@@ -59,3 +59,46 @@ func createWidget(name string) (*Widget, error) {
     return widget, nil
 }
 ```
+
+## Configuration
+
+- Load config from environment variables at startup; validate required values before use. Missing config should cause immediate exit.
+- Define a Config struct as single source of truth; avoid `os.Getenv` scattered throughout code.
+- Use sensible defaults for development; require explicit values for production secrets.
+
+### Examples
+
+Typed config struct:
+```go
+type Config struct {
+    Port        int
+    DatabaseURL string
+    APIKey      string
+    Env         string
+}
+
+func LoadConfig() (*Config, error) {
+    dbURL := os.Getenv("DATABASE_URL")
+    if dbURL == "" {
+        return nil, fmt.Errorf("DATABASE_URL is required")
+    }
+    apiKey := os.Getenv("API_KEY")
+    if apiKey == "" {
+        return nil, fmt.Errorf("API_KEY is required")
+    }
+    port := 3000
+    if p := os.Getenv("PORT"); p != "" {
+        var err error
+        port, err = strconv.Atoi(p)
+        if err != nil {
+            return nil, fmt.Errorf("invalid PORT: %w", err)
+        }
+    }
+    return &Config{
+        Port:        port,
+        DatabaseURL: dbURL,
+        APIKey:      apiKey,
+        Env:         getEnvOrDefault("ENV", "development"),
+    }, nil
+}
+```

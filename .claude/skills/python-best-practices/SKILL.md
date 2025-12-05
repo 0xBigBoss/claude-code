@@ -53,3 +53,38 @@ def create_widget(name: str) -> Widget:
     logger.debug("created widget id=%s", widget.id)
     return widget
 ```
+
+## Configuration
+
+- Load config from environment variables at startup; validate required values before use. Missing config should fail immediately.
+- Define a config dataclass or Pydantic model as single source of truth; avoid `os.getenv` scattered throughout code.
+- Use sensible defaults for development; require explicit values for production secrets.
+
+### Examples
+
+Typed config with dataclass:
+```python
+import os
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class Config:
+    port: int = 3000
+    database_url: str = ""
+    api_key: str = ""
+    env: str = "development"
+
+    @classmethod
+    def from_env(cls) -> "Config":
+        database_url = os.environ.get("DATABASE_URL", "")
+        if not database_url:
+            raise ValueError("DATABASE_URL is required")
+        return cls(
+            port=int(os.environ.get("PORT", "3000")),
+            database_url=database_url,
+            api_key=os.environ["API_KEY"],  # required, will raise if missing
+            env=os.environ.get("ENV", "development"),
+        )
+
+config = Config.from_env()
+```
