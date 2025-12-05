@@ -6,7 +6,7 @@ description: Generate concise handoff summary with context
 
 # Generate Teammate Handoff Prompt
 
-Generate a prompt for handing off work to another AI agent (Codex, Claude Code) for code review and verification. The receiving agent has no context from this session, so the prompt must be self-contained and actionable.
+Generate a prompt for handing off work to another AI agent (Codex, Claude Code). The receiving agent has no context from this session, so the prompt must be self-contained and actionable. This supports any follow-up: continuation, investigation, review, or exploration.
 
 ## Git Context
 
@@ -23,9 +23,11 @@ Generate a prompt for handing off work to another AI agent (Codex, Claude Code) 
 ## Session Context
 
 Review the conversation history from this session to understand:
-- What task was requested
+- What task was requested and why
 - What approach was taken
-- Any decisions made or tradeoffs discussed
+- Decisions made or tradeoffs discussed
+- Current state: what's done, in progress, or blocked
+- Open questions or areas of uncertainty
 - Known issues or incomplete items
 
 ## Additional Focus
@@ -36,22 +38,53 @@ $ARGUMENTS
 
 Write a handoff prompt to `/tmp/handoff-<shortname>.md` where `<shortname>` is derived from the branch name or directory (e.g., `sen-69`, `fix-auth`, `api-refactor`).
 
-The prompt must be standalone and actionable for an agent with zero prior context. Use this structure:
+The prompt must be standalone and actionable for an agent with zero prior context.
+
+### Prompting Guidelines
+
+Apply these when writing the handoff:
+- **Be explicit and detailed** - include context on *why*, not just *what*
+- **Use action-oriented language** - direct instructions like "Continue implementing..." not "Can you look at..."
+- **Avoid negation** - frame positively (say what to do, not what to avoid)
+- **Use XML tags** for clear section delimitation
+
+### Role/Framing
+
+Analyze the session to determine the best framing for the receiving agent:
+- If the work needs **review**: use a reviewer role (e.g., "You are a senior engineer reviewing...")
+- If the work needs **continuation**: use an implementer framing (e.g., "You are picking up implementation of...")
+- If there's an **issue to investigate**: use a debugger framing (e.g., "You are investigating...")
+- If **no specific role fits**: use neutral teammate framing (e.g., "You are picking up work from a teammate...")
+
+Choose whichever produces the strongest, most actionable prompt for the situation.
+
+### Output Structure
+
+Use this XML-tagged structure:
 
 ```
-You are a senior engineer reviewing a teammate's work. Read, review, verify and test the changes.
+<role>
+[Your chosen framing based on session context - be specific about what the agent should do]
+</role>
 
-## Context
-[2-4 sentences: what was done, why, and the approach taken. Be specific enough that a fresh agent understands the scope.]
+<context>
+[2-4 sentences: what was being worked on, why, approach taken, key decisions made]
+</context>
 
-## Changes
-[List key files modified with brief description of each change]
+<current_state>
+[What's done, what's in progress, what's blocked or uncertain]
+</current_state>
 
-## Verification
-[Specific commands to run: tests, linters, build, manual checks. Include expected outcomes.]
+<key_files>
+[Files involved with brief descriptions of changes/relevance]
+</key_files>
 
-## Focus Areas
-[What to look for: edge cases, potential issues, areas needing careful review. If user provided focus notes above, incorporate them here.]
+<next_steps>
+[Action-oriented tasks for the receiving agent. Be specific. Examples:
+- "Continue implementing the X feature by adding Y to Z file"
+- "Review changes in A, B, C focusing on error handling"
+- "Investigate why the build fails when running X command"]
+</next_steps>
 ```
 
 After writing the file, copy to clipboard: `cat /tmp/handoff-<shortname>.md | pbcopy`
