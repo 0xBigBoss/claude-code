@@ -247,6 +247,43 @@ const value = operation() catch |err| {
 };
 ```
 
+## Configuration
+
+- Load config from environment variables at startup; validate required values before use. Missing config should cause a clean exit with a descriptive message.
+- Define a Config struct as single source of truth; avoid `std.posix.getenv` scattered throughout code.
+- Use sensible defaults for development; require explicit values for production secrets.
+
+### Examples
+
+Typed config struct:
+```zig
+const std = @import("std");
+
+pub const Config = struct {
+    port: u16,
+    database_url: []const u8,
+    api_key: []const u8,
+    env: []const u8,
+};
+
+pub fn loadConfig() !Config {
+    const db_url = std.posix.getenv("DATABASE_URL") orelse
+        return error.MissingDatabaseUrl;
+    const api_key = std.posix.getenv("API_KEY") orelse
+        return error.MissingApiKey;
+    const port_str = std.posix.getenv("PORT") orelse "3000";
+    const port = std.fmt.parseInt(u16, port_str, 10) catch
+        return error.InvalidPort;
+
+    return .{
+        .port = port,
+        .database_url = db_url,
+        .api_key = api_key,
+        .env = std.posix.getenv("ENV") orelse "development",
+    };
+}
+```
+
 ## Optionals
 
 - Use `orelse` to provide default values for optionals; use `.?` only when null is a program error.
