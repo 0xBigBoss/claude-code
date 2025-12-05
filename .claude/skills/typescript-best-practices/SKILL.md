@@ -128,6 +128,36 @@ const UserWithPostsSchema = UserSchema.extend({
 });
 ```
 
+## Configuration
+
+- Load config from environment variables at startup; validate with Zod before use. Invalid config should crash immediately.
+- Define a typed config object as single source of truth; avoid accessing `process.env` throughout the codebase.
+- Use sensible defaults for development; require explicit values for production secrets.
+
+### Examples
+
+Typed config with Zod validation:
+```ts
+import { z } from "zod";
+
+const ConfigSchema = z.object({
+  PORT: z.coerce.number().default(3000),
+  DATABASE_URL: z.string().url(),
+  API_KEY: z.string().min(1),
+  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+});
+
+export const config = ConfigSchema.parse(process.env);
+```
+
+Access config values (not process.env directly):
+```ts
+import { config } from "./config";
+
+const server = app.listen(config.PORT);
+const db = connect(config.DATABASE_URL);
+```
+
 ---
 
 # React & Frontend Patterns
