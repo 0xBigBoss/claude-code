@@ -23,9 +23,9 @@ Before modifying code in the following contexts, read the corresponding skill fi
 | Context | Skill File |
 |---------|------------|
 | Python (.py, pyproject.toml, requirements.txt) | `~/.claude/skills/python-best-practices/SKILL.md` |
-| TypeScript (.ts, tsconfig.json) | `~/.claude/skills/typescript-best-practices/SKILL.md` |
-| TypeScript React (.tsx, React components) | `~/.claude/skills/typescript-frontend-best-practices/SKILL.md` |
+| TypeScript (.ts, .tsx, tsconfig.json, React) | `~/.claude/skills/typescript-best-practices/SKILL.md` |
 | Go (.go, go.mod) | `~/.claude/skills/go-best-practices/SKILL.md` |
+| Zig (.zig, build.zig, build.zig.zon) | `~/.claude/skills/zig-best-practices/SKILL.md` |
 | Tilt (Tiltfile, tilt commands) | `~/.claude/skills/tilt/SKILL.md` |
 
 This is mandatory. Read the skill file before making changes; follow its guidelines throughout the task.
