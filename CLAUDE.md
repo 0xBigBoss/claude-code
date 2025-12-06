@@ -17,19 +17,25 @@ Applies to agents. Follow these directives as system-level behavior.
 - Security: require explicit authorization before accessing secrets/keychains.
 - Extract configuration immediately; magic numbers, URLs, ports, timeouts, and feature flags belong in config, not code.
 
-## Language and tool skills (mandatory)
+## Language and tool skills (mandatory pre-flight check)
 
-Before modifying code in the following contexts, read the corresponding skill file and apply its patterns:
+**STOP before writing or modifying code.** Check if the task involves any of these contexts and read the skill file first:
 
-| Context | Skill File |
-|---------|------------|
-| Python (.py, pyproject.toml, requirements.txt) | `~/.claude/skills/python-best-practices/SKILL.md` |
-| TypeScript (.ts, .tsx, tsconfig.json, React) | `~/.claude/skills/typescript-best-practices/SKILL.md` |
-| Go (.go, go.mod) | `~/.claude/skills/go-best-practices/SKILL.md` |
-| Zig (.zig, build.zig, build.zig.zon) | `~/.claude/skills/zig-best-practices/SKILL.md` |
-| Tilt (Tiltfile, tilt commands) | `~/.claude/skills/tilt/SKILL.md` |
+| Context (file extensions or tools) | Skill File |
+|------------------------------------|------------|
+| Python: `.py`, `pyproject.toml`, `requirements.txt` | `~/.claude/skills/python-best-practices/SKILL.md` |
+| TypeScript: `.ts`, `.tsx`, `tsconfig.json`, React/JSX | `~/.claude/skills/typescript-best-practices/SKILL.md` |
+| Go: `.go`, `go.mod` | `~/.claude/skills/go-best-practices/SKILL.md` |
+| Zig: `.zig`, `build.zig`, `build.zig.zon` | `~/.claude/skills/zig-best-practices/SKILL.md` |
+| Tilt: `Tiltfile`, tilt commands | `~/.claude/skills/tilt/SKILL.md` |
 
-This is mandatory. Read the skill file before making changes; follow its guidelines throughout the task.
+**Why this matters:** Skill files contain project-specific patterns, error handling conventions, and quality standards that prevent common mistakes. Skipping this step leads to inconsistent code that fails review.
+
+**Workflow:**
+1. Identify the language/tool from the task or files involved
+2. Read the corresponding skill file using the Read tool
+3. Apply its patterns throughout implementation
+4. Reference skill guidelines when making design decisions
 
 ## Tool use
 - Prefer project-standard tools; default to `rg` for search.
