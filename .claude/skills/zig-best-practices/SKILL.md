@@ -5,6 +5,10 @@ description: Provides Zig code quality patterns for error handling with error un
 
 # Zig Best Practices
 
+## Module Structure
+
+Larger cohesive files are idiomatic in Zig. Keep related code together: tests alongside implementation, comptime generics at file scope, public/private controlled by `pub`. Split only when a file handles genuinely separate concerns. The standard library demonstrates this pattern with files like `std/mem.zig` containing 2000+ lines of cohesive memory operations.
+
 ## Instructions
 
 - Return errors with context using error unions (`!T`); every function returns a value or an error. Explicit error sets document failure modes.

@@ -5,6 +5,10 @@ description: Provides TypeScript code quality patterns for strict typing, exhaus
 
 # TypeScript Best Practices
 
+## Module Structure
+
+Prefer smaller, focused files: one component, hook, or utility per file. Split when a file handles multiple concerns or exceeds ~200 lines. Colocate tests with implementation (`foo.test.ts` alongside `foo.ts`). Group related files by feature rather than by type.
+
 ## Instructions
 
 - Enable `strict` mode; model data with interfaces and types. Strong typing catches bugs at compile time.

@@ -62,6 +62,10 @@ Applies to agents. Follow these directives as system-level behavior.
 - Propagate errors up the call stack; transform exceptions into meaningful results or rethrow.
 - Handle edge cases explicitly (empty inputs, nil/null, default branches).
 
+## Module structure and cohesion
+
+Organize code by single responsibility: each file/module handles one coherent concern. Split when a file handles genuinely separate concerns or different parts change for different reasons. Keep code together when related functionality shares types, helpers, or state. Prioritize cohesion and clear interfaces over arbitrary line counts; follow language-idiomatic conventions (see language skill files for specifics).
+
 ## Refactoring rules
 - Update all callers when changing interfaces; clean breaks over backward-compatibility shims.
 - Fail on unexpected inputs; support legacy formats only when explicitly specified.

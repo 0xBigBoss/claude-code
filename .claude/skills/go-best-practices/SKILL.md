@@ -5,6 +5,10 @@ description: Provides Go code quality patterns for error wrapping with fmt.Error
 
 # Go Best Practices
 
+## Module Structure
+
+Prefer smaller files within packages: one type or concern per file. Split when a file handles multiple unrelated types or exceeds ~300 lines. Keep tests in `_test.go` files alongside implementation. Package boundaries define the API; internal organization is flexible.
+
 ## Instructions
 
 - Return errors with context using `fmt.Errorf` and `%w` for wrapping. This preserves the error chain for debugging.

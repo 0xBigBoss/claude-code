@@ -5,6 +5,10 @@ description: Provides Python code quality patterns for exception propagation wit
 
 # Python Best Practices
 
+## Module Structure
+
+Prefer smaller, focused files: one class or closely related set of functions per module. Split when a file handles multiple concerns or exceeds ~300 lines. Use `__init__.py` to expose public API; keep implementation details in private modules (`_internal.py`). Colocate tests in `tests/` mirroring the source structure.
+
 ## Instructions
 
 - Raise descriptive exceptions for unsupported cases; every code path returns a value or raises. This makes failures debuggable and prevents silent corruption.
