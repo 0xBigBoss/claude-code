@@ -1,6 +1,6 @@
 ---
 name: tilt
-description: Manages Tilt development environments via CLI and Tiltfile authoring. Activates when working with Tiltfile, running tilt commands, querying resource status/logs, or when user mentions Tilt, local_resource, k8s_yaml, docker_build, or live_update. For detailed CLI reference see CLI_REFERENCE.md. For Tiltfile patterns see TILTFILE_API.md.
+description: Manages Tilt development environments via CLI and Tiltfile authoring. Must use when working with Tilt or Tiltfiles.
 ---
 
 # Tilt Development Environment

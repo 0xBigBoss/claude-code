@@ -1,6 +1,6 @@
 ---
 name: zig-best-practices
-description: Provides Zig code quality patterns for error handling with error unions, memory management with allocators and defer/errdefer, exhaustive switch statements, and testing with leak detection. Activates when editing .zig files, working with Zig projects (build.zig, build.zig.zon), or when the user mentions Zig, error unions, allocators, or comptime.
+description: Provides Zig code quality patterns for error handling with error unions, memory management with allocators and defer/errdefer, exhaustive switch statements, and testing with leak detection. Must use when reading or writing Zig files.
 ---
 
 # Zig Best Practices
