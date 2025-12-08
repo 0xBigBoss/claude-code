@@ -12,6 +12,8 @@ Generate a prompt for handing off work to another AI agent (Codex, Claude Code).
 
 **Working Directory**: !`pwd`
 
+**Repository**: !`basename "$(git rev-parse --show-toplevel 2>/dev/null)" || basename "$(pwd)"`
+
 **Branch**: !`git branch --show-current 2>/dev/null || echo "detached/unknown"`
 
 **Uncommitted changes**: !`git diff --stat 2>/dev/null || echo "None"`
@@ -36,7 +38,7 @@ $ARGUMENTS
 
 ## Task
 
-Write a handoff prompt to `/tmp/handoff-<shortname>.md` where `<shortname>` is derived from the branch name or directory (e.g., `sen-69`, `fix-auth`, `api-refactor`).
+Write a handoff prompt to `/tmp/handoff-<repo>-<shortname>.md` where `<repo>` is the repository name and `<shortname>` is derived from the branch name (e.g., `handoff-myapp-sen-69.md`, `handoff-api-fix-auth.md`).
 
 The prompt must be standalone and actionable for an agent with zero prior context.
 
@@ -87,6 +89,6 @@ Use this XML-tagged structure:
 </next_steps>
 ```
 
-After writing the file, copy to clipboard: `cat /tmp/handoff-<shortname>.md | pbcopy`
+After writing the file, copy to clipboard: `cat /tmp/handoff-<repo>-<shortname>.md | pbcopy`
 
 Confirm: "Handoff prompt copied to clipboard. Paste into your next agent session."
