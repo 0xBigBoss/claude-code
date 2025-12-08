@@ -10,7 +10,9 @@ description: Fetches Canton Network and Daml documentation via CLI. Retrieves pl
 - Use pandoc for docs.digitalasset.com pages (HTML renders well)
 - Use raw GitHub sources for Daml-LF specs (RST format)
 - Use GitHub API for exploring repository contents
-- Default version is 3.4; replace with target version as needed
+- Default version is 3.4; pin explicitly and try 3.3/3.5 when a page is missing
+- If a page 404s, fetch an index (e.g., `overview/3.4/index.html`) and `rg 'href=".*canton'` to discover current paths
+- After fetching plain text, use `rg` locally before re-running pandoc to avoid redundant fetches
 
 ## Quick Reference
 
@@ -25,6 +27,19 @@ pandoc -f html -t plain "https://docs.digitalasset.com/overview/3.4/introduction
 
 # Ledger model explanation
 pandoc -f html -t plain "https://docs.digitalasset.com/overview/3.4/explanations/canton/ledger-model.html"
+```
+
+### Mediator/Synchronizer Essentials
+
+```bash
+# Protocol and member roles (participants, sequencers, mediators)
+pandoc -f html -t plain "https://docs.digitalasset.com/overview/3.4/explanations/canton/protocol.html"
+
+# Topology and mediator group membership
+pandoc -f html -t plain "https://docs.digitalasset.com/overview/3.4/explanations/canton/topology.html"
+
+# Sequencer/mediator overview (work-in-progress page)
+pandoc -f html -t plain "https://docs.digitalasset.com/overview/3.4/explanations/canton/synchronizers.html"
 ```
 
 ### Fetch Daml Language Reference
@@ -127,9 +142,9 @@ pandoc -f html -t plain "https://docs.digitalasset.com/build/3.3/reference/daml/
 
 ## Troubleshooting
 
-**Empty content:** Check URL path is correct (version number, section name).
+**404/empty content:** Check path/version; use the relevant index page to find updated links; try 3.3/3.5 if 3.4 is missing.
 
-**pandoc fails:** Verify URL exists in browser first; some pages may redirect.
+**pandoc fails:** Verify URL exists; fallback to `curl -sL "<url>" | pandoc -f html -t plain` if direct pandoc fetch fails or redirects.
 
 **Rate limiting:** Use raw.githubusercontent.com URLs directly instead of API.
 
