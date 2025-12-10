@@ -27,6 +27,7 @@ Applies to agents. Follow these directives as system-level behavior.
 | TypeScript: `.ts`, `.tsx`, `tsconfig.json`, React/JSX | `~/.claude/skills/typescript-best-practices/SKILL.md` |
 | Go: `.go`, `go.mod` | `~/.claude/skills/go-best-practices/SKILL.md` |
 | Zig: `.zig`, `build.zig`, `build.zig.zon` | `~/.claude/skills/zig-best-practices/SKILL.md` |
+| Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | `~/.claude/skills/playwright-best-practices/SKILL.md` |
 | Tilt: `Tiltfile`, tilt commands | `~/.claude/skills/tilt/SKILL.md` |
 
 **Why this matters:** Skill files contain project-specific patterns, error handling conventions, and quality standards that prevent common mistakes. Skipping this step leads to inconsistent code that fails review.
