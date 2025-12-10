@@ -1,5 +1,12 @@
 Reimplement the current branch with a clean, narrative-quality git commit history suitable for reviewer comprehension. Execute each step fully before proceeding to the next.
 
+<determine_default_branch>
+First, determine the repository's default branch:
+!gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'
+
+Store this value and use it wherever `{default_branch}` appears in subsequent steps.
+</determine_default_branch>
+
 <validate_and_backup>
 Before any changes, validate and backup the current state:
 - Run `git status` to confirm no uncommitted changes or merge conflicts exist
