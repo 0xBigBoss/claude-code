@@ -7,9 +7,10 @@ This repository is dedicated to developing, maintaining, and improving Claude Co
 ## What This Repository Contains
 
 - **Memory Files**: CLAUDE.md files and related memory system components
-- **Slash Commands**: Custom command definitions stored in `.claude/commands/`
-- **Development Tools**: Scripts and utilities for managing Claude Code configurations
-- **Templates**: Reusable patterns for memory files and commands
+- **Slash Commands**: Custom command definitions stored in `commands/`
+- **Skills**: User-level skills stored in `.claude/skills/`
+- **Agents**: Custom agent definitions in `agents/`
+- **Scripts**: Helper scripts and utilities in `scripts/`
 
 ## Memory Files System
 
@@ -82,6 +83,82 @@ When working on this repository:
 # Individual Preferences
 @~/.claude/my-project-instructions.md
 ```
+
+## Repository Structure for Stow
+
+This repository is a git submodule within the dotfiles repo and integrates with the `claude` stow package. The directory structure matters for proper symlink creation.
+
+### Directory Layout
+
+```
+dotfiles/
+├── claude-code/                # This repo (git submodule)
+│   ├── CLAUDE.md               # Shared guidelines (source of truth)
+│   ├── CLAUDE.local.md         # Dev instructions (this file, not symlinked)
+│   ├── commands/               # User-level slash commands
+│   │   ├── clean-copy.md
+│   │   ├── git-commit.md
+│   │   ├── handoff.md
+│   │   └── implement.md
+│   ├── agents/                 # Custom agent definitions
+│   ├── scripts/                # Helper scripts
+│   └── .claude/
+│       └── skills/             # User-level skills
+│           ├── playwright-best-practices/
+│           ├── python-best-practices/
+│           └── ...
+│
+└── claude/                     # Stow package (creates ~/.claude/ symlinks)
+    └── .claude/
+        ├── CLAUDE.md           # Global memory file
+        ├── settings.json       # Claude Code settings
+        ├── commands -> ../../claude-code/commands
+        ├── agents -> ../../claude-code/agents
+        ├── scripts -> ../../claude-code/scripts
+        └── skills -> ../../claude-code/.claude/skills
+```
+
+### Adding User-Level Customizations
+
+All user-level customizations go in this repo (`claude-code/`) and are symlinked via the `claude` stow package.
+
+**Slash Commands** - Add to `commands/` directory:
+```bash
+# Create a new command
+cat > commands/my-command.md << 'EOF'
+Your prompt instructions here.
+Use $ARGUMENTS for passed parameters.
+EOF
+```
+
+**Skills** - Add to `.claude/skills/` directory:
+```bash
+# Create a new skill directory
+mkdir -p .claude/skills/my-skill
+cat > .claude/skills/my-skill/SKILL.md << 'EOF'
+# My Skill
+Skill instructions and patterns here.
+EOF
+```
+
+**Agents** - Add to `agents/` directory for custom agent definitions.
+
+### After Adding New Content
+
+1. Changes are immediately available (symlinks point here)
+2. Commit changes to this repo
+3. If you added a new top-level directory, update `dotfiles/claude/.claude/` with a new symlink:
+   ```bash
+   cd ~/code/dotfiles/claude/.claude
+   ln -s ../../claude-code/new-directory new-directory
+   ```
+4. Re-stow if needed: `cd ~/code/dotfiles && stow -R claude`
+
+### Codex Prompts
+
+Codex uses a separate structure at `dotfiles/codex/.codex/prompts/`. When creating commands for both tools, add to both locations:
+- Claude Code: `claude-code/commands/my-command.md`
+- Codex: `codex/.codex/prompts/my-command.md` (uses YAML frontmatter)
 
 ## Important Notes
 
