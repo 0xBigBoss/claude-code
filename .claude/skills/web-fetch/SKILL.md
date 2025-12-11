@@ -1,6 +1,6 @@
 ---
 name: web-fetch
-description: Fetches web content with intelligent content extraction, converting HTML to clean markdown. Use for documentation, articles, and reference pages.
+description: Fetches web content with intelligent content extraction, converting HTML to clean markdown. Use for documentation, articles, and reference pages http/https URLs.
 ---
 
 # Web Content Fetching

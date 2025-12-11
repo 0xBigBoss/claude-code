@@ -37,6 +37,10 @@ Applies to agents. Follow these directives as system-level behavior.
 
 Apply the skill's patterns throughout the task and reference its guidelines for design decisions.
 
+## Web content fetching
+
+Use the web-fetch skill over your built in WebFetch or Fetch toll. See `~/.claude/skills/web-fetch/SKILL.md` for site-specific patterns and the universal Bun script fallback.
+
 ## Tool use
 - Prefer project-standard tools; default to `rg` for search.
 - Read relevant files before responding; cite paths.
