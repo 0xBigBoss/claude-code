@@ -17,12 +17,12 @@ Applies to agents. Follow these directives as system-level behavior.
 - Security: require explicit authorization before accessing secrets/keychains.
 - Extract configuration immediately; magic numbers, URLs, ports, timeouts, and feature flags belong in config, not code.
 
-## Language and tool skills (mandatory pre-flight check)
+## Language and tool skills (mandatory)
 
-**STOP before writing or modifying code.** Check if the task involves any of these contexts and read the skill file first:
+**Proactively use skills when relevant to the task.** When a skill applies, invoke it immediately as your first action—do not wait for the user to request it. Skills provide language-specific patterns, error handling conventions, and quality standards that prevent common mistakes and ensure code passes review.
 
-| Context (file extensions or tools) | Skill File |
-|------------------------------------|------------|
+| Context | Skill File |
+|---------|------------|
 | Python: `.py`, `pyproject.toml`, `requirements.txt` | `~/.claude/skills/python-best-practices/SKILL.md` |
 | TypeScript: `.ts`, `.tsx`, `tsconfig.json`, React/JSX | `~/.claude/skills/typescript-best-practices/SKILL.md` |
 | Go: `.go`, `go.mod` | `~/.claude/skills/go-best-practices/SKILL.md` |
@@ -30,13 +30,12 @@ Applies to agents. Follow these directives as system-level behavior.
 | Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | `~/.claude/skills/playwright-best-practices/SKILL.md` |
 | Tilt: `Tiltfile`, tilt commands | `~/.claude/skills/tilt/SKILL.md` |
 
-**Why this matters:** Skill files contain project-specific patterns, error handling conventions, and quality standards that prevent common mistakes. Skipping this step leads to inconsistent code that fails review.
+**When to invoke skills:**
+- Reading code in a supported language (to understand project patterns)
+- Writing or modifying code (to apply correct conventions)
+- Reviewing or debugging (to identify pattern violations)
 
-**Workflow:**
-1. Identify the language/tool from the task or files involved
-2. Read the corresponding skill file using the Read tool
-3. Apply its patterns throughout implementation
-4. Reference skill guidelines when making design decisions
+Apply the skill's patterns throughout the task and reference its guidelines for design decisions.
 
 ## Tool use
 - Prefer project-standard tools; default to `rg` for search.
