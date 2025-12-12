@@ -19,16 +19,31 @@ const colors = struct {
     const reset = "\x1b[0m";
 };
 
-/// Input structure from Claude Code
+/// Input structure from Claude Code (matches latest API)
 const StatuslineInput = struct {
     workspace: ?struct {
-        current_dir: ?[]const u8,
+        current_dir: ?[]const u8 = null,
+        project_dir: ?[]const u8 = null,
     } = null,
     model: ?struct {
-        display_name: ?[]const u8,
+        id: ?[]const u8 = null,
+        display_name: ?[]const u8 = null,
     } = null,
     session_id: ?[]const u8 = null,
     transcript_path: ?[]const u8 = null,
+    version: ?[]const u8 = null,
+    context_window: ?struct {
+        total_input_tokens: ?i64 = null,
+        total_output_tokens: ?i64 = null,
+        context_window_size: ?i64 = null,
+    } = null,
+    cost: ?struct {
+        total_cost_usd: ?f64 = null,
+        total_duration_ms: ?i64 = null,
+        total_api_duration_ms: ?i64 = null,
+        total_lines_added: ?i64 = null,
+        total_lines_removed: ?i64 = null,
+    } = null,
 };
 
 /// Model type detection
@@ -149,8 +164,36 @@ fn execCommand(allocator: Allocator, command: [:0]const u8, cwd: ?[]const u8) ![
     return allocator.dupe(u8, trimmed);
 }
 
-/// Calculate context usage percentage from transcript
-fn calculateContextUsage(allocator: Allocator, transcript_path: ?[]const u8) !ContextUsage {
+/// Calculate context usage percentage from API-provided values
+/// NOTE: Currently broken - context_window values are cumulative session totals, not current usage
+/// See: https://github.com/anthropics/claude-code/issues/13783
+/// Uses modulus to find current position since tokens are cumulative across compacts
+/// Effective context is 77.5% of window (22.5% reserved for autocompact buffer)
+fn calculateContextUsageFromApi(input: StatuslineInput) ContextUsage {
+    const ctx = input.context_window orelse return ContextUsage{ .percentage = 0.0 };
+    const window_size = ctx.context_window_size orelse return ContextUsage{ .percentage = 0.0 };
+    if (window_size == 0) return ContextUsage{ .percentage = 0.0 };
+
+    const input_tokens = ctx.total_input_tokens orelse 0;
+    const output_tokens = ctx.total_output_tokens orelse 0;
+    const total_tokens = input_tokens + output_tokens;
+
+    // Effective context is 77.5% of window (22.5% reserved for autocompact buffer)
+    const effective_size: i64 = @intFromFloat(@as(f64, @floatFromInt(window_size)) * 0.775);
+    if (effective_size == 0) return ContextUsage{ .percentage = 0.0 };
+
+    // Use modulus to get current position within context window (tokens are cumulative)
+    const current_tokens = @mod(total_tokens, effective_size);
+    const current: f64 = @floatFromInt(current_tokens);
+    const size: f64 = @floatFromInt(effective_size);
+
+    return ContextUsage{ .percentage = (current * 100.0) / size };
+}
+
+/// Calculate context usage percentage from transcript file
+/// Parses the last assistant message to get current token counts
+/// Accounts for 22.5% autocompact buffer in effective context size
+fn calculateContextUsage(allocator: Allocator, transcript_path: ?[]const u8, context_window_size: ?i64) !ContextUsage {
     if (transcript_path == null) return ContextUsage{ .percentage = 0.0 };
 
     const file = std.fs.cwd().openFile(transcript_path.?, .{}) catch {
@@ -205,7 +248,11 @@ fn calculateContextUsage(allocator: Allocator, transcript_path: ?[]const u8) !Co
         };
 
         const total = tokens.input + tokens.output + tokens.cache_read + tokens.cache_creation;
-        latest_usage = @min(100.0, (total * 100.0) / 160000.0);
+        // Use API-provided context window size if available, otherwise default to 200k
+        const window_size: f64 = if (context_window_size) |size| @floatFromInt(size) else 200000.0;
+        // Effective context is 77.5% of window (22.5% reserved for autocompact buffer)
+        const effective_size = window_size * 0.775;
+        latest_usage = @min(100.0, (total * 100.0) / effective_size);
     }
 
     return ContextUsage{ .percentage = latest_usage orelse 0.0 };
@@ -221,32 +268,11 @@ fn extractTokenCount(obj: std.json.ObjectMap, field: []const u8) f64 {
     };
 }
 
-/// Format session duration from transcript timestamps
-fn formatSessionDuration(allocator: Allocator, transcript_path: ?[]const u8, writer: anytype) !bool {
-    if (transcript_path == null) return false;
+/// Format session duration from API-provided cost.total_duration_ms
+fn formatSessionDuration(input: StatuslineInput, writer: anytype) !bool {
+    const cost = input.cost orelse return false;
+    const duration_ms = cost.total_duration_ms orelse return false;
 
-    const file = std.fs.cwd().openFile(transcript_path.?, .{}) catch return false;
-    defer file.close();
-
-    const content = file.readToEndAlloc(allocator, 10 * 1024 * 1024) catch return false;
-    defer allocator.free(content);
-
-    var lines = try std.ArrayList([]const u8).initCapacity(allocator, 0);
-    defer lines.deinit(allocator);
-
-    var line_iter = std.mem.splitScalar(u8, content, '\n');
-    while (line_iter.next()) |line| {
-        if (line.len > 0) try lines.append(allocator, line);
-    }
-
-    if (lines.items.len < 2) return false;
-
-    const first_ts = try extractTimestamp(allocator, lines.items[0]);
-    const last_ts = try findLastTimestamp(allocator, lines.items);
-
-    if (first_ts == null or last_ts == null) return false;
-
-    const duration_ms = (last_ts.? - first_ts.?) * 1000;
     const hours = @divTrunc(duration_ms, 1000 * 60 * 60);
     const minutes = @divTrunc(@mod(duration_ms, 1000 * 60 * 60), 1000 * 60);
 
@@ -260,30 +286,30 @@ fn formatSessionDuration(allocator: Allocator, transcript_path: ?[]const u8, wri
     return true;
 }
 
-/// Extract timestamp from a JSON line
-fn extractTimestamp(allocator: Allocator, line: []const u8) !?i64 {
-    const parsed = json.parseFromSlice(json.Value, allocator, line, .{}) catch return null;
-    defer parsed.deinit();
-
-    if (parsed.value != .object) return null;
-    const ts = parsed.value.object.get("timestamp") orelse return null;
-
-    return switch (ts) {
-        .integer => |i| i,
-        .string => std.time.timestamp(),
-        else => null,
-    };
+/// Format session cost from API-provided cost.total_cost_usd
+fn formatCost(input: StatuslineInput, writer: anytype) !bool {
+    const cost = input.cost orelse return false;
+    const usd = cost.total_cost_usd orelse return false;
+    if (usd < 0.001) return false; // Skip if negligible
+    try writer.print("${d:.2}", .{usd});
+    return true;
 }
 
-/// Find the last valid timestamp in lines
-fn findLastTimestamp(allocator: Allocator, lines: [][]const u8) !?i64 {
-    var i = lines.len;
-    while (i > 0) : (i -= 1) {
-        if (try extractTimestamp(allocator, lines[i - 1])) |ts| {
-            return ts;
-        }
-    }
-    return null;
+/// Format lines changed from API-provided cost.total_lines_added/removed
+fn formatLinesChanged(input: StatuslineInput, writer: anytype) !bool {
+    const cost = input.cost orelse return false;
+    const added = cost.total_lines_added orelse 0;
+    const removed = cost.total_lines_removed orelse 0;
+    if (added == 0 and removed == 0) return false;
+    try writer.print("{s}+{d}{s}/{s}-{d}{s}", .{
+        colors.green,
+        added,
+        colors.reset,
+        colors.red,
+        removed,
+        colors.reset,
+    });
+    return true;
 }
 
 /// Abbreviate a path segment intelligently
@@ -435,16 +461,9 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     // No need to free - arena handles it
 
-    var short_mode = false;
-    var show_pr_status = true;
     var debug_mode = false;
-
     for (args[1..]) |arg| {
-        if (std.mem.eql(u8, arg, "--short")) {
-            short_mode = true;
-        } else if (std.mem.eql(u8, arg, "--skip-pr-status")) {
-            show_pr_status = false;
-        } else if (std.mem.eql(u8, arg, "--debug")) {
+        if (std.mem.eql(u8, arg, "--debug")) {
             debug_mode = true;
         }
     }
@@ -534,18 +553,39 @@ pub fn main() !void {
     if (input.model) |model| {
         if (model.display_name) |name| {
             const model_type = ModelType.fromName(name);
-            const usage = try calculateContextUsage(allocator, input.transcript_path);
+            const context_size = if (input.context_window) |ctx| ctx.context_window_size else null;
+            const usage = try calculateContextUsage(allocator, input.transcript_path, context_size);
 
             try writer.print(" {s}• {s}", .{ colors.gray, usage.color() });
             try usage.format(writer);
             try writer.print("% {s}{s}", .{ colors.gray, model_type.abbreviation() });
 
             // Add duration if available
-            if (input.transcript_path != null) {
+            if (input.cost != null and input.cost.?.total_duration_ms != null) {
                 try writer.print(" • {s}", .{colors.light_gray});
-                _ = try formatSessionDuration(allocator, input.transcript_path, writer);
-                try writer.print("{s}", .{colors.reset});
+                _ = try formatSessionDuration(input, writer);
             }
+
+            // Add cost if available
+            if (input.cost != null and input.cost.?.total_cost_usd != null) {
+                const cost_usd = input.cost.?.total_cost_usd.?;
+                if (cost_usd >= 0.001) {
+                    try writer.print(" • {s}", .{colors.light_gray});
+                    _ = try formatCost(input, writer);
+                }
+            }
+
+            // Add lines changed if available
+            if (input.cost != null) {
+                const added = input.cost.?.total_lines_added orelse 0;
+                const removed = input.cost.?.total_lines_removed orelse 0;
+                if (added > 0 or removed > 0) {
+                    try writer.print(" • ", .{});
+                    _ = try formatLinesChanged(input, writer);
+                }
+            }
+
+            try writer.print("{s}", .{colors.reset});
         }
     }
 
@@ -728,7 +768,182 @@ test "formatPathShort with short path" {
     var buf: [256]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
     const writer = stream.writer();
-    
+
     try formatPathShort(allocator, writer, "/home/user/project");
     try std.testing.expectEqualStrings("/home/user/project", stream.getWritten());
+}
+
+test "calculateContextUsageFromApi with API values" {
+    // NOTE: This function exists but is currently unused due to bug in Claude Code API
+    // See: https://github.com/anthropics/claude-code/issues/13783
+    // Effective context = 200000 * 0.775 = 155000
+    // Test with 50% usage: 77500 % 155000 = 77500, 77500/155000 = 50%
+    const input_50 = StatuslineInput{
+        .context_window = .{
+            .total_input_tokens = 40000,
+            .total_output_tokens = 37500,
+            .context_window_size = 200000,
+        },
+    };
+    const usage_50 = calculateContextUsageFromApi(input_50);
+    try std.testing.expectEqual(@as(f64, 50.0), usage_50.percentage);
+
+    // Test modulus wrap: 232500 tokens (1.5x effective) should also be 50%
+    // 232500 % 155000 = 77500, 77500/155000 = 50%
+    const input_wrap = StatuslineInput{
+        .context_window = .{
+            .total_input_tokens = 120000,
+            .total_output_tokens = 112500,
+            .context_window_size = 200000,
+        },
+    };
+    const usage_wrap = calculateContextUsageFromApi(input_wrap);
+    try std.testing.expectEqual(@as(f64, 50.0), usage_wrap.percentage);
+
+    // Test with missing context_window
+    const input_empty = StatuslineInput{};
+    const usage_empty = calculateContextUsageFromApi(input_empty);
+    try std.testing.expectEqual(@as(f64, 0.0), usage_empty.percentage);
+
+    // Test with zero context window size
+    const input_zero = StatuslineInput{
+        .context_window = .{
+            .total_input_tokens = 1000,
+            .total_output_tokens = 1000,
+            .context_window_size = 0,
+        },
+    };
+    const usage_zero = calculateContextUsageFromApi(input_zero);
+    try std.testing.expectEqual(@as(f64, 0.0), usage_zero.percentage);
+}
+
+test "calculateContextUsage returns zero with no transcript" {
+    const allocator = std.testing.allocator;
+    const usage = try calculateContextUsage(allocator, null, 200000);
+    try std.testing.expectEqual(@as(f64, 0.0), usage.percentage);
+}
+
+test "formatCost function" {
+    var buf: [64]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    // Test with valid cost
+    const input_with_cost = StatuslineInput{
+        .cost = .{
+            .total_cost_usd = 1.23,
+        },
+    };
+    const result = try formatCost(input_with_cost, writer);
+    try std.testing.expect(result);
+    try std.testing.expectEqualStrings("$1.23", stream.getWritten());
+
+    // Test with negligible cost
+    stream.reset();
+    const input_negligible = StatuslineInput{
+        .cost = .{
+            .total_cost_usd = 0.0001,
+        },
+    };
+    const result_negligible = try formatCost(input_negligible, writer);
+    try std.testing.expect(!result_negligible);
+
+    // Test with no cost
+    stream.reset();
+    const input_no_cost = StatuslineInput{};
+    const result_no_cost = try formatCost(input_no_cost, writer);
+    try std.testing.expect(!result_no_cost);
+}
+
+test "formatLinesChanged function" {
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    // Test with both added and removed
+    const input_both = StatuslineInput{
+        .cost = .{
+            .total_lines_added = 150,
+            .total_lines_removed = 25,
+        },
+    };
+    const result = try formatLinesChanged(input_both, writer);
+    try std.testing.expect(result);
+    // Should contain +150 and -25 with color codes
+    const output = stream.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, output, "+150") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "-25") != null);
+
+    // Test with zeros
+    stream.reset();
+    const input_zeros = StatuslineInput{
+        .cost = .{
+            .total_lines_added = 0,
+            .total_lines_removed = 0,
+        },
+    };
+    const result_zeros = try formatLinesChanged(input_zeros, writer);
+    try std.testing.expect(!result_zeros);
+
+    // Test with no cost
+    stream.reset();
+    const input_no_cost = StatuslineInput{};
+    const result_no_cost = try formatLinesChanged(input_no_cost, writer);
+    try std.testing.expect(!result_no_cost);
+}
+
+test "JSON parsing with full API structure" {
+    const allocator = std.testing.allocator;
+
+    const full_json =
+        \\{
+        \\  "hook_event_name": "Status",
+        \\  "session_id": "abc123",
+        \\  "model": {
+        \\    "id": "claude-opus-4-1",
+        \\    "display_name": "Opus"
+        \\  },
+        \\  "workspace": {
+        \\    "current_dir": "/test/project",
+        \\    "project_dir": "/test"
+        \\  },
+        \\  "version": "1.0.80",
+        \\  "context_window": {
+        \\    "total_input_tokens": 15234,
+        \\    "total_output_tokens": 4521,
+        \\    "context_window_size": 200000
+        \\  },
+        \\  "cost": {
+        \\    "total_cost_usd": 0.01234,
+        \\    "total_duration_ms": 45000,
+        \\    "total_api_duration_ms": 2300,
+        \\    "total_lines_added": 156,
+        \\    "total_lines_removed": 23
+        \\  }
+        \\}
+    ;
+
+    const parsed = try json.parseFromSlice(StatuslineInput, allocator, full_json, .{
+        .ignore_unknown_fields = true,
+    });
+    defer parsed.deinit();
+
+    // Check model
+    try std.testing.expectEqualStrings("Opus", parsed.value.model.?.display_name.?);
+    try std.testing.expectEqualStrings("claude-opus-4-1", parsed.value.model.?.id.?);
+
+    // Check workspace
+    try std.testing.expectEqualStrings("/test/project", parsed.value.workspace.?.current_dir.?);
+    try std.testing.expectEqualStrings("/test", parsed.value.workspace.?.project_dir.?);
+
+    // Check context_window
+    try std.testing.expectEqual(@as(i64, 15234), parsed.value.context_window.?.total_input_tokens.?);
+    try std.testing.expectEqual(@as(i64, 4521), parsed.value.context_window.?.total_output_tokens.?);
+    try std.testing.expectEqual(@as(i64, 200000), parsed.value.context_window.?.context_window_size.?);
+
+    // Check cost
+    try std.testing.expect(parsed.value.cost.?.total_cost_usd.? > 0.01);
+    try std.testing.expectEqual(@as(i64, 45000), parsed.value.cost.?.total_duration_ms.?);
+    try std.testing.expectEqual(@as(i64, 156), parsed.value.cost.?.total_lines_added.?);
+    try std.testing.expectEqual(@as(i64, 23), parsed.value.cost.?.total_lines_removed.?);
 }

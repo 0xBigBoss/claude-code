@@ -23,9 +23,8 @@ zig build -Doptimize=ReleaseSmall
 # Run the application directly
 zig build run
 
-# Run with specific arguments
-zig build run -- --short
-zig build run -- --skip-pr-status
+# Run with debug logging
+zig build run -- --debug
 ```
 
 ### Testing
@@ -60,15 +59,17 @@ The application is structured as a single-file Zig program with clear separation
 
 - `main()`: Entry point that orchestrates the statusline generation
 - `execCommand()`: Executes shell commands safely with proper error handling
-- `calculateContextUsage()`: Processes transcript files to determine context usage percentage
-- `formatSessionDuration()`: Calculates session length from transcript timestamps
+- `calculateContextUsage()`: Calculates context usage from API-provided token counts
+- `formatSessionDuration()`: Formats session duration from API-provided total_duration_ms
+- `formatCost()`: Displays session cost in $X.XX format
+- `formatLinesChanged()`: Displays lines added/removed in +N/-M format
 - `isGitRepo()`, `getGitBranch()`, `getGitStatus()`: Git integration functions
 
 ### Performance Optimizations
 
 - Uses ArenaAllocator for efficient memory management (single deallocation)
 - Fixed buffer output stream to minimize allocations
-- Processes only last 50 lines of transcript for context calculation
+- Uses pre-calculated API values instead of parsing transcript files
 - Single-threaded compilation option for maximum performance
 - Color codes defined as compile-time constants
 
