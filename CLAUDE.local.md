@@ -160,6 +160,26 @@ Codex uses a separate structure at `dotfiles/codex/.codex/prompts/`. When creati
 - Claude Code: `claude-code/commands/my-command.md`
 - Codex: `codex/.codex/prompts/my-command.md` (uses YAML frontmatter)
 
+## Critical: Symlink Behavior
+
+**NEVER edit `~/.claude/CLAUDE.md` directly.** This file is a symlink that points to `claude-code/CLAUDE.md` in this repository. Editing the symlink target via its symlinked path (e.g., using the Read/Edit tools on `~/.claude/CLAUDE.md`) will **destroy the symlink** and replace it with a regular file containing the edited content.
+
+**Always edit the source file directly:**
+- Edit: `/Users/allen/code/dotfiles/claude-code/CLAUDE.md`
+- NOT: `~/.claude/CLAUDE.md`
+
+If the symlink is accidentally destroyed, restore it:
+```bash
+cd ~/code/dotfiles/claude/.claude
+rm CLAUDE.md
+ln -s ../../claude-code/CLAUDE.md CLAUDE.md
+```
+
+This applies to all symlinked files in the stow structure. The symlink chain is:
+```
+~/.claude/CLAUDE.md -> ~/code/dotfiles/claude/.claude/CLAUDE.md -> ../../claude-code/CLAUDE.md
+```
+
 ## Important Notes
 
 - Changes made in this repository affect the global Claude Code configuration when symlinked
