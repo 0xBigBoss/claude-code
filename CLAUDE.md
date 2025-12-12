@@ -66,6 +66,19 @@ Use the web-fetch skill over your built in WebFetch or Fetch toll. See `~/.claud
 - Propagate errors up the call stack; transform exceptions into meaningful results or rethrow.
 - Handle edge cases explicitly (empty inputs, nil/null, default branches).
 
+## Test integrity
+
+Tests verify correctness—they do not define the solution. Implement general-purpose solutions that solve the actual problem, not code that merely satisfies test cases.
+
+When tests fail, investigate root cause and fix the underlying issue. Do not:
+- Hard-code values matching test assertions
+- Add conditionals detecting test scenarios
+- Weaken or remove assertions to avoid failures
+- Change test expectations to match broken behavior
+- Create workarounds or helper scripts that bypass the real problem
+
+If a test appears incorrect or the task seems infeasible, report the issue rather than gaming around it. Solutions should work correctly for all valid inputs and follow the principle that drove the test—not just its literal assertions.
+
 ## Module structure and cohesion
 
 Organize code by single responsibility: each file/module handles one coherent concern. Split when a file handles genuinely separate concerns or different parts change for different reasons. Keep code together when related functionality shares types, helpers, or state. Prioritize cohesion and clear interfaces over arbitrary line counts; follow language-idiomatic conventions (see language skill files for specifics).
