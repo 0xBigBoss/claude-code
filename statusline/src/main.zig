@@ -86,6 +86,7 @@ const default_gauge_config = GaugeConfig{};
 /// Context percentage with color coding and gauge display
 const ContextUsage = struct {
     percentage: f64,
+    total_tokens: u64 = 0, // For debug display
 
     fn color(self: ContextUsage) []const u8 {
         if (self.percentage >= 90.0) return colors.red;
@@ -218,9 +219,10 @@ fn execCommand(allocator: Allocator, command: [:0]const u8, cwd: ?[]const u8) ![
 }
 
 /// Calculate context usage percentage from API-provided values
-/// Context window values are cumulative session totals, so we use modulus to find
-/// current position within the context window (tokens wrap after each compaction)
-/// Effective context is 77.5% of window (22.5% reserved for autocompact buffer)
+/// NOTE: This function is inaccurate - API values are cumulative session totals that
+/// don't reflect current context window position. Use calculateContextUsage() instead,
+/// which reads actual per-message token counts from the transcript file.
+/// Kept for reference/testing only.
 fn calculateContextUsageFromApi(input: StatuslineInput) ContextUsage {
     const ctx = input.context_window orelse return ContextUsage{ .percentage = 0.0 };
     const window_size = ctx.context_window_size orelse return ContextUsage{ .percentage = 0.0 };
@@ -248,30 +250,33 @@ fn calculateContextUsageFromApi(input: StatuslineInput) ContextUsage {
 fn calculateContextUsage(allocator: Allocator, transcript_path: ?[]const u8, context_window_size: ?i64) !ContextUsage {
     if (transcript_path == null) return ContextUsage{ .percentage = 0.0 };
 
-    const file = std.fs.cwd().openFile(transcript_path.?, .{}) catch {
+    var file = std.fs.cwd().openFile(transcript_path.?, .{}) catch {
         return ContextUsage{ .percentage = 0.0 };
     };
     defer file.close();
 
-    const content = file.readToEndAlloc(allocator, 10 * 1024 * 1024) catch {
+    // Get file size and seek to read only the last 512KB (enough for ~50 lines of JSON)
+    const stat = file.stat() catch return ContextUsage{ .percentage = 0.0 };
+    const file_size = stat.size;
+    const read_size: u64 = 512 * 1024; // 512KB should be plenty for last 50 lines
+
+    if (file_size > read_size) {
+        file.seekTo(file_size - read_size) catch return ContextUsage{ .percentage = 0.0 };
+    }
+
+    const content = file.readToEndAlloc(allocator, read_size + 1024) catch {
         return ContextUsage{ .percentage = 0.0 };
     };
     defer allocator.free(content);
 
-    // Process only last 50 lines for performance
-    var lines = try std.ArrayList([]const u8).initCapacity(allocator, 0);
-    defer lines.deinit(allocator);
+    // Find last assistant message with usage data (scan from end)
+    var line_iter = std.mem.splitBackwardsScalar(u8, content, '\n');
+    var lines_checked: u32 = 0;
 
-    var line_iter = std.mem.splitScalar(u8, content, '\n');
     while (line_iter.next()) |line| {
-        if (line.len > 0) try lines.append(allocator, line);
-    }
-
-    const start_idx = if (lines.items.len > 50) lines.items.len - 50 else 0;
-    var latest_usage: ?f64 = null;
-
-    for (lines.items[start_idx..]) |line| {
         if (line.len == 0) continue;
+        lines_checked += 1;
+        if (lines_checked > 100) break; // Only check last 100 lines
 
         const parsed = json.parseFromSlice(json.Value, allocator, line, .{}) catch continue;
         defer parsed.deinit();
@@ -304,10 +309,11 @@ fn calculateContextUsage(allocator: Allocator, transcript_path: ?[]const u8, con
         const window_size: f64 = if (context_window_size) |size| @floatFromInt(size) else 200000.0;
         // Effective context is 77.5% of window (22.5% reserved for autocompact buffer)
         const effective_size = window_size * 0.775;
-        latest_usage = @min(100.0, (total * 100.0) / effective_size);
+        const pct = @min(100.0, (total * 100.0) / effective_size);
+        return ContextUsage{ .percentage = pct, .total_tokens = @intFromFloat(total) };
     }
 
-    return ContextUsage{ .percentage = latest_usage orelse 0.0 };
+    return ContextUsage{ .percentage = 0.0, .total_tokens = 0 };
 }
 
 /// Extract token count from JSON object
@@ -714,12 +720,18 @@ pub fn main() !void {
     if (input.model) |model| {
         if (model.display_name) |name| {
             const model_type = ModelType.fromName(name);
-            // Use API-provided token counts directly (cumulative values with modulus)
-            const usage = calculateContextUsageFromApi(input);
+            // Parse transcript to get latest message's actual token usage
+            const context_size = if (input.context_window) |ctx| ctx.context_window_size else null;
+            const usage = try calculateContextUsage(allocator, input.transcript_path, context_size);
 
             // Gauge + model emoji (e.g., "██░ 🎭")
             try writer.print(" ", .{});
             try usage.formatGauge(writer, default_gauge_config);
+            // Show token counts for debugging: current/effective_max in k
+            if (debug_mode) {
+                const effective_max: u64 = if (context_size) |sz| @intFromFloat(@as(f64, @floatFromInt(sz)) * 0.775) else 155000;
+                try writer.print(" {s}{d}k/{d}k", .{ colors.gray, usage.total_tokens / 1000, effective_max / 1000 });
+            }
             try writer.print(" {s}{s}", .{ model_type.emoji(), colors.gray });
 
             // Duration (space-separated, no bullets)
