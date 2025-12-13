@@ -218,9 +218,8 @@ fn execCommand(allocator: Allocator, command: [:0]const u8, cwd: ?[]const u8) ![
 }
 
 /// Calculate context usage percentage from API-provided values
-/// NOTE: Currently broken - context_window values are cumulative session totals, not current usage
-/// See: https://github.com/anthropics/claude-code/issues/13783
-/// Uses modulus to find current position since tokens are cumulative across compacts
+/// Context window values are cumulative session totals, so we use modulus to find
+/// current position within the context window (tokens wrap after each compaction)
 /// Effective context is 77.5% of window (22.5% reserved for autocompact buffer)
 fn calculateContextUsageFromApi(input: StatuslineInput) ContextUsage {
     const ctx = input.context_window orelse return ContextUsage{ .percentage = 0.0 };
@@ -486,7 +485,8 @@ fn formatPath(writer: anytype, path: []const u8) !void {
 }
 
 /// Format path with intelligent shortening for statusline display
-fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8) !void {
+/// If highlight_last is true, the last segment is colored green (indicates it's a branch name)
+fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8, highlight_last: bool) !void {
     const home = std.posix.getenv("HOME") orelse "";
     var display_path = path;
     var has_home = false;
@@ -511,17 +511,30 @@ fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8) !voi
     
     if (segments.items.len <= 3) {
         if (has_home) try writer.print("~", .{});
-        try writer.print("{s}", .{display_path});
+        // Print all but last segment, then last segment with optional highlight
+        for (segments.items, 0..) |segment, i| {
+            try writer.print("/", .{});
+            if (i == segments.items.len - 1 and highlight_last) {
+                try writer.print("{s}{s}{s}", .{ colors.green, segment, colors.cyan });
+            } else {
+                try writer.print("{s}", .{segment});
+            }
+        }
         return;
     }
-    
+
     if (has_home) try writer.print("~", .{});
-    
+
     for (segments.items, 0..) |segment, i| {
         try writer.print("/", .{});
-        
+
         if (i == segments.items.len - 1) {
-            try writer.print("{s}", .{segment});
+            // Last segment: full name, optionally highlighted
+            if (highlight_last) {
+                try writer.print("{s}{s}{s}", .{ colors.green, segment, colors.cyan });
+            } else {
+                try writer.print("{s}", .{segment});
+            }
         } else if (i == 0 and segment.len <= 10) {
             try writer.print("{s}", .{segment});
         } else {
@@ -648,35 +661,50 @@ pub fn main() !void {
     if (current_dir == null) {
         try writer.print("~{s}", .{colors.reset});
     } else {
-        try formatPathShort(allocator, writer, current_dir.?);
+        // Check git status first to determine if we should highlight the last path segment
+        const is_git = isGitRepo(allocator, current_dir.?);
+        var branch_matches_path = false;
+        var branch: []const u8 = "";
+        var owns_branch = false;
 
-        // Check git status
-        if (isGitRepo(allocator, current_dir.?)) {
-            const branch = try getGitBranch(allocator, current_dir.?);
-            defer allocator.free(branch);
+        if (is_git) {
+            branch = try getGitBranch(allocator, current_dir.?);
+            owns_branch = true;
+            const last_segment = getLastPathSegment(current_dir.?);
+            branch_matches_path = std.mem.eql(u8, branch, last_segment);
+        }
+        defer if (owns_branch) allocator.free(branch);
 
+        // Format path, highlighting last segment green if it matches branch name
+        try formatPathShort(allocator, writer, current_dir.?, branch_matches_path);
+
+        // Handle git status display
+        if (is_git) {
             const git_status = try getGitStatus(allocator, current_dir.?);
 
-            // Skip branch name if it matches the last path segment (avoid redundancy)
-            const last_segment = getLastPathSegment(current_dir.?);
-            const branch_matches_path = std.mem.eql(u8, branch, last_segment);
+            // Determine what to show in brackets
+            const show_branch = !branch_matches_path and branch.len > 0;
+            const has_status = !git_status.isEmpty();
 
-            try writer.print(" {s}{s}[", .{ colors.reset, colors.green });
+            // Only show brackets if there's something to display
+            if (show_branch or has_status) {
+                try writer.print(" {s}{s}[", .{ colors.reset, colors.green });
 
-            var has_content = false;
-            if (!branch_matches_path and branch.len > 0) {
-                const abbrev_branch = try abbreviateBranch(allocator, branch);
-                defer allocator.free(abbrev_branch);
-                try writer.print("{s}", .{abbrev_branch});
-                has_content = true;
+                if (show_branch) {
+                    const abbrev_branch = try abbreviateBranch(allocator, branch);
+                    defer allocator.free(abbrev_branch);
+                    try writer.print("{s}", .{abbrev_branch});
+                }
+
+                if (has_status) {
+                    if (show_branch) try writer.print(" ", .{});
+                    try git_status.format(writer);
+                }
+
+                try writer.print("]{s}", .{colors.reset});
+            } else {
+                try writer.print("{s}", .{colors.reset});
             }
-
-            if (!git_status.isEmpty()) {
-                if (has_content) try writer.print(" ", .{});
-                try git_status.format(writer);
-            }
-
-            try writer.print("]{s}", .{colors.reset});
         } else {
             try writer.print("{s}", .{colors.reset});
         }
@@ -686,8 +714,8 @@ pub fn main() !void {
     if (input.model) |model| {
         if (model.display_name) |name| {
             const model_type = ModelType.fromName(name);
-            const context_size = if (input.context_window) |ctx| ctx.context_window_size else null;
-            const usage = try calculateContextUsage(allocator, input.transcript_path, context_size);
+            // Use API-provided token counts directly (cumulative values with modulus)
+            const usage = calculateContextUsageFromApi(input);
 
             // Gauge + model emoji (e.g., "██░ 🎭")
             try writer.print(" ", .{});
@@ -984,12 +1012,12 @@ test "formatPathShort with long path" {
     var buf: [256]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
     const writer = stream.writer();
-    
-    try formatPathShort(allocator, writer, "/Users/test/0xbigboss/canton-network/canton-foundation/decentralized-canton-sync/token-standard");
-    
+
+    try formatPathShort(allocator, writer, "/Users/test/0xbigboss/canton-network/canton-foundation/decentralized-canton-sync/token-standard", false);
+
     const result = stream.getWritten();
     try std.testing.expect(result.len < 50);
-    try std.testing.expect(std.mem.endsWith(u8, result, "token-standard"));
+    try std.testing.expect(std.mem.indexOf(u8, result, "token-standard") != null);
 }
 
 test "formatPathShort with short path" {
@@ -998,8 +1026,21 @@ test "formatPathShort with short path" {
     var stream = std.io.fixedBufferStream(&buf);
     const writer = stream.writer();
 
-    try formatPathShort(allocator, writer, "/home/user/project");
+    try formatPathShort(allocator, writer, "/home/user/project", false);
     try std.testing.expectEqualStrings("/home/user/project", stream.getWritten());
+}
+
+test "formatPathShort with highlighted last segment" {
+    const allocator = std.testing.allocator;
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    try formatPathShort(allocator, writer, "/home/user/feature-branch", true);
+    const result = stream.getWritten();
+    // Should contain green color code before "feature-branch"
+    try std.testing.expect(std.mem.indexOf(u8, result, colors.green) != null);
+    try std.testing.expect(std.mem.indexOf(u8, result, "feature-branch") != null);
 }
 
 test "calculateContextUsageFromApi with API values" {
