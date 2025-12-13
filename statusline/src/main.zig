@@ -60,17 +60,30 @@ const ModelType = enum {
         return .unknown;
     }
 
-    fn abbreviation(self: ModelType) []const u8 {
+    /// Emoji representation based on literal meaning
+    /// Opus = grand musical work (theater), Sonnet = poem (scroll), Haiku = nature poem (leaf)
+    fn emoji(self: ModelType) []const u8 {
         return switch (self) {
-            .opus => "Opus",
-            .sonnet => "Sonnet",
-            .haiku => "Haiku",
+            .opus => "🎭",
+            .sonnet => "📜",
+            .haiku => "🍃",
             .unknown => "?",
         };
     }
 };
 
-/// Context percentage with color coding
+/// Configuration for gauge display - designed for easy future customization
+const GaugeConfig = struct {
+    width: u8 = 3,
+    filled_char: []const u8 = "█",
+    empty_char: []const u8 = "░",
+    // Future options: partial_char for finer granularity, custom thresholds, etc.
+};
+
+/// Default gauge configuration
+const default_gauge_config = GaugeConfig{};
+
+/// Context percentage with color coding and gauge display
 const ContextUsage = struct {
     percentage: f64,
 
@@ -78,9 +91,33 @@ const ContextUsage = struct {
         if (self.percentage >= 90.0) return colors.red;
         if (self.percentage >= 70.0) return colors.orange;
         if (self.percentage >= 50.0) return colors.yellow;
-        return colors.gray;
+        return colors.green;
     }
 
+    /// Calculate number of filled blocks for gauge display
+    fn filledBlocks(self: ContextUsage, config: GaugeConfig) u8 {
+        const width_f: f64 = @floatFromInt(config.width);
+        const blocks = (self.percentage / 100.0) * width_f;
+        return @min(config.width, @as(u8, @intFromFloat(@round(blocks))));
+    }
+
+    /// Format as a color-coded gauge (e.g., "██░")
+    fn formatGauge(self: ContextUsage, writer: anytype, config: GaugeConfig) !void {
+        const filled = self.filledBlocks(config);
+        const clr = self.color();
+
+        try writer.print("{s}", .{clr});
+        for (0..config.width) |i| {
+            if (i < filled) {
+                try writer.print("{s}", .{config.filled_char});
+            } else {
+                try writer.print("{s}", .{config.empty_char});
+            }
+        }
+        try writer.print("{s}", .{colors.reset});
+    }
+
+    /// Format as percentage number (legacy, kept for flexibility)
     fn format(self: ContextUsage, writer: anytype) !void {
         if (self.percentage >= 90.0) {
             try writer.print("{d:.1}", .{self.percentage});
@@ -102,11 +139,27 @@ const GitStatus = struct {
             self.deleted == 0 and self.untracked == 0;
     }
 
+    /// Format git status indicators (no leading space, space-separated)
     fn format(self: GitStatus, writer: anytype) !void {
-        if (self.added > 0) try writer.print(" +{d}", .{self.added});
-        if (self.modified > 0) try writer.print(" ~{d}", .{self.modified});
-        if (self.deleted > 0) try writer.print(" -{d}", .{self.deleted});
-        if (self.untracked > 0) try writer.print(" ?{d}", .{self.untracked});
+        var first = true;
+        if (self.added > 0) {
+            try writer.print("+{d}", .{self.added});
+            first = false;
+        }
+        if (self.modified > 0) {
+            if (!first) try writer.print(" ", .{});
+            try writer.print("~{d}", .{self.modified});
+            first = false;
+        }
+        if (self.deleted > 0) {
+            if (!first) try writer.print(" ", .{});
+            try writer.print("-{d}", .{self.deleted});
+            first = false;
+        }
+        if (self.untracked > 0) {
+            if (!first) try writer.print(" ", .{});
+            try writer.print("?{d}", .{self.untracked});
+        }
     }
 
     fn parse(output: []const u8) GitStatus {
@@ -269,17 +322,21 @@ fn extractTokenCount(obj: std.json.ObjectMap, field: []const u8) f64 {
 }
 
 /// Format session duration from API-provided cost.total_duration_ms
+/// Rounds to nearest hour when >= 1 hour, otherwise shows minutes
 fn formatSessionDuration(input: StatuslineInput, writer: anytype) !bool {
     const cost = input.cost orelse return false;
     const duration_ms = cost.total_duration_ms orelse return false;
 
-    const hours = @divTrunc(duration_ms, 1000 * 60 * 60);
-    const minutes = @divTrunc(@mod(duration_ms, 1000 * 60 * 60), 1000 * 60);
+    const total_minutes = @divTrunc(duration_ms, 1000 * 60);
+    const hours = @divTrunc(total_minutes, 60);
+    const minutes = @mod(total_minutes, 60);
 
     if (hours > 0) {
-        try writer.print("{d}h\u{2009}{d}m", .{ hours, minutes });
-    } else if (minutes > 0) {
-        try writer.print("{d}m", .{minutes});
+        // Round to nearest hour
+        const rounded_hours = if (minutes >= 30) hours + 1 else hours;
+        try writer.print("{d}h", .{rounded_hours});
+    } else if (total_minutes > 0) {
+        try writer.print("{d}m", .{total_minutes});
     } else {
         try writer.print("<1m", .{});
     }
@@ -287,11 +344,19 @@ fn formatSessionDuration(input: StatuslineInput, writer: anytype) !bool {
 }
 
 /// Format session cost from API-provided cost.total_cost_usd
+/// Rounds based on amount: <$1 shows 2 decimals, $1-10 shows 1 decimal, >=$10 rounds to whole
 fn formatCost(input: StatuslineInput, writer: anytype) !bool {
     const cost = input.cost orelse return false;
     const usd = cost.total_cost_usd orelse return false;
     if (usd < 0.001) return false; // Skip if negligible
-    try writer.print("${d:.2}", .{usd});
+
+    if (usd < 1.0) {
+        try writer.print("${d:.2}", .{usd});
+    } else if (usd < 10.0) {
+        try writer.print("${d:.1}", .{usd});
+    } else {
+        try writer.print("${d}", .{@as(u32, @intFromFloat(@round(usd)))});
+    }
     return true;
 }
 
@@ -310,6 +375,61 @@ fn formatLinesChanged(input: StatuslineInput, writer: anytype) !bool {
         colors.reset,
     });
     return true;
+}
+
+/// Get the last segment of a path (e.g., "/foo/bar/baz" -> "baz")
+fn getLastPathSegment(path: []const u8) []const u8 {
+    if (path.len == 0) return path;
+
+    // Handle trailing slash
+    var end = path.len;
+    while (end > 0 and path[end - 1] == '/') : (end -= 1) {}
+    if (end == 0) return "";
+
+    // Find the last slash before end
+    var start = end;
+    while (start > 0 and path[start - 1] != '/') : (start -= 1) {}
+
+    return path[start..end];
+}
+
+/// Abbreviate a git branch name intelligently
+/// Detects Linear issue format (e.g., SEND-77-description -> SEND-77)
+/// Otherwise uses smart compaction like path segments
+fn abbreviateBranch(allocator: Allocator, branch: []const u8) ![]const u8 {
+    if (branch.len == 0) return try allocator.dupe(u8, branch);
+
+    // Try to detect Linear issue pattern: PREFIX-NUMBER-...
+    // Pattern: [A-Z]+-[0-9]+(-.*)?
+    var i: usize = 0;
+
+    // Find uppercase prefix
+    while (i < branch.len and branch[i] >= 'A' and branch[i] <= 'Z') : (i += 1) {}
+
+    // Need at least one uppercase letter followed by hyphen
+    if (i == 0 or i >= branch.len or branch[i] != '-') {
+        return abbreviateSegment(allocator, branch);
+    }
+
+    i += 1; // skip the hyphen
+
+    // Find digits
+    const num_start = i;
+    while (i < branch.len and branch[i] >= '0' and branch[i] <= '9') : (i += 1) {}
+
+    // Need at least one digit
+    if (i == num_start) {
+        return abbreviateSegment(allocator, branch);
+    }
+
+    // Valid if at end of string or followed by hyphen
+    if (i == branch.len or branch[i] == '-') {
+        // This looks like a Linear issue! Return PREFIX-NUMBER
+        return try allocator.dupe(u8, branch[0..i]);
+    }
+
+    // Doesn't match pattern, fall back to segment abbreviation
+    return abbreviateSegment(allocator, branch);
 }
 
 /// Abbreviate a path segment intelligently
@@ -537,9 +657,22 @@ pub fn main() !void {
 
             const git_status = try getGitStatus(allocator, current_dir.?);
 
-            try writer.print(" {s}{s}[{s}", .{ colors.reset, colors.green, branch });
+            // Skip branch name if it matches the last path segment (avoid redundancy)
+            const last_segment = getLastPathSegment(current_dir.?);
+            const branch_matches_path = std.mem.eql(u8, branch, last_segment);
+
+            try writer.print(" {s}{s}[", .{ colors.reset, colors.green });
+
+            var has_content = false;
+            if (!branch_matches_path and branch.len > 0) {
+                const abbrev_branch = try abbreviateBranch(allocator, branch);
+                defer allocator.free(abbrev_branch);
+                try writer.print("{s}", .{abbrev_branch});
+                has_content = true;
+            }
 
             if (!git_status.isEmpty()) {
+                if (has_content) try writer.print(" ", .{});
                 try git_status.format(writer);
             }
 
@@ -549,38 +682,39 @@ pub fn main() !void {
         }
     }
 
-    // Add model display
+    // Add model display with gauge
     if (input.model) |model| {
         if (model.display_name) |name| {
             const model_type = ModelType.fromName(name);
             const context_size = if (input.context_window) |ctx| ctx.context_window_size else null;
             const usage = try calculateContextUsage(allocator, input.transcript_path, context_size);
 
-            try writer.print(" {s}• {s}", .{ colors.gray, usage.color() });
-            try usage.format(writer);
-            try writer.print("% {s}{s}", .{ colors.gray, model_type.abbreviation() });
+            // Gauge + model emoji (e.g., "██░ 🎭")
+            try writer.print(" ", .{});
+            try usage.formatGauge(writer, default_gauge_config);
+            try writer.print(" {s}{s}", .{ model_type.emoji(), colors.gray });
 
-            // Add duration if available
+            // Duration (space-separated, no bullets)
             if (input.cost != null and input.cost.?.total_duration_ms != null) {
-                try writer.print(" • {s}", .{colors.light_gray});
+                try writer.print(" {s}", .{colors.light_gray});
                 _ = try formatSessionDuration(input, writer);
             }
 
-            // Add cost if available
+            // Cost
             if (input.cost != null and input.cost.?.total_cost_usd != null) {
                 const cost_usd = input.cost.?.total_cost_usd.?;
                 if (cost_usd >= 0.001) {
-                    try writer.print(" • {s}", .{colors.light_gray});
+                    try writer.print(" {s}", .{colors.light_gray});
                     _ = try formatCost(input, writer);
                 }
             }
 
-            // Add lines changed if available
+            // Lines changed
             if (input.cost != null) {
                 const added = input.cost.?.total_lines_added orelse 0;
                 const removed = input.cost.?.total_lines_removed orelse 0;
                 if (added > 0 or removed > 0) {
-                    try writer.print(" • ", .{});
+                    try writer.print(" ", .{});
                     _ = try formatLinesChanged(input, writer);
                 }
             }
@@ -624,11 +758,11 @@ test "ModelType detects models correctly" {
     try std.testing.expectEqual(ModelType.unknown, ModelType.fromName("GPT-4"));
 }
 
-test "ModelType abbreviations" {
-    try std.testing.expectEqualStrings("Opus", ModelType.opus.abbreviation());
-    try std.testing.expectEqualStrings("Sonnet", ModelType.sonnet.abbreviation());
-    try std.testing.expectEqualStrings("Haiku", ModelType.haiku.abbreviation());
-    try std.testing.expectEqualStrings("?", ModelType.unknown.abbreviation());
+test "ModelType emoji representations" {
+    try std.testing.expectEqualStrings("🎭", ModelType.opus.emoji());
+    try std.testing.expectEqualStrings("📜", ModelType.sonnet.emoji());
+    try std.testing.expectEqualStrings("🍃", ModelType.haiku.emoji());
+    try std.testing.expectEqualStrings("?", ModelType.unknown.emoji());
 }
 
 test "ContextUsage color thresholds" {
@@ -637,10 +771,34 @@ test "ContextUsage color thresholds" {
     const high = ContextUsage{ .percentage = 80.0 };
     const critical = ContextUsage{ .percentage = 95.0 };
 
-    try std.testing.expectEqualStrings(colors.gray, low.color());
+    try std.testing.expectEqualStrings(colors.green, low.color());
     try std.testing.expectEqualStrings(colors.yellow, medium.color());
     try std.testing.expectEqualStrings(colors.orange, high.color());
     try std.testing.expectEqualStrings(colors.red, critical.color());
+}
+
+test "ContextUsage gauge formatting" {
+    const config = GaugeConfig{};
+
+    // 0% = no blocks filled
+    const empty = ContextUsage{ .percentage = 0.0 };
+    try std.testing.expectEqual(@as(u8, 0), empty.filledBlocks(config));
+
+    // 50% = 1.5 blocks, rounds to 2
+    const half = ContextUsage{ .percentage = 50.0 };
+    try std.testing.expectEqual(@as(u8, 2), half.filledBlocks(config));
+
+    // 100% = 3 blocks
+    const full = ContextUsage{ .percentage = 100.0 };
+    try std.testing.expectEqual(@as(u8, 3), full.filledBlocks(config));
+
+    // 17% = 0.5 blocks, rounds to 1
+    const low = ContextUsage{ .percentage = 17.0 };
+    try std.testing.expectEqual(@as(u8, 1), low.filledBlocks(config));
+
+    // 83% = 2.5 blocks, rounds to 3
+    const high = ContextUsage{ .percentage = 83.0 };
+    try std.testing.expectEqual(@as(u8, 2), high.filledBlocks(config));
 }
 
 test "GitStatus parsing" {
@@ -718,36 +876,107 @@ test "JSON parsing with minimal data" {
 
 test "abbreviateSegment function" {
     const allocator = std.testing.allocator;
-    
+
     {
         const result = try abbreviateSegment(allocator, "0xbigboss");
         defer allocator.free(result);
         try std.testing.expectEqualStrings("0xb", result);
     }
-    
+
     {
         const result = try abbreviateSegment(allocator, "canton-network");
         defer allocator.free(result);
         try std.testing.expectEqualStrings("c-n", result);
     }
-    
+
     {
         const result = try abbreviateSegment(allocator, "decentralized-canton-sync");
         defer allocator.free(result);
         try std.testing.expectEqualStrings("d-c-s", result);
     }
-    
+
     {
         const result = try abbreviateSegment(allocator, "short");
         defer allocator.free(result);
         try std.testing.expectEqualStrings("short", result);
     }
-    
+
     {
         const result = try abbreviateSegment(allocator, "api");
         defer allocator.free(result);
         try std.testing.expectEqualStrings("api", result);
     }
+}
+
+test "abbreviateBranch with Linear issue format" {
+    const allocator = std.testing.allocator;
+
+    // Linear issue: SEND-77-description -> SEND-77
+    {
+        const result = try abbreviateBranch(allocator, "SEND-77-dapp-api-controller");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("SEND-77", result);
+    }
+
+    // Linear issue: ENG-1234-some-feature -> ENG-1234
+    {
+        const result = try abbreviateBranch(allocator, "ENG-1234-some-feature");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("ENG-1234", result);
+    }
+
+    // Just the issue number, no description
+    {
+        const result = try abbreviateBranch(allocator, "PROJ-42");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("PROJ-42", result);
+    }
+
+    // Not a Linear issue - falls back to segment abbreviation
+    {
+        const result = try abbreviateBranch(allocator, "feature-branch-name");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("f-b-n", result);
+    }
+
+    // Main/master branches stay as-is
+    {
+        const result = try abbreviateBranch(allocator, "main");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("main", result);
+    }
+
+    // Lowercase prefix - not Linear format, falls back to segment abbreviation
+    // Short segments (<=3 chars) stay as-is
+    {
+        const result = try abbreviateBranch(allocator, "fix-123-bug");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("fix-123-bug", result);
+    }
+
+    // Longer segments get abbreviated
+    {
+        const result = try abbreviateBranch(allocator, "feature-authentication-flow");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("f-a-f", result);
+    }
+}
+
+test "getLastPathSegment function" {
+    // Basic path
+    try std.testing.expectEqualStrings("project", getLastPathSegment("/home/user/project"));
+
+    // Path with trailing slash
+    try std.testing.expectEqualStrings("project", getLastPathSegment("/home/user/project/"));
+
+    // Single segment
+    try std.testing.expectEqualStrings("project", getLastPathSegment("project"));
+
+    // Root
+    try std.testing.expectEqualStrings("", getLastPathSegment("/"));
+
+    // Empty
+    try std.testing.expectEqualStrings("", getLastPathSegment(""));
 }
 
 test "formatPathShort with long path" {
@@ -823,32 +1052,43 @@ test "calculateContextUsage returns zero with no transcript" {
     try std.testing.expectEqual(@as(f64, 0.0), usage.percentage);
 }
 
-test "formatCost function" {
+test "formatCost function with rounding" {
     var buf: [64]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
     const writer = stream.writer();
 
-    // Test with valid cost
-    const input_with_cost = StatuslineInput{
-        .cost = .{
-            .total_cost_usd = 1.23,
-        },
+    // Test < $1: shows 2 decimals
+    const input_low = StatuslineInput{
+        .cost = .{ .total_cost_usd = 0.45 },
     };
-    const result = try formatCost(input_with_cost, writer);
-    try std.testing.expect(result);
-    try std.testing.expectEqualStrings("$1.23", stream.getWritten());
+    _ = try formatCost(input_low, writer);
+    try std.testing.expectEqualStrings("$0.45", stream.getWritten());
 
-    // Test with negligible cost
+    // Test $1-$10: shows 1 decimal
+    stream.reset();
+    const input_mid = StatuslineInput{
+        .cost = .{ .total_cost_usd = 5.67 },
+    };
+    _ = try formatCost(input_mid, writer);
+    try std.testing.expectEqualStrings("$5.7", stream.getWritten());
+
+    // Test >= $10: rounds to whole dollars
+    stream.reset();
+    const input_high = StatuslineInput{
+        .cost = .{ .total_cost_usd = 54.16 },
+    };
+    _ = try formatCost(input_high, writer);
+    try std.testing.expectEqualStrings("$54", stream.getWritten());
+
+    // Test negligible cost returns false
     stream.reset();
     const input_negligible = StatuslineInput{
-        .cost = .{
-            .total_cost_usd = 0.0001,
-        },
+        .cost = .{ .total_cost_usd = 0.0001 },
     };
     const result_negligible = try formatCost(input_negligible, writer);
     try std.testing.expect(!result_negligible);
 
-    // Test with no cost
+    // Test no cost returns false
     stream.reset();
     const input_no_cost = StatuslineInput{};
     const result_no_cost = try formatCost(input_no_cost, writer);
