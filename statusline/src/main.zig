@@ -72,50 +72,100 @@ const ModelType = enum {
     }
 };
 
-/// Configuration for gauge display - designed for easy future customization
+/// Configuration for gauge display
 const GaugeConfig = struct {
-    width: u8 = 3,
-    filled_char: []const u8 = "█",
+    width: u8 = 5, // 5 characters for better granularity
     empty_char: []const u8 = "░",
-    // Future options: partial_char for finer granularity, custom thresholds, etc.
 };
 
 /// Default gauge configuration
 const default_gauge_config = GaugeConfig{};
+
+/// Eighth block characters for sub-character precision (8 levels per char)
+/// Index 0 = empty, 1-7 = partial, 8 = full
+const eighth_blocks = [_][]const u8{
+    "░", // 0/8 - empty (use config empty_char in practice)
+    "▏", // 1/8
+    "▎", // 2/8
+    "▍", // 3/8
+    "▌", // 4/8
+    "▋", // 5/8
+    "▊", // 6/8
+    "▉", // 7/8
+    "█", // 8/8 - full
+};
 
 /// Context percentage with color coding and gauge display
 const ContextUsage = struct {
     percentage: f64,
     total_tokens: u64 = 0, // For debug display
 
+    /// Calculate RGB color using smooth gradient: green → yellow → red
+    /// Returns (r, g, b) tuple for 24-bit true color
+    fn gradientColor(self: ContextUsage) struct { r: u8, g: u8, b: u8 } {
+        const pct = @min(100.0, @max(0.0, self.percentage));
+
+        if (pct <= 50.0) {
+            // Green to Yellow: increase red from 0 to 255
+            const t = pct / 50.0;
+            return .{
+                .r = @intFromFloat(t * 255.0),
+                .g = 255,
+                .b = 0,
+            };
+        } else {
+            // Yellow to Red: decrease green from 255 to 0
+            const t = (pct - 50.0) / 50.0;
+            return .{
+                .r = 255,
+                .g = @intFromFloat((1.0 - t) * 255.0),
+                .b = 0,
+            };
+        }
+    }
+
+    /// Format as a high-fidelity color-coded gauge using eighth blocks
+    /// 5 chars × 8 levels = 40 discrete steps (2.5% precision)
+    fn formatGauge(self: ContextUsage, writer: anytype, config: GaugeConfig) !void {
+        const width_f: f64 = @floatFromInt(config.width);
+        // Total steps = width * 8 (8 levels per character)
+        const total_steps: f64 = width_f * 8.0;
+        const filled_steps = (self.percentage / 100.0) * total_steps;
+        const steps: u32 = @intFromFloat(@floor(filled_steps));
+
+        // Get gradient color
+        const rgb = self.gradientColor();
+
+        // Write 24-bit true color ANSI escape: \x1b[38;2;R;G;Bm
+        try writer.print("\x1b[38;2;{d};{d};{d}m", .{ rgb.r, rgb.g, rgb.b });
+
+        // Render each character
+        for (0..config.width) |i| {
+            const char_start: u32 = @intCast(i * 8);
+            const char_end: u32 = char_start + 8;
+
+            if (steps >= char_end) {
+                // Fully filled character
+                try writer.print("{s}", .{eighth_blocks[8]});
+            } else if (steps <= char_start) {
+                // Empty character
+                try writer.print("{s}", .{config.empty_char});
+            } else {
+                // Partially filled - get the eighth block index
+                const partial = steps - char_start;
+                try writer.print("{s}", .{eighth_blocks[partial]});
+            }
+        }
+
+        try writer.print("{s}", .{colors.reset});
+    }
+
+    /// Legacy color function for non-gradient uses
     fn color(self: ContextUsage) []const u8 {
         if (self.percentage >= 90.0) return colors.red;
         if (self.percentage >= 70.0) return colors.orange;
         if (self.percentage >= 50.0) return colors.yellow;
         return colors.green;
-    }
-
-    /// Calculate number of filled blocks for gauge display
-    fn filledBlocks(self: ContextUsage, config: GaugeConfig) u8 {
-        const width_f: f64 = @floatFromInt(config.width);
-        const blocks = (self.percentage / 100.0) * width_f;
-        return @min(config.width, @as(u8, @intFromFloat(@round(blocks))));
-    }
-
-    /// Format as a color-coded gauge (e.g., "██░")
-    fn formatGauge(self: ContextUsage, writer: anytype, config: GaugeConfig) !void {
-        const filled = self.filledBlocks(config);
-        const clr = self.color();
-
-        try writer.print("{s}", .{clr});
-        for (0..config.width) |i| {
-            if (i < filled) {
-                try writer.print("{s}", .{config.filled_char});
-            } else {
-                try writer.print("{s}", .{config.empty_char});
-            }
-        }
-        try writer.print("{s}", .{colors.reset});
     }
 
     /// Format as percentage number (legacy, kept for flexibility)
@@ -817,28 +867,34 @@ test "ContextUsage color thresholds" {
     try std.testing.expectEqualStrings(colors.red, critical.color());
 }
 
-test "ContextUsage gauge formatting" {
-    const config = GaugeConfig{};
+test "ContextUsage gradient color" {
+    // 0% = pure green
+    const zero = ContextUsage{ .percentage = 0.0 };
+    const green = zero.gradientColor();
+    try std.testing.expectEqual(@as(u8, 0), green.r);
+    try std.testing.expectEqual(@as(u8, 255), green.g);
+    try std.testing.expectEqual(@as(u8, 0), green.b);
 
-    // 0% = no blocks filled
-    const empty = ContextUsage{ .percentage = 0.0 };
-    try std.testing.expectEqual(@as(u8, 0), empty.filledBlocks(config));
-
-    // 50% = 1.5 blocks, rounds to 2
+    // 50% = yellow
     const half = ContextUsage{ .percentage = 50.0 };
-    try std.testing.expectEqual(@as(u8, 2), half.filledBlocks(config));
+    const yellow = half.gradientColor();
+    try std.testing.expectEqual(@as(u8, 255), yellow.r);
+    try std.testing.expectEqual(@as(u8, 255), yellow.g);
+    try std.testing.expectEqual(@as(u8, 0), yellow.b);
 
-    // 100% = 3 blocks
+    // 100% = red
     const full = ContextUsage{ .percentage = 100.0 };
-    try std.testing.expectEqual(@as(u8, 3), full.filledBlocks(config));
+    const red = full.gradientColor();
+    try std.testing.expectEqual(@as(u8, 255), red.r);
+    try std.testing.expectEqual(@as(u8, 0), red.g);
+    try std.testing.expectEqual(@as(u8, 0), red.b);
 
-    // 17% = 0.5 blocks, rounds to 1
-    const low = ContextUsage{ .percentage = 17.0 };
-    try std.testing.expectEqual(@as(u8, 1), low.filledBlocks(config));
-
-    // 83% = 2.5 blocks, rounds to 3
-    const high = ContextUsage{ .percentage = 83.0 };
-    try std.testing.expectEqual(@as(u8, 2), high.filledBlocks(config));
+    // 75% = orange-ish (halfway between yellow and red)
+    const three_quarter = ContextUsage{ .percentage = 75.0 };
+    const orange = three_quarter.gradientColor();
+    try std.testing.expectEqual(@as(u8, 255), orange.r);
+    try std.testing.expectEqual(@as(u8, 127), orange.g); // 255 * 0.5
+    try std.testing.expectEqual(@as(u8, 0), orange.b);
 }
 
 test "GitStatus parsing" {
