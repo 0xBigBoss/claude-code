@@ -17,6 +17,9 @@ const colors = struct {
     const yellow = "\x1b[33m";
     const light_gray = "\x1b[38;5;245m";
     const reset = "\x1b[0m";
+    // Background colors for gauge
+    const bg_dark_gray = "\x1b[48;2;60;60;60m"; // Dark gray background for gauge empty space
+    const bg_reset = "\x1b[49m"; // Reset background only
 };
 
 /// Input structure from Claude Code (matches latest API)
@@ -126,21 +129,23 @@ const ContextUsage = struct {
 
     /// Format as a high-fidelity color-coded gauge using eighth blocks
     /// 5 chars × 8 levels = 40 discrete steps (2.5% precision)
+    /// Uses background color to eliminate gaps between partial and empty blocks
     fn formatGauge(self: ContextUsage, writer: anytype, config: GaugeConfig) !void {
-        const width_f: f64 = @floatFromInt(config.width);
+        _ = config; // empty_char not used with background color approach
+        const width: u32 = 5; // Fixed width for gauge
         // Total steps = width * 8 (8 levels per character)
-        const total_steps: f64 = width_f * 8.0;
+        const total_steps: f64 = @as(f64, @floatFromInt(width)) * 8.0;
         const filled_steps = (self.percentage / 100.0) * total_steps;
         const steps: u32 = @intFromFloat(@floor(filled_steps));
 
         // Get gradient color
         const rgb = self.gradientColor();
 
-        // Write 24-bit true color ANSI escape: \x1b[38;2;R;G;Bm
-        try writer.print("\x1b[38;2;{d};{d};{d}m", .{ rgb.r, rgb.g, rgb.b });
+        // Set background color for empty space, foreground for filled
+        try writer.print("{s}\x1b[38;2;{d};{d};{d}m", .{ colors.bg_dark_gray, rgb.r, rgb.g, rgb.b });
 
         // Render each character
-        for (0..config.width) |i| {
+        for (0..width) |i| {
             const char_start: u32 = @intCast(i * 8);
             const char_end: u32 = char_start + 8;
 
@@ -148,10 +153,10 @@ const ContextUsage = struct {
                 // Fully filled character
                 try writer.print("{s}", .{eighth_blocks[8]});
             } else if (steps <= char_start) {
-                // Empty character
-                try writer.print("{s}", .{config.empty_char});
+                // Empty character - use space so background shows through
+                try writer.print(" ", .{});
             } else {
-                // Partially filled - get the eighth block index
+                // Partially filled - background shows through the empty part
                 const partial = steps - char_start;
                 try writer.print("{s}", .{eighth_blocks[partial]});
             }
