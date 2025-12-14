@@ -7,6 +7,7 @@ description: Manages Tilt development environments via CLI and Tiltfile authorin
 
 ## Instructions
 
+- **Tilt live-reloads aggressively**: When `tilt up` is running, editing Tiltfiles or source code triggers automatic reloads. Restarting Tilt is almost never necessary—just save the file and Tilt will pick up changes.
 - Use `tilt get uiresources -o json` to query resource status programmatically.
 - Use `tilt get uiresource/<name> -o json` for detailed single resource state.
 - Use `tilt logs -f <resource>` for streaming log retrieval.
