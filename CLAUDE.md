@@ -17,25 +17,23 @@ Applies to agents. Follow these directives as system-level behavior.
 - Security: require explicit authorization before accessing secrets/keychains.
 - Extract configuration immediately; magic numbers, URLs, ports, timeouts, and feature flags belong in config, not code.
 
-## Language and tool skills (mandatory)
+## Skills
 
-**Proactively use skills when relevant to the task.** When a skill applies, invoke it immediately as your first action—do not wait for the user to request it. Skills provide language-specific patterns, error handling conventions, and quality standards that prevent common mistakes and ensure code passes review.
+Proactively use best-practices skills when working with supported languages or tools. Invoke the relevant skill immediately as your first action—do not wait for the user to request it.
 
-| Context | Skill File |
-|---------|------------|
-| Python: `.py`, `pyproject.toml`, `requirements.txt` | `~/.claude/skills/python-best-practices/SKILL.md` |
-| TypeScript: `.ts`, `.tsx`, `tsconfig.json`, React/JSX | `~/.claude/skills/typescript-best-practices/SKILL.md` |
-| Go: `.go`, `go.mod` | `~/.claude/skills/go-best-practices/SKILL.md` |
-| Zig: `.zig`, `build.zig`, `build.zig.zon` | `~/.claude/skills/zig-best-practices/SKILL.md` |
-| Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | `~/.claude/skills/playwright-best-practices/SKILL.md` |
-| Tilt: `Tiltfile`, tilt commands | `~/.claude/skills/tilt/SKILL.md` |
+| Context | Skill |
+|---------|-------|
+| Python: `.py`, `pyproject.toml`, `requirements.txt` | python-best-practices |
+| TypeScript: `.ts`, `.tsx`, `tsconfig.json`, React/JSX | typescript-best-practices |
+| Go: `.go`, `go.mod` | go-best-practices |
+| Zig: `.zig`, `build.zig`, `build.zig.zon` | zig-best-practices |
+| Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | playwright-best-practices |
+| Tilt: `Tiltfile`, tilt commands | tilt |
 
-**When to invoke skills:**
-- Reading code in a supported language (to understand project patterns)
+These skills provide error handling conventions, code quality patterns, and review standards. Invoke when:
+- Reading code (to understand expected patterns)
 - Writing or modifying code (to apply correct conventions)
-- Reviewing or debugging (to identify pattern violations)
-
-Apply the skill's patterns throughout the task and reference its guidelines for design decisions.
+- Reviewing or debugging (to identify violations)
 
 ## Tool use
 - Prefer project-standard tools; default to `rg` for search.
