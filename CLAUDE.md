@@ -17,9 +17,22 @@ Applies to agents. Follow these directives as system-level behavior.
 - Security: require explicit authorization before accessing secrets/keychains.
 - Extract configuration immediately; magic numbers, URLs, ports, timeouts, and feature flags belong in config, not code.
 
+## Type-first development
+- Define types, interfaces, and data models before implementing logic.
+- Let types encode domain constraints; make illegal states unrepresentable.
+- When modifying existing code, understand the type signatures first.
+- Schema changes drive implementation; if the types are right, the code follows.
+
+## Functional style
+- Prefer immutability: `const`, `frozen`, `readonly` types; mutate only when necessary for performance.
+- Write pure functions; isolate side effects at system boundaries (I/O, network, state updates).
+- Use `map`/`filter`/`reduce` and comprehensions over imperative loops where readable.
+- Compose small functions over large stateful procedures; prefer pipelines over in-place mutation.
+- Avoid shared mutable state; pass data explicitly rather than relying on side effects.
+
 ## Skills
 
-Proactively use best-practices skills when working with supported languages or tools. Invoke the relevant skill immediately as your first action—do not wait for the user to request it.
+Always use best-practices skills when working with supported languages or tools. Invoke the relevant skill immediately as your first action—do not wait for the user to request it.
 
 | Context | Skill |
 |---------|-------|
