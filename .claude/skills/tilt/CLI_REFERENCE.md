@@ -58,26 +58,28 @@ tilt api-resources
 
 ## Logs
 
-### Stream Logs (Follow Mode)
+**Note**: Always use snapshot-based log retrieval, not streaming (`-f`). Streaming doesn't work well with agent tooling.
+
+### Snapshot Logs
 
 ```bash
-tilt logs -f              # Stream all logs
-tilt logs -f <resource>   # Stream specific resource
-```
-
-### One-Shot Logs
-
-```bash
-tilt logs <resource>              # Get current logs and exit
+tilt logs <resource>              # Get current logs snapshot
 tilt logs <resource1> <resource2> # Multiple resources
 ```
 
-### Filter Logs
+### Filter and Search Logs
 
 ```bash
-tilt logs --level=warn            # Filter by level: "warn" or "error"
-tilt logs --source=build          # Filter by source: "all", "build", or "runtime"
-tilt logs --level=error --source=runtime <resource>
+# Filter by level/source at capture time
+tilt logs --level=warn <resource>             # Only warn/error
+tilt logs --source=build <resource>           # Build logs only
+tilt logs --source=runtime <resource>         # Runtime logs only
+
+# Pipe to search tools for specific patterns
+tilt logs <resource> | tail -50               # Recent logs
+tilt logs <resource> | head -100              # First logs
+tilt logs <resource> | rg -i "error|fail"     # Search for errors
+tilt logs <resource> | rg "listening on"      # Find startup confirmation
 ```
 
 ## Control Commands

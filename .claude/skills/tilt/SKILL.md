@@ -5,13 +5,52 @@ description: Manages Tilt development environments via CLI and Tiltfile authorin
 
 # Tilt Development Environment
 
+## Automatic Reload Behaviors
+
+Tilt live-reloads aggressively. **Never suggest restarting `tilt up` or manually refreshing resources**—Tilt handles this automatically in nearly all cases.
+
+### What Reloads Automatically
+
+| Change Type | What Happens | Your Action |
+|------------|--------------|-------------|
+| **Tiltfile edits** | Tilt re-evaluates the entire Tiltfile on save | Just save the file |
+| **Source code with `live_update`** | Files sync to container without rebuild | Just save the file |
+| **Source code without `live_update`** | Full image rebuild triggers automatically | Just save the file |
+| **Kubernetes manifests** | Resources re-apply automatically | Just save the file |
+| **Frontend with HMR** | Browser updates via Hot Module Replacement | Just save the file |
+| **Backend with watch tools** | Process restarts via nodemon/air/watchexec | Just save the file |
+
+### When Restart IS Actually Needed
+
+Restarting `tilt up` is required only for:
+- Tilt version upgrades
+- Changing Tilt's port or host settings
+- Recovering from Tilt crashes
+- Kubernetes context changes (switching clusters)
+
+### Verifying Updates Applied
+
+Instead of restarting, verify updates propagated:
+
+```bash
+# Check resource status after saving
+tilt get uiresource/<name> -o json | jq '.status.updateStatus'
+
+# Watch for update completion
+tilt wait --for=condition=Ready uiresource/<name> --timeout=60s
+
+# Snapshot logs and search for reload confirmation
+tilt logs <resource> | tail -50
+tilt logs <resource> | rg -i "reload|restart|updated|synced"
+```
+
 ## Instructions
 
-- **Tilt live-reloads aggressively**: When `tilt up` is running, editing Tiltfiles or source code triggers automatic reloads. Restarting Tilt is almost never necessary—just save the file and Tilt will pick up changes.
-- Use `tilt get uiresources -o json` to query resource status programmatically.
-- Use `tilt get uiresource/<name> -o json` for detailed single resource state.
-- Use `tilt logs -f <resource>` for streaming log retrieval.
-- Use `tilt trigger <resource>` to force updates; `tilt wait` to block until ready.
+- Use `tilt get uiresources -o json` to query resource status programmatically
+- Use `tilt get uiresource/<name> -o json` for detailed single resource state
+- Use `tilt logs <resource>` to snapshot logs, then pipe to `tail`/`head`/`rg` to search
+- Use `tilt trigger <resource>` to force updates when auto-reload didn't trigger
+- Use `tilt wait` to block until resources reach ready state
 - For Tiltfile authoring, see @TILTFILE_API.md
 - For complete CLI reference with JSON parsing patterns, see @CLI_REFERENCE.md
 
