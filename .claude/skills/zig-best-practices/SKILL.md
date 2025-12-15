@@ -426,114 +426,13 @@ if (maybeValue) |value| {
 }
 ```
 
-## Advanced Patterns
+## Advanced Topics
 
-These patterns demonstrate Zig's more powerful features. Use as reference when needed.
+Reference these guides for specialized patterns:
 
-### Generic Data Structures
-
-Return a type from a function to create reusable generic containers:
-```zig
-pub fn Queue(comptime Child: type) type {
-    return struct {
-        const Self = @This();
-        const Node = struct {
-            data: Child,
-            next: ?*Node,
-        };
-
-        allocator: std.mem.Allocator,
-        start: ?*Node,
-        end: ?*Node,
-
-        pub fn init(allocator: std.mem.Allocator) Self {
-            return Self{ .allocator = allocator, .start = null, .end = null };
-        }
-
-        pub fn enqueue(self: *Self, value: Child) !void {
-            const node = try self.allocator.create(Node);
-            node.* = .{ .data = value, .next = null };
-            if (self.end) |end| end.next = node else self.start = node;
-            self.end = node;
-        }
-
-        pub fn dequeue(self: *Self) ?Child {
-            const start = self.start orelse return null;
-            defer self.allocator.destroy(start);
-            if (start.next) |next| self.start = next else {
-                self.start = null;
-                self.end = null;
-            }
-            return start.data;
-        }
-    };
-}
-```
-
-### GeneralPurposeAllocator for Leak Detection
-
-Use GPA in debug builds to catch memory leaks with stack traces:
-```zig
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer std.debug.assert(gpa.deinit() == .ok);
-    const allocator = gpa.allocator();
-
-    // Use allocator; leaks will be reported on deinit
-}
-```
-
-### C Interoperability
-
-Import C headers directly with `@cImport`:
-```zig
-const ray = @cImport({
-    @cInclude("raylib.h");
-});
-
-pub fn main() void {
-    ray.InitWindow(800, 450, "window title");
-    defer ray.CloseWindow();
-
-    ray.SetTargetFPS(60);
-    while (!ray.WindowShouldClose()) {
-        ray.BeginDrawing();
-        defer ray.EndDrawing();
-        ray.ClearBackground(ray.RAYWHITE);
-    }
-}
-```
-
-### Extern Functions (System APIs)
-
-Call platform APIs without bindings:
-```zig
-const win = @import("std").os.windows;
-
-extern "user32" fn MessageBoxA(
-    ?win.HWND,
-    [*:0]const u8,
-    [*:0]const u8,
-    u32,
-) callconv(.winapi) i32;
-```
-
-### C Callbacks with Zig
-
-Pass Zig functions to C libraries using `callconv(.C)`:
-```zig
-fn writeCallback(
-    data: *anyopaque,
-    size: c_uint,
-    nmemb: c_uint,
-    user_data: *anyopaque,
-) callconv(.C) c_uint {
-    const buffer: *std.ArrayList(u8) = @alignCast(@ptrCast(user_data));
-    const typed_data: [*]u8 = @ptrCast(data);
-    buffer.appendSlice(typed_data[0 .. nmemb * size]) catch return 0;
-    return nmemb * size;
-}
-```
+- **Building custom containers** (queues, stacks, trees): See [GENERICS.md](GENERICS.md)
+- **Interfacing with C libraries** (raylib, SDL, curl, system APIs): See [C-INTEROP.md](C-INTEROP.md)
+- **Debugging memory leaks** (GPA, stack traces): See [DEBUGGING.md](DEBUGGING.md)
 
 ## References
 
