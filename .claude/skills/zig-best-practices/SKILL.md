@@ -1,9 +1,119 @@
 ---
 name: zig-best-practices
-description: Provides Zig code quality patterns for error handling with error unions, memory management with allocators and defer/errdefer, exhaustive switch statements, and testing with leak detection. Must use when reading or writing Zig files.
+description: Provides Zig patterns for type-first development with tagged unions, explicit error sets, comptime validation, and memory management. Must use when reading or writing Zig files.
 ---
 
 # Zig Best Practices
+
+## Type-First Development
+
+Types define the contract before implementation. Follow this workflow:
+
+1. **Define data structures** - structs, unions, and error sets first
+2. **Define function signatures** - parameters, return types, and error unions
+3. **Implement to satisfy types** - let the compiler guide completeness
+4. **Validate at comptime** - catch invalid configurations during compilation
+
+### Make Illegal States Unrepresentable
+
+Use Zig's type system to prevent invalid states at compile time.
+
+**Tagged unions for mutually exclusive states:**
+```zig
+// Good: only valid combinations possible
+const RequestState = union(enum) {
+    idle,
+    loading,
+    success: []const u8,
+    failure: anyerror,
+};
+
+fn handleState(state: RequestState) void {
+    switch (state) {
+        .idle => {},
+        .loading => showSpinner(),
+        .success => |data| render(data),
+        .failure => |err| showError(err),
+    }
+}
+
+// Bad: allows invalid combinations
+const RequestState = struct {
+    loading: bool,
+    data: ?[]const u8,
+    err: ?anyerror,
+};
+```
+
+**Explicit error sets for failure modes:**
+```zig
+// Good: documents exactly what can fail
+const ParseError = error{
+    InvalidSyntax,
+    UnexpectedToken,
+    EndOfInput,
+};
+
+fn parse(input: []const u8) ParseError!Ast {
+    // implementation
+}
+
+// Bad: anyerror hides failure modes
+fn parse(input: []const u8) anyerror!Ast {
+    // implementation
+}
+```
+
+**Distinct types for domain concepts:**
+```zig
+// Prevent mixing up IDs of different types
+const UserId = enum(u64) { _ };
+const OrderId = enum(u64) { _ };
+
+fn getUser(id: UserId) !User {
+    // Compiler prevents passing OrderId here
+}
+
+fn createUserId(raw: u64) UserId {
+    return @enumFromInt(raw);
+}
+```
+
+**Comptime validation for invariants:**
+```zig
+fn Buffer(comptime size: usize) type {
+    if (size == 0) {
+        @compileError("buffer size must be greater than 0");
+    }
+    if (size > 1024 * 1024) {
+        @compileError("buffer size exceeds 1MB limit");
+    }
+    return struct {
+        data: [size]u8 = undefined,
+        len: usize = 0,
+    };
+}
+```
+
+**Non-exhaustive enums for extensibility:**
+```zig
+// External enum that may gain variants
+const Status = enum(u8) {
+    active = 1,
+    inactive = 2,
+    pending = 3,
+    _,
+};
+
+fn processStatus(status: Status) !void {
+    switch (status) {
+        .active => {},
+        .inactive => {},
+        .pending => {},
+        _ => return error.UnknownStatus,
+    }
+}
+```
 
 ## Module Structure
 

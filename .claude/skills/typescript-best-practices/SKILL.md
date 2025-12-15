@@ -1,13 +1,92 @@
 ---
 name: typescript-best-practices
-description: Provides TypeScript code quality patterns for strict typing, exhaustive switch handling, runtime validation with Zod, and debug logging. Must use when reading or writing TypeScript/JavaScript files. 
+description: Provides TypeScript patterns for type-first development, making illegal states unrepresentable, exhaustive handling, and runtime validation. Must use when reading or writing TypeScript/JavaScript files.
 ---
 
 # TypeScript Best Practices
 
+## Type-First Development
+
+Types define the contract before implementation. Follow this workflow:
+
+1. **Define the data model** - types, interfaces, and schemas first
+2. **Define function signatures** - input/output types before logic
+3. **Implement to satisfy types** - let the compiler guide completeness
+4. **Validate at boundaries** - runtime checks where data enters the system
+
+### Make Illegal States Unrepresentable
+
+Use the type system to prevent invalid states at compile time.
+
+**Discriminated unions for mutually exclusive states:**
+```ts
+// Good: only valid combinations possible
+type RequestState<T> =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'success'; data: T }
+  | { status: 'error'; error: Error };
+
+// Bad: allows invalid combinations like { loading: true, error: Error }
+type RequestState<T> = {
+  loading: boolean;
+  data?: T;
+  error?: Error;
+};
+```
+
+**Branded types for domain primitives:**
+```ts
+type UserId = string & { readonly __brand: 'UserId' };
+type OrderId = string & { readonly __brand: 'OrderId' };
+
+// Compiler prevents passing OrderId where UserId expected
+function getUser(id: UserId): Promise<User> { /* ... */ }
+
+function createUserId(id: string): UserId {
+  return id as UserId;
+}
+```
+
+**Const assertions for literal unions:**
+```ts
+const ROLES = ['admin', 'user', 'guest'] as const;
+type Role = typeof ROLES[number]; // 'admin' | 'user' | 'guest'
+
+// Array and type stay in sync automatically
+function isValidRole(role: string): role is Role {
+  return ROLES.includes(role as Role);
+}
+```
+
+**Required vs optional fields - be explicit:**
+```ts
+// Creation: some fields required
+type CreateUser = {
+  email: string;
+  name: string;
+};
+
+// Update: all fields optional
+type UpdateUser = Partial<CreateUser>;
+
+// Database row: all fields present
+type User = CreateUser & {
+  id: UserId;
+  createdAt: Date;
+};
+```
+
 ## Module Structure
 
 Prefer smaller, focused files: one component, hook, or utility per file. Split when a file handles multiple concerns or exceeds ~200 lines. Colocate tests with implementation (`foo.test.ts` alongside `foo.ts`). Group related files by feature rather than by type.
+
+## Functional Patterns
+
+- Prefer `const` over `let`; use `readonly` and `Readonly<T>` for immutable data.
+- Use `array.map/filter/reduce` over `for` loops; chain transformations in pipelines.
+- Write pure functions for business logic; isolate side effects in dedicated modules.
+- Avoid mutating function parameters; return new objects/arrays instead.
 
 ## Instructions
 
@@ -160,6 +239,30 @@ import { config } from "./config";
 
 const server = app.listen(config.PORT);
 const db = connect(config.DATABASE_URL);
+```
+
+## Optional: type-fest
+
+For advanced type utilities beyond TypeScript builtins, consider [type-fest](https://github.com/sindresorhus/type-fest):
+
+- `Opaque<T, Token>` - cleaner branded types than manual `& { __brand }` pattern
+- `PartialDeep<T>` - recursive partial for nested objects
+- `ReadonlyDeep<T>` - recursive readonly for immutable data
+- `LiteralUnion<Literals, Fallback>` - literals with autocomplete + string fallback
+- `SetRequired<T, K>` / `SetOptional<T, K>` - targeted field modifications
+- `Simplify<T>` - flatten complex intersection types in IDE tooltips
+
+```ts
+import type { Opaque, PartialDeep, SetRequired } from 'type-fest';
+
+// Branded type (cleaner than manual approach)
+type UserId = Opaque<string, 'UserId'>;
+
+// Deep partial for patch operations
+type UserPatch = PartialDeep<User>;
+
+// Make specific fields required
+type UserWithEmail = SetRequired<Partial<User>, 'email'>;
 ```
 
 ---
