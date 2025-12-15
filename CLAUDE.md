@@ -42,6 +42,7 @@ Always use best-practices skills when working with supported languages or tools.
 | Zig: `.zig`, `build.zig`, `build.zig.zon` | zig-best-practices |
 | Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | playwright-best-practices |
 | Tilt: `Tiltfile`, tilt commands | tilt |
+| Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
 
 These skills provide error handling conventions, code quality patterns, and review standards. Invoke when:
 - Reading code (to understand expected patterns)
