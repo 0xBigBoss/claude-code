@@ -22,6 +22,23 @@ const colors = struct {
     const bg_reset = "\x1b[49m"; // Reset background only
 };
 
+/// Current context usage token counts - added in v2.0.70
+/// Provides accurate per-message token counts for context window calculation
+const CurrentUsage = struct {
+    input_tokens: ?i64 = null,
+    output_tokens: ?i64 = null,
+    cache_creation_input_tokens: ?i64 = null,
+    cache_read_input_tokens: ?i64 = null,
+
+    /// Calculate total tokens from all fields
+    fn totalTokens(self: CurrentUsage) i64 {
+        return (self.input_tokens orelse 0) +
+            (self.output_tokens orelse 0) +
+            (self.cache_creation_input_tokens orelse 0) +
+            (self.cache_read_input_tokens orelse 0);
+    }
+};
+
 /// Input structure from Claude Code (matches latest API)
 const StatuslineInput = struct {
     workspace: ?struct {
@@ -39,6 +56,9 @@ const StatuslineInput = struct {
         total_input_tokens: ?i64 = null,
         total_output_tokens: ?i64 = null,
         context_window_size: ?i64 = null,
+        /// Current context usage - added in v2.0.70
+        /// Nested inside context_window, provides per-message token counts
+        current_usage: ?CurrentUsage = null,
     } = null,
     cost: ?struct {
         total_cost_usd: ?f64 = null,
@@ -775,17 +795,31 @@ pub fn main() !void {
     if (input.model) |model| {
         if (model.display_name) |name| {
             const model_type = ModelType.fromName(name);
-            // Parse transcript to get latest message's actual token usage
-            const context_size = if (input.context_window) |ctx| ctx.context_window_size else null;
-            const usage = try calculateContextUsage(allocator, input.transcript_path, context_size);
+
+            // Calculate context usage from current_usage (v2.0.70+) or fall back to transcript parsing
+            const usage: ContextUsage = blk: {
+                if (input.context_window) |ctx| {
+                    if (ctx.current_usage) |cur| {
+                        // Use current_usage token counts directly (v2.0.70+)
+                        const total_tokens = cur.totalTokens();
+                        const window_size: f64 = @floatFromInt(ctx.context_window_size orelse 200000);
+                        // Effective context is 77.5% of window (22.5% reserved for autocompact buffer)
+                        const effective_size = window_size * 0.775;
+                        const pct = @min(100.0, (@as(f64, @floatFromInt(total_tokens)) * 100.0) / effective_size);
+                        break :blk ContextUsage{ .percentage = pct, .total_tokens = @intCast(total_tokens) };
+                    }
+                }
+                // Fall back to transcript parsing for older Claude Code versions
+                const context_size = if (input.context_window) |ctx| ctx.context_window_size else null;
+                break :blk try calculateContextUsage(allocator, input.transcript_path, context_size);
+            };
 
             // Gauge + model emoji (e.g., "██░ 🎭")
             try writer.print(" ", .{});
             try usage.formatGauge(writer, default_gauge_config);
-            // Show token counts for debugging: current/effective_max in k
+            // Show percentage for debugging
             if (debug_mode) {
-                const effective_max: u64 = if (context_size) |sz| @intFromFloat(@as(f64, @floatFromInt(sz)) * 0.775) else 155000;
-                try writer.print(" {s}{d}k/{d}k", .{ colors.gray, usage.total_tokens / 1000, effective_max / 1000 });
+                try writer.print(" {s}{d:.1}%", .{ colors.gray, usage.percentage });
             }
             try writer.print(" {s}{s}", .{ model_type.emoji(), colors.gray });
 
@@ -1300,4 +1334,85 @@ test "JSON parsing with full API structure" {
     try std.testing.expectEqual(@as(i64, 45000), parsed.value.cost.?.total_duration_ms.?);
     try std.testing.expectEqual(@as(i64, 156), parsed.value.cost.?.total_lines_added.?);
     try std.testing.expectEqual(@as(i64, 23), parsed.value.cost.?.total_lines_removed.?);
+}
+
+test "JSON parsing with current_usage field (v2.0.70+)" {
+    const allocator = std.testing.allocator;
+
+    const json_with_usage =
+        \\{
+        \\  "hook_event_name": "Status",
+        \\  "session_id": "abc123",
+        \\  "model": {
+        \\    "id": "claude-opus-4-1",
+        \\    "display_name": "Opus"
+        \\  },
+        \\  "workspace": {
+        \\    "current_dir": "/test/project"
+        \\  },
+        \\  "context_window": {
+        \\    "context_window_size": 200000,
+        \\    "current_usage": {
+        \\      "input_tokens": 100,
+        \\      "output_tokens": 50,
+        \\      "cache_creation_input_tokens": 500,
+        \\      "cache_read_input_tokens": 67000
+        \\    }
+        \\  },
+        \\  "version": "2.0.70"
+        \\}
+    ;
+
+    const parsed = try json.parseFromSlice(StatuslineInput, allocator, json_with_usage, .{
+        .ignore_unknown_fields = true,
+    });
+    defer parsed.deinit();
+
+    // Check current_usage is parsed correctly
+    try std.testing.expect(parsed.value.context_window != null);
+    try std.testing.expect(parsed.value.context_window.?.current_usage != null);
+
+    const cur = parsed.value.context_window.?.current_usage.?;
+    try std.testing.expectEqual(@as(i64, 100), cur.input_tokens.?);
+    try std.testing.expectEqual(@as(i64, 50), cur.output_tokens.?);
+    try std.testing.expectEqual(@as(i64, 500), cur.cache_creation_input_tokens.?);
+    try std.testing.expectEqual(@as(i64, 67000), cur.cache_read_input_tokens.?);
+
+    // Total should be 67650
+    try std.testing.expectEqual(@as(i64, 67650), cur.totalTokens());
+
+    // Verify percentage calculation: 67650 / (200000 * 0.775) = 43.6%
+    const window_size: f64 = 200000.0;
+    const effective_size = window_size * 0.775;
+    const pct = (@as(f64, @floatFromInt(cur.totalTokens())) * 100.0) / effective_size;
+    try std.testing.expectApproxEqAbs(@as(f64, 43.6), pct, 0.1);
+}
+
+test "current_usage field fallback when missing" {
+    const allocator = std.testing.allocator;
+
+    // JSON without current_usage (older Claude Code versions)
+    const json_without_usage =
+        \\{
+        \\  "model": {
+        \\    "display_name": "Opus"
+        \\  },
+        \\  "workspace": {
+        \\    "current_dir": "/test"
+        \\  },
+        \\  "context_window": {
+        \\    "context_window_size": 200000
+        \\  },
+        \\  "version": "1.0.80"
+        \\}
+    ;
+
+    const parsed = try json.parseFromSlice(StatuslineInput, allocator, json_without_usage, .{
+        .ignore_unknown_fields = true,
+    });
+    defer parsed.deinit();
+
+    // current_usage should be null for older versions
+    try std.testing.expect(parsed.value.context_window != null);
+    try std.testing.expect(parsed.value.context_window.?.current_usage == null);
 }
