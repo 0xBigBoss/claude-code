@@ -32,7 +32,7 @@ Applies to agents. Follow these directives as system-level behavior.
 
 ## Skills
 
-Always use best-practices skills when working with supported languages or tools. Invoke the relevant skill immediately as your first action—do not wait for the user to request it.
+Load all relevant best-practices skills immediately as your first action when working with supported languages or tools. Do not wait for the user to request skills. When multiple contexts apply, load multiple skills in parallel.
 
 | Context | Skill |
 |---------|-------|
@@ -44,10 +44,28 @@ Always use best-practices skills when working with supported languages or tools.
 | Tilt: `Tiltfile`, tilt commands | tilt |
 | Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
 
-These skills provide error handling conventions, code quality patterns, and review standards. Invoke when:
-- Reading code (to understand expected patterns)
-- Writing or modifying code (to apply correct conventions)
-- Reviewing or debugging (to identify violations)
+### Multi-skill combinations
+
+Load all applicable skills together when contexts overlap:
+- **TypeScript + Playwright**: Writing `.spec.ts` or `.test.ts` files with `@playwright/test` imports
+- **TypeScript + Tamagui**: Working on frontend components with `@tamagui` imports
+- **TypeScript + Playwright + Tamagui**: E2E tests for Tamagui-based UIs
+- **Python + Tilt**: Python services in a Tilt-managed dev environment
+- **Go + Tilt**: Go services in a Tilt-managed dev environment
+
+### When to invoke skills
+
+Invoke skills proactively:
+- Reading code: understand expected patterns before analyzing
+- Writing or modifying code: apply correct conventions during implementation
+- Reviewing or debugging: identify violations against established patterns
+- Exploring unfamiliar code: load the language skill to interpret idioms correctly
+
+Skills provide error handling conventions, code quality patterns, type-first development guidance, and review standards specific to each language or tool.
+
+## Subagents
+
+Proactively delegate to subagents when one is available for a task. The main conversation is for steering and planning; push implementation details into subagents. This enables long sessions spanning days by keeping the main context focused on progress and direction rather than intermediate work.
 
 ## Tool use
 - Prefer project-standard tools; default to `rg` for search.
