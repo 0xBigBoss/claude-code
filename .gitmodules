@@ -1,0 +1,3 @@
+[submodule "analytics"]
+	path = analytics
+	url = git@github.com:0xbigboss/claude-code-analytics.git
