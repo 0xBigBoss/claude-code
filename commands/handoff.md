@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Write
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(pbcopy:*)
 argument-hint: [optional focus area or additional notes]
 description: Generate concise handoff summary with context
 ---
@@ -38,7 +38,7 @@ $ARGUMENTS
 
 ## Task
 
-Write a handoff prompt to `/tmp/handoff-<repo>-<shortname>.md` where `<repo>` is the repository name and `<shortname>` is derived from the branch name (e.g., `handoff-myapp-sen-69.md`, `handoff-api-fix-auth.md`).
+Generate a handoff prompt and copy it directly to the clipboard using pbcopy with a heredoc. Do NOT write to any file.
 
 The prompt must be standalone and actionable for an agent with zero prior context.
 
@@ -89,6 +89,18 @@ Use this XML-tagged structure:
 </next_steps>
 ```
 
-After writing the file, copy to clipboard: `cat /tmp/handoff-<repo>-<shortname>.md | pbcopy`
+### Output Method
 
-Confirm: "Handoff prompt copied to clipboard. Paste into your next agent session."
+1. First, display the handoff prompt in a code block so the user can see it
+2. Then copy to clipboard using a heredoc:
+
+```bash
+pbcopy << 'HANDOFF_EOF'
+<role>
+...
+</role>
+...
+HANDOFF_EOF
+```
+
+3. Confirm: "Handoff prompt copied to clipboard. Paste into your next agent session."
