@@ -37,7 +37,8 @@ Load all relevant best-practices skills immediately as your first action when wo
 | Context | Skill |
 |---------|-------|
 | Python: `.py`, `pyproject.toml`, `requirements.txt` | python-best-practices |
-| TypeScript: `.ts`, `.tsx`, `tsconfig.json`, React/JSX | typescript-best-practices |
+| TypeScript: `.ts`, `.tsx`, `tsconfig.json` | typescript-best-practices |
+| React: `.tsx`, `.jsx`, `@react` imports | react-best-practices |
 | Go: `.go`, `go.mod` | go-best-practices |
 | Zig: `.zig`, `build.zig`, `build.zig.zon` | zig-best-practices |
 | Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | playwright-best-practices |
@@ -47,9 +48,10 @@ Load all relevant best-practices skills immediately as your first action when wo
 ### Multi-skill combinations
 
 Load all applicable skills together when contexts overlap:
-- **TypeScript + Playwright**: Writing `.spec.ts` or `.test.ts` files with `@playwright/test` imports
-- **TypeScript + Tamagui**: Working on frontend components with `@tamagui` imports
-- **TypeScript + Playwright + Tamagui**: E2E tests for Tamagui-based UIs
+- **TypeScript + React**: All React components (`.tsx`, `.jsx`) - always load both skills together
+- **TypeScript + React + Playwright**: React component E2E tests with `@playwright/test`
+- **TypeScript + React + Tamagui**: React Native/web components with `@tamagui` imports
+- **TypeScript + Playwright**: Non-React test files with `@playwright/test` imports
 - **Python + Tilt**: Python services in a Tilt-managed dev environment
 - **Go + Tilt**: Go services in a Tilt-managed dev environment
 
