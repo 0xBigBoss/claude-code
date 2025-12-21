@@ -58,29 +58,68 @@ tilt api-resources
 
 ## Logs
 
-**Note**: Always use snapshot-based log retrieval, not streaming (`-f`). Streaming doesn't work well with agent tooling.
-
-### Snapshot Logs
+**Use `tilt-logs` CLI** (preferred over `tilt logs` subcommand). It provides enhanced filtering with `--since`, `--tail`, JSON output, and follow mode.
 
 ```bash
-tilt logs <resource>              # Get current logs snapshot
-tilt logs <resource1> <resource2> # Multiple resources
+# Install globally
+bun install -g tilt-logs
+
+# Or run directly without installing
+bunx tilt-logs <resource> --since 5m
 ```
 
-### Filter and Search Logs
+### Basic Usage
 
 ```bash
-# Filter by level/source at capture time
-tilt logs --level=warn <resource>             # Only warn/error
-tilt logs --source=build <resource>           # Build logs only
-tilt logs --source=runtime <resource>         # Runtime logs only
-
-# Pipe to search tools for specific patterns
-tilt logs <resource> | tail -50               # Recent logs
-tilt logs <resource> | head -100              # First logs
-tilt logs <resource> | rg -i "error|fail"     # Search for errors
-tilt logs <resource> | rg "listening on"      # Find startup confirmation
+tilt-logs                         # All logs
+tilt-logs <resource>              # Filter by resource name
 ```
+
+### Time-Based Filtering
+
+```bash
+tilt-logs --since 5m              # Logs from last 5 minutes
+tilt-logs --since 1h              # Logs from last hour
+tilt-logs --since 30s             # Logs from last 30 seconds
+tilt-logs <resource> --since 5m   # Resource logs from last 5 minutes
+```
+
+### Tail and Follow
+
+```bash
+tilt-logs --tail 100              # Last 100 log lines
+tilt-logs -n 50                   # Last 50 lines (short form)
+tilt-logs -f                      # Follow/stream new logs
+tilt-logs <resource> -f           # Stream logs from specific resource
+```
+
+**Note**: Prefer `--since` or `--tail` for agent tooling. Use `-f` (follow) only for interactive debugging.
+
+### JSON Output
+
+```bash
+tilt-logs --json                  # Output as JSON lines
+tilt-logs --json | jq .           # Pipe to jq for processing
+tilt-logs <resource> --json       # JSON logs for specific resource
+```
+
+### Search Patterns
+
+```bash
+tilt-logs --since 5m | rg -i "error|fail"     # Search for errors
+tilt-logs <resource> --tail 50 | rg "listening on"  # Find startup
+tilt-logs --since 1m | rg -i "reload|restart|updated"  # Verify updates
+```
+
+### Configuration
+
+```bash
+tilt-logs --host <host>           # Custom Tilt host (default: localhost)
+tilt-logs --port <port>           # Custom Tilt port (default: 10350)
+tilt-logs --no-color              # Disable colored output
+```
+
+Environment variables: `TILT_HOST`, `TILT_PORT`
 
 ## Control Commands
 
