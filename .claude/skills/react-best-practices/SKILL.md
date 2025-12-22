@@ -87,7 +87,7 @@ function Profile({ userId }) {
 function ProductPage({ product, addToCart }) {
   useEffect(() => {
     if (product.isInCart) {
-      showNotification(`Added ${product.name}!`);
+      showNotification(`Added ${product.name} to cart`);
     }
   }, [product]);
   // ...
@@ -97,7 +97,7 @@ function ProductPage({ product, addToCart }) {
 function ProductPage({ product, addToCart }) {
   function buyProduct() {
     addToCart(product);
-    showNotification(`Added ${product.name}!`);
+    showNotification(`Added ${product.name} to cart`);
   }
   // ...
 }
