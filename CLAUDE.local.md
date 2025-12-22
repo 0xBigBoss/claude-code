@@ -96,10 +96,10 @@ dotfiles/
 │   ├── CLAUDE.md               # Shared guidelines (source of truth)
 │   ├── CLAUDE.local.md         # Dev instructions (this file, not symlinked)
 │   ├── commands/               # User-level slash commands
-│   │   ├── clean-copy.md
+│   │   ├── fix-issue.md
 │   │   ├── git-commit.md
 │   │   ├── handoff.md
-│   │   └── implement.md
+│   │   └── rewrite-history.md
 │   ├── agents/                 # Custom agent definitions
 │   ├── scripts/                # Helper scripts
 │   └── .claude/
