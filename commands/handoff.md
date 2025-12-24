@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(pbcopy:*), Write(~/.claude/handoffs/**)
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(pbcopy:*), Bash(basename:*), Bash(mkdir:*), Edit(~/.claude/handoffs/**)
 argument-hint: [optional focus area or additional notes]
 description: Generate concise handoff summary with context
 ---
@@ -12,7 +12,7 @@ Generate a prompt for handing off work to another AI agent (Codex, Claude Code).
 
 **Working Directory**: !`pwd`
 
-**Repository**: !`basename "$(git rev-parse --show-toplevel 2>/dev/null)" || basename "$(pwd)"`
+**Repository**: !`basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`
 
 **Branch**: !`git branch --show-current 2>/dev/null || echo "detached/unknown"`
 
@@ -91,10 +91,12 @@ Use this XML-tagged structure:
 
 ### Output Method
 
-1. Write the handoff prompt to `~/.claude/handoffs/handoff-<repo>-<shortname>.md` where:
+1. Ensure directory exists: `mkdir -p ~/.claude/handoffs`
+
+2. Write the handoff prompt to `~/.claude/handoffs/handoff-<repo>-<shortname>.md` where:
    - `<repo>` is the repository basename
    - `<shortname>` is derived from the branch name (e.g., `handoff-myapp-sen-69.md`, `handoff-api-fix-auth.md`)
 
-2. Copy to clipboard: `cat ~/.claude/handoffs/<filename> | pbcopy`
+3. Copy to clipboard: `cat ~/.claude/handoffs/<filename> | pbcopy`
 
-3. Confirm: "Handoff saved to ~/.claude/handoffs/<filename> and copied to clipboard."
+4. Confirm: "Handoff saved to ~/.claude/handoffs/<filename> and copied to clipboard."
