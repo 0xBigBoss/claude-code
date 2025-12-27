@@ -5,6 +5,29 @@ description: Provides Playwright test patterns for resilient locators, Page Obje
 
 # Playwright Best Practices
 
+## CLI Context: Prevent Context Overflow
+
+When running Playwright tests from Claude Code or any CLI agent, always use minimal reporters to prevent verbose output from consuming the context window.
+
+**Use `--reporter=line` or `--reporter=dot` for CLI test runs:**
+
+```bash
+# REQUIRED: Use minimal reporter to prevent context overflow
+npx playwright test --reporter=line
+npx playwright test --reporter=dot
+
+# BAD: Default reporter generates thousands of lines, floods context
+npx playwright test
+```
+
+Configure `playwright.config.ts` to use minimal reporters by default when `CI` or `CLAUDE` env vars are set:
+
+```ts
+reporter: process.env.CI || process.env.CLAUDE
+  ? [['line'], ['html', { open: 'never' }]]
+  : 'list',
+```
+
 ## Locator Priority (Most to Least Resilient)
 
 Always prefer user-facing attributes:
@@ -346,7 +369,10 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? [['html'], ['json', { outputFile: 'results.json' }]] : 'list',
+  // Use minimal reporter in CI/agent contexts to prevent context overflow
+  reporter: process.env.CI || process.env.CLAUDE
+    ? [['line'], ['html', { open: 'never' }]]
+    : 'list',
 
   use: {
     baseURL: process.env.BASE_URL ?? 'http://localhost:3000',
@@ -454,6 +480,7 @@ Enable debug logs: `DEBUG=test:* npx playwright test`
 - UI login in every test - use setup project + storageState
 - Manual assertions without await - use web-first assertions
 - Hardcoded waits - rely on Playwright's auto-waiting
+- Default reporter in CI/agent - use `--reporter=line` or `--reporter=dot` to prevent context overflow
 
 ## Checklist
 
@@ -466,3 +493,4 @@ Enable debug logs: `DEBUG=test:* npx playwright test`
 - [ ] Network mocks set up before navigation
 - [ ] Test data created per-test or via fixtures
 - [ ] Debug logging added for complex flows
+- [ ] Minimal reporter (`line`/`dot`) used in CI/agent contexts
