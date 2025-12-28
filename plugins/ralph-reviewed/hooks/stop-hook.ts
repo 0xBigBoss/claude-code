@@ -23,13 +23,27 @@
  *    - REJECT: inject feedback, block exit, continue
  */
 
-import { readFileSync, writeFileSync, existsSync, appendFileSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, appendFileSync, unlinkSync, mkdirSync } from "node:fs";
 import { execSync, spawnSync } from "node:child_process";
+import { homedir } from "node:os";
+
+// --- Version ---
+// Update this when making changes to help diagnose cached code issues
+const HOOK_VERSION = "2025-12-28T16:50:00Z";
+const HOOK_BUILD = "v1.1.0-cleanup-fix";
 
 // --- Crash Reporting ---
-// Session-specific crash logs to avoid clobbering between concurrent sessions
+// Session-specific logs stored in ~/.claude/ralphs/{session_id}/
+// Pre-session logs go to ~/.claude/ralphs/startup.log
+const ralphsDir = `${homedir()}/.claude/ralphs`;
 let sessionId = "unknown";
-let crashLogPath = "/tmp/ralph-reviewed-crash-startup.log"; // Before we know session ID
+let sessionLogDir = ralphsDir; // Updated when session ID is known
+let crashLogPath = `${ralphsDir}/startup.log`; // Before we know session ID
+
+// Ensure base ralphs directory exists
+try {
+  mkdirSync(ralphsDir, { recursive: true });
+} catch { /* ignore */ }
 
 function crash(msg: string, error?: unknown) {
   const timestamp = new Date().toISOString();
@@ -52,11 +66,18 @@ function crash(msg: string, error?: unknown) {
 
 function setSessionId(id: string) {
   sessionId = id;
-  crashLogPath = `/tmp/ralph-reviewed-crash-${id}.log`;
+  sessionLogDir = `${ralphsDir}/${id}`;
+
+  // Create session-specific directory
+  try {
+    mkdirSync(sessionLogDir, { recursive: true });
+  } catch { /* ignore */ }
+
+  crashLogPath = `${sessionLogDir}/crash.log`;
 }
 
 // Log startup immediately to help diagnose "operation aborted" errors
-crash(`Hook starting - PID: ${process.pid}, argv: ${JSON.stringify(process.argv)}`);
+crash(`Hook starting - version: ${HOOK_BUILD} (${HOOK_VERSION}), PID: ${process.pid}`);
 
 // Global error handlers
 process.on("uncaughtException", (err) => {
@@ -87,7 +108,7 @@ process.on("unhandledRejection", (reason) => {
   process.exit(1);
 });
 
-let debugLogPath = "/tmp/ralph-reviewed-debug.log"; // Updated with session ID later
+let debugLogPath = `${ralphsDir}/debug.log`; // Updated with session ID later
 let debugEnabled = process.env.RALPH_DEBUG === "1";
 let stateFilePath: string | null = null; // Set in main() for error handler access
 
@@ -565,8 +586,8 @@ async function main() {
     stateFilePath = getStateFilePath(input.cwd);
 
     // Set session-specific file paths
-    debugLogPath = `/tmp/ralph-reviewed-${input.session_id}.log`;
-    crash(`State file: ${stateFilePath}, Git root: ${gitRoot || "none"}, cwd: ${input.cwd}`);
+    debugLogPath = `${sessionLogDir}/debug.log`;
+    crash(`State file: ${stateFilePath}, Git root: ${gitRoot || "none"}, cwd: ${input.cwd}, logs: ${sessionLogDir}`);
 
     // Check for active loop
     if (!existsSync(stateFilePath)) {
