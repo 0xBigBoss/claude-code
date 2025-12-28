@@ -1,6 +1,6 @@
 ---
 description: Start Ralph Reviewed loop in current session
-allowed-tools: Bash(mkdir:*), Bash(date:*), Bash(cat:*), Write(**/ralph-loop.local.md)
+allowed-tools: Bash(git:*), Bash(mkdir:*), Bash(date:*), Bash(cat:*), Write(**/ralph-loop.local.md)
 argument-hint: "task description" [--max-iterations N] [--max-reviews N] [--completion-promise TEXT] [--no-review] [--debug]
 ---
 
@@ -22,17 +22,23 @@ Parse the following from arguments:
 
 ## Setup
 
-1. Create state directory if needed:
+1. Get git repository root (state file must be at repo root to survive directory changes):
    ```bash
-   mkdir -p .claude
+   git rev-parse --show-toplevel
+   ```
+   Store this as GIT_ROOT. If not in a git repo, use current directory.
+
+2. Create state directory at repo root:
+   ```bash
+   mkdir -p {GIT_ROOT}/.claude
    ```
 
-2. Generate timestamp:
+3. Generate timestamp:
    ```bash
    date -u +"%Y-%m-%dT%H:%M:%SZ"
    ```
 
-3. Write the state file to `.claude/ralph-loop.local.md`:
+4. Write the state file to `{GIT_ROOT}/.claude/ralph-loop.local.md`:
 
 ```markdown
 ---

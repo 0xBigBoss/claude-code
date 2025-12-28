@@ -5,8 +5,13 @@
  * Intercepts exit attempts during an active Ralph loop.
  * When completion is claimed, triggers Codex review gate.
  *
+ * NOTE: Ralph loops only work within git repositories. The state file is stored
+ * at the git repo root (.claude/ralph-loop.local.md) to ensure it survives
+ * directory changes within the repo. Outside of git repos, falls back to cwd
+ * but directory changes will break the loop.
+ *
  * Flow:
- * 1. Check for active loop state file
+ * 1. Check for active loop state file (at git repo root)
  * 2. If no loop, allow exit
  * 3. Extract last assistant message from transcript
  * 4. Check for completion promise
@@ -101,6 +106,38 @@ function debug(msg: string) {
   appendFileSync(debugLogPath, line);
 }
 import { join } from "node:path";
+
+// --- Git Utilities ---
+
+/**
+ * Get the git repository root directory.
+ * Returns null if not in a git repo or git command fails.
+ */
+function getGitRoot(cwd: string): string | null {
+  try {
+    const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf-8",
+      timeout: 5000,
+    });
+    if (result.status === 0 && result.stdout) {
+      return result.stdout.trim();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Determine the state file path.
+ * Uses git repo root if available, otherwise falls back to cwd.
+ */
+function getStateFilePath(cwd: string): string {
+  const gitRoot = getGitRoot(cwd);
+  const baseDir = gitRoot || cwd;
+  return join(baseDir, ".claude", "ralph-loop.local.md");
+}
 
 // --- Types ---
 
@@ -523,11 +560,13 @@ async function main() {
       throw parseErr;
     }
 
-    stateFilePath = join(input.cwd, ".claude", "ralph-loop.local.md");
+    // Use git repo root for state file to handle directory changes within repo
+    const gitRoot = getGitRoot(input.cwd);
+    stateFilePath = getStateFilePath(input.cwd);
 
     // Set session-specific file paths
     debugLogPath = `/tmp/ralph-reviewed-${input.session_id}.log`;
-    crash(`State file: ${stateFilePath}, Debug log: ${debugLogPath}`);
+    crash(`State file: ${stateFilePath}, Git root: ${gitRoot || "none"}, cwd: ${input.cwd}`);
 
     // Check for active loop
     if (!existsSync(stateFilePath)) {
