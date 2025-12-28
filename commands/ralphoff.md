@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(pbcopy:*), Bash(basename:*), Bash(mkdir:*), Edit(~/.claude/handoffs/**)
+allowed-tools: Bash(*), Edit(~/.claude/handoffs/**)
 argument-hint: [completion criteria or additional notes]
 description: Generate Ralph-loop-ready handoff prompt
 ---
