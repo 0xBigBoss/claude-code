@@ -21,13 +21,68 @@
 import { readFileSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
 import { execSync, spawnSync } from "node:child_process";
 
+// --- Crash Reporting ---
+// Session-specific crash logs to avoid clobbering between concurrent sessions
+let sessionId = "unknown";
+let crashLogPath = "/tmp/ralph-reviewed-crash-startup.log"; // Before we know session ID
+
+function crash(msg: string, error?: unknown) {
+  const timestamp = new Date().toISOString();
+  let line = `[${timestamp}] [${sessionId}] ${msg}`;
+  if (error) {
+    if (error instanceof Error) {
+      line += `\n  Error: ${error.message}\n  Stack: ${error.stack}`;
+    } else {
+      line += `\n  Error: ${String(error)}`;
+    }
+  }
+  line += "\n";
+  try {
+    appendFileSync(crashLogPath, line);
+  } catch {
+    // Last resort: stderr
+    console.error(line);
+  }
+}
+
+function setSessionId(id: string) {
+  sessionId = id;
+  crashLogPath = `/tmp/ralph-reviewed-crash-${id}.log`;
+}
+
+// Log startup immediately to help diagnose "operation aborted" errors
+crash(`Hook starting - PID: ${process.pid}, argv: ${JSON.stringify(process.argv)}`);
+
+// Global error handlers
+process.on("uncaughtException", (err) => {
+  crash("Uncaught exception", err);
+  // Output approve to avoid trapping user
+  console.log(JSON.stringify({ decision: "approve" }));
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  crash("Unhandled rejection", reason);
+  // Output approve to avoid trapping user
+  console.log(JSON.stringify({ decision: "approve" }));
+  process.exit(1);
+});
+
 let debugLogPath = "/tmp/ralph-reviewed-debug.log"; // Updated with session ID later
 let debugEnabled = process.env.RALPH_DEBUG === "1";
 
 function debug(msg: string) {
-  if (!debugEnabled) return;
+  // Always log to crash log for traceability
   const timestamp = new Date().toISOString();
-  const line = `[${timestamp}] ${msg}\n`;
+  const line = `[${timestamp}] [${sessionId}] ${msg}\n`;
+
+  // Always append to session crash log (for debugging crashes)
+  try {
+    appendFileSync(crashLogPath, `[DEBUG] ${line}`);
+  } catch { /* ignore */ }
+
+  // Only write to debug log if debug mode is enabled
+  if (!debugEnabled) return;
   appendFileSync(debugLogPath, line);
 }
 import { join } from "node:path";
@@ -296,12 +351,16 @@ function callCodexReview(
   maxReviews: number,
   cwd: string
 ): ReviewResult {
+  crash(`callCodexReview() started - reviewCount=${reviewCount}, cwd=${cwd}`);
+
   // Check if codex is available
   const whichResult = spawnSync("which", ["codex"], { encoding: "utf-8" });
   if (whichResult.status !== 0) {
+    crash("Codex CLI not found, approving by default");
     debug("Codex CLI not found, approving by default");
     return { approved: true, feedback: null };
   }
+  crash(`Codex found at: ${whichResult.stdout?.trim()}`);
 
   // Build review prompt
   const reviewPrompt = `# Code Review Request
@@ -336,15 +395,21 @@ If rejecting, be specific and actionable. Focus on 1-2 critical issues only.`;
   const uniqueId = Date.now();
   const outputFile = `/tmp/codex-review-output-${uniqueId}.txt`;
 
-  try {
+  crash(`Calling Codex with output file: ${outputFile}`);
+  crash(`Review prompt length: ${reviewPrompt.length} chars`);
 
-    // Call codex exec with proper flags
-    const result = spawnSync("codex", [
+  try {
+    const codexArgs = [
       "exec",
       "-",  // read prompt from stdin
       "--dangerously-bypass-approvals-and-sandbox",
       "-o", outputFile,
-    ], {
+    ];
+    crash(`Codex args: ${JSON.stringify(codexArgs)}`);
+
+    // NOTE: This timeout (20 min) must be less than plugin.json hook timeout
+    // Plugin hook timeout was 120s which caused "operation aborted" errors
+    const result = spawnSync("codex", codexArgs, {
       cwd,
       encoding: "utf-8",
       timeout: 1200000, // 20 minute timeout
@@ -352,32 +417,42 @@ If rejecting, be specific and actionable. Focus on 1-2 critical issues only.`;
       input: reviewPrompt,  // pass prompt via stdin
     });
 
+    crash(`Codex returned - status: ${result.status}, signal: ${result.signal}, error: ${result.error}`);
+    if (result.stderr) {
+      crash(`Codex stderr: ${result.stderr.slice(0, 500)}`);
+    }
     debug(`[ralph-reviewed] Codex exit code: ${result.status}, stderr: ${result.stderr?.slice(0, 200)}`);
 
     // Read output from file
     let output = "";
     if (existsSync(outputFile)) {
       output = readFileSync(outputFile, "utf-8");
+      crash(`Codex output file contents: ${output.slice(0, 500)}`);
       debug(`[ralph-reviewed] Codex output: ${output.slice(0, 500)}`);
     } else {
+      crash("No Codex output file created");
       debug(`[ralph-reviewed] No output file created`);
     }
 
     // Parse response
     if (output.includes("<review>APPROVE</review>")) {
+      crash("Codex approved");
       return { approved: true, feedback: null };
     }
 
     // Look for REJECT pattern
     const rejectMatch = output.match(/<review>REJECT:\s*([\s\S]*?)<\/review>/);
     if (rejectMatch) {
+      crash(`Codex rejected with feedback: ${rejectMatch[1].slice(0, 200)}`);
       return { approved: false, feedback: rejectMatch[1].trim() };
     }
 
     // Unclear response - default to approve
+    crash("Unclear Codex response, approving by default");
     debug("Unclear Codex response, approving by default");
     return { approved: true, feedback: null };
   } catch (e) {
+    crash("Codex review call threw exception", e);
     debug(`Codex review failed: ${e}, approving by default`);
     return { approved: true, feedback: null };
   }
@@ -398,21 +473,38 @@ function output(result: HookOutput): void {
 }
 
 async function main() {
+  crash("main() entered");
+
   try {
+    crash("Reading stdin...");
     const inputRaw = await readStdin();
-    const input: HookInput = JSON.parse(inputRaw);
+    crash(`Stdin received: ${inputRaw.length} bytes`);
+
+    let input: HookInput;
+    try {
+      input = JSON.parse(inputRaw);
+      // Switch to session-specific crash log immediately
+      setSessionId(input.session_id);
+      crash(`Input parsed: session_id=${input.session_id}, cwd=${input.cwd}, event=${input.hook_event_name}`);
+    } catch (parseErr) {
+      crash("Failed to parse input JSON", parseErr);
+      crash(`Raw input was: ${inputRaw.slice(0, 500)}`);
+      throw parseErr;
+    }
 
     const stateFilePath = join(input.cwd, ".claude", "ralph-loop.local.md");
-    const sessionId = input.session_id;
 
     // Set session-specific file paths
-    debugLogPath = `/tmp/ralph-reviewed-${sessionId}.log`;
+    debugLogPath = `/tmp/ralph-reviewed-${input.session_id}.log`;
+    crash(`State file: ${stateFilePath}, Debug log: ${debugLogPath}`);
 
     // Check for active loop
     if (!existsSync(stateFilePath)) {
+      crash("No state file found, approving exit");
       output({ decision: "approve" });
       return;
     }
+    crash("State file exists, reading...");
 
     // Parse state
     const stateContent = readFileSync(stateFilePath, "utf-8");
@@ -542,10 +634,17 @@ ${state.original_prompt}`;
 
     output({ decision: "block", reason: feedbackPrompt });
   } catch (e) {
+    crash("main() caught exception", e);
     debug(`Stop hook error: ${e}`);
     // On error, allow exit to avoid trapping user
     output({ decision: "approve" });
   }
+  crash("main() exiting normally");
 }
 
-main();
+crash("About to call main()");
+main().catch((e) => {
+  crash("main() promise rejected", e);
+  console.log(JSON.stringify({ decision: "approve" }));
+  process.exit(1);
+});
