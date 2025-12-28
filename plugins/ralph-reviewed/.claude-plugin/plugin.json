@@ -1,0 +1,22 @@
+{
+  "name": "ralph-reviewed",
+  "description": "Iterative Ralph loops with Codex CLI review gates at completion. Claude works until done, then Codex reviews before allowing exit.",
+  "author": {
+    "name": "Allen",
+    "email": "allen@0xbigboss.dev"
+  },
+  "version": "1.0.0",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.ts",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

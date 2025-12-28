@@ -1,0 +1,25 @@
+{
+  "name": "0xbigboss-plugins",
+  "owner": {
+    "name": "Allen",
+    "email": "bigboss@metalrodeo.xyz"
+  },
+  "metadata": {
+    "description": "Personal Claude Code plugins and tools",
+    "version": "1.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "ralph-reviewed",
+      "source": "./plugins/ralph-reviewed",
+      "description": "Iterative Ralph loops with Codex CLI review gates at completion",
+      "version": "1.0.0",
+      "author": {
+        "name": "Allen"
+      },
+      "keywords": ["ralph", "iteration", "review", "codex"],
+      "category": "workflow"
+    }
+  ]
+}
