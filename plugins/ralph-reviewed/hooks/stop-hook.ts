@@ -432,7 +432,8 @@ If rejecting, be specific and actionable. Focus on 1-2 critical issues only.`;
     const codexArgs = [
       "exec",
       "-",  // read prompt from stdin
-      "--dangerously-bypass-approvals-and-sandbox",
+      "--sandbox", "read-only",  // No writes except output file
+      "-c", 'approval_policy="never"',  // Non-interactive
       "-o", outputFile,
     ];
     crash(`Codex args: ${JSON.stringify(codexArgs)}`);
