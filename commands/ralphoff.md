@@ -6,7 +6,7 @@ description: Generate Ralph-loop-ready handoff prompt
 
 # Generate Ralph Loop Handoff Prompt
 
-Generate a prompt for handing off work to a Ralph Wiggum loop (`/ralph-wiggum:ralph-loop`). The receiving session runs in an iterative self-improvement loop until a completion promise is output. The prompt must be self-contained, include clear success criteria, and support automatic verification.
+Generate a prompt for handing off work to a Ralph Reviewed loop (`/ralph-reviewed:ralph-loop`). The receiving session runs in an iterative self-improvement loop with Codex review gates until a completion promise is output and approved. The prompt must be self-contained, include clear success criteria, and support automatic verification.
 
 ## Git Context
 
@@ -126,7 +126,7 @@ After 15+ iterations without progress:
 
    Run this command in a new Claude Code session:
 
-   /ralph-wiggum:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task. Output COMPLETE when done." --completion-promise "COMPLETE" --max-iterations 30
+   /ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task. Output COMPLETE when done." --completion-promise "COMPLETE" --max-iterations 30
    ```
 
 ### Wrapper Command Format
@@ -134,7 +134,7 @@ After 15+ iterations without progress:
 The clipboard should contain ONLY this single-line command (no extra text):
 
 ```
-/ralph-wiggum:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations." --completion-promise "COMPLETE" --max-iterations 30
+/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations." --completion-promise "COMPLETE" --max-iterations 30
 ```
 
 Replace `<filename>` with the actual filename (e.g., `ralph-myrepo-feature-x.md`).
