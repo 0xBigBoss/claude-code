@@ -38,9 +38,9 @@ $ARGUMENTS
 
 ## Task
 
-Write a Ralph-loop handoff prompt to `~/.claude/handoffs/ralph-<repo>-<shortname>.md` where `<repo>` is the repository name and `<shortname>` is derived from the branch name (e.g., `ralph-myapp-sen-69.md`). Copy to clipboard after writing.
+Write a Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>.md` where `<repo>` is the repository name and `<shortname>` is derived from the branch name (e.g., `ralph-myapp-sen-69.md`).
 
-The prompt must work with `/ralph-wiggum:ralph-loop` and include everything needed for autonomous iteration.
+The context file contains the detailed task description. A simple wrapper command referencing this file is copied to clipboard for direct use with ralph-loop.
 
 ### Ralph Loop Prompt Requirements
 
@@ -108,17 +108,33 @@ After 15+ iterations without progress:
 
 1. Ensure directory exists: `mkdir -p ~/.claude/handoffs`
 
-2. Write the Ralph-loop prompt to `~/.claude/handoffs/ralph-<repo>-<shortname>.md` where:
+2. Write the Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>.md` where:
    - `<repo>` is the repository basename
    - `<shortname>` is derived from the branch name (e.g., `ralph-myapp-sen-69.md`)
 
-3. Copy to clipboard: `cat ~/.claude/handoffs/<filename> | pbcopy`
+3. Generate a simple, bash-safe wrapper command. The wrapper prompt must:
+   - Reference the context file by path
+   - Be a single line with no newlines
+   - Avoid special characters that break bash (backticks, unescaped quotes, $)
+   - Include the completion promise
 
-4. Confirm with usage instructions:
-   ```
-   Ralph-loop prompt saved to ~/.claude/handoffs/<filename> and copied to clipboard.
+4. Copy the **wrapper command** (not the context file) to clipboard
 
-   To use in a new Claude Code session:
-   1. Paste the prompt
-   2. Run: /ralph-wiggum:ralph-loop --max-iterations 30 --completion-promise "COMPLETE"
+5. Confirm with usage instructions showing the exact command to run:
    ```
+   Ralph-loop context saved to ~/.claude/handoffs/<filename>
+
+   Run this command in a new Claude Code session:
+
+   /ralph-wiggum:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task. Output COMPLETE when done." --completion-promise "COMPLETE" --max-iterations 30
+   ```
+
+### Wrapper Command Format
+
+The clipboard should contain ONLY this single-line command (no extra text):
+
+```
+/ralph-wiggum:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations." --completion-promise "COMPLETE" --max-iterations 30
+```
+
+Replace `<filename>` with the actual filename (e.g., `ralph-myrepo-feature-x.md`).
