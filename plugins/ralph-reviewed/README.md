@@ -29,15 +29,34 @@ An iterative development loop with Codex review gates. Fork of [ralph-wiggum](ht
 
 ## Installation
 
-The plugin should be symlinked or copied to your Claude plugins directory:
+### From Marketplace (Recommended)
 
 ```bash
-# If using stow from dotfiles
-cd ~/code/dotfiles
-stow -R claude-code
+# 1. Add the marketplace
+/plugin marketplace add 0xbigboss/plugins
 
-# Or manual symlink
-ln -s /path/to/ralph-reviewed ~/.claude/plugins/ralph-reviewed
+# 2. Install the plugin
+/plugin install ralph-reviewed@0xbigboss-plugins
+```
+
+Or use the interactive plugin manager:
+
+```bash
+/plugin
+```
+
+Navigate to the **Discover** tab to browse and install.
+
+### From Local Development
+
+If developing locally or using dotfiles:
+
+```bash
+# Add local path as marketplace
+/plugin marketplace add ~/code/dotfiles/claude-code/plugins
+
+# Install from local
+/plugin install ralph-reviewed@local
 ```
 
 ## Commands
