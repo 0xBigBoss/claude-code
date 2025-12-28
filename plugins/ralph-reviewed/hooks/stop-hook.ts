@@ -56,6 +56,13 @@ crash(`Hook starting - PID: ${process.pid}, argv: ${JSON.stringify(process.argv)
 // Global error handlers
 process.on("uncaughtException", (err) => {
   crash("Uncaught exception", err);
+  // Clean up state file to avoid re-triggering loop
+  if (stateFilePath) {
+    try {
+      unlinkSync(stateFilePath);
+      crash(`Cleaned up state file on uncaught exception: ${stateFilePath}`);
+    } catch { /* ignore cleanup errors */ }
+  }
   // Output approve to avoid trapping user
   console.log(JSON.stringify({ decision: "approve" }));
   process.exit(1);
@@ -63,6 +70,13 @@ process.on("uncaughtException", (err) => {
 
 process.on("unhandledRejection", (reason) => {
   crash("Unhandled rejection", reason);
+  // Clean up state file to avoid re-triggering loop
+  if (stateFilePath) {
+    try {
+      unlinkSync(stateFilePath);
+      crash(`Cleaned up state file on unhandled rejection: ${stateFilePath}`);
+    } catch { /* ignore cleanup errors */ }
+  }
   // Output approve to avoid trapping user
   console.log(JSON.stringify({ decision: "approve" }));
   process.exit(1);
@@ -70,6 +84,7 @@ process.on("unhandledRejection", (reason) => {
 
 let debugLogPath = "/tmp/ralph-reviewed-debug.log"; // Updated with session ID later
 let debugEnabled = process.env.RALPH_DEBUG === "1";
+let stateFilePath: string | null = null; // Set in main() for error handler access
 
 function debug(msg: string) {
   // Always log to crash log for traceability
@@ -507,7 +522,7 @@ async function main() {
       throw parseErr;
     }
 
-    const stateFilePath = join(input.cwd, ".claude", "ralph-loop.local.md");
+    stateFilePath = join(input.cwd, ".claude", "ralph-loop.local.md");
 
     // Set session-specific file paths
     debugLogPath = `/tmp/ralph-reviewed-${input.session_id}.log`;
@@ -525,7 +540,18 @@ async function main() {
     const stateContent = readFileSync(stateFilePath, "utf-8");
     const state = parseStateFile(stateContent);
 
-    if (!state || !state.active) {
+    if (!state) {
+      // Corrupt state file - clean up and exit
+      crash("Failed to parse state file, cleaning up");
+      cleanupStateFile(stateFilePath);
+      output({ decision: "approve" });
+      return;
+    }
+
+    if (!state.active) {
+      // Loop was deactivated - clean up stale file and exit
+      crash("Loop inactive, cleaning up stale state file");
+      cleanupStateFile(stateFilePath);
       output({ decision: "approve" });
       return;
     }
@@ -656,6 +682,13 @@ ${state.original_prompt}`;
   } catch (e) {
     crash("main() caught exception", e);
     debug(`Stop hook error: ${e}`);
+    // Clean up state file to avoid re-triggering loop
+    if (stateFilePath) {
+      try {
+        unlinkSync(stateFilePath);
+        crash(`Cleaned up state file on main() exception: ${stateFilePath}`);
+      } catch { /* ignore cleanup errors */ }
+    }
     // On error, allow exit to avoid trapping user
     output({ decision: "approve" });
   }
@@ -665,6 +698,13 @@ ${state.original_prompt}`;
 crash("About to call main()");
 main().catch((e) => {
   crash("main() promise rejected", e);
+  // Clean up state file to avoid re-triggering loop
+  if (stateFilePath) {
+    try {
+      unlinkSync(stateFilePath);
+      crash(`Cleaned up state file on main() rejection: ${stateFilePath}`);
+    } catch { /* ignore cleanup errors */ }
+  }
   console.log(JSON.stringify({ decision: "approve" }));
   process.exit(1);
 });
