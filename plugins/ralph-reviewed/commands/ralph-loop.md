@@ -15,7 +15,7 @@ Arguments: $ARGUMENTS
 Parse the following from arguments:
 - **PROMPT**: Everything before the first `--` flag (the task description)
 - **--max-iterations**: Number (default: 50)
-- **--max-reviews**: Number (default: 3)
+- **--max-reviews**: Number (default: 5)
 - **--completion-promise**: String (default: "COMPLETE")
 - **--no-review**: Boolean flag (default: false)
 - **--debug**: Boolean flag (default: false) - writes debug logs to /tmp/ralph-reviewed-{session_id}.log

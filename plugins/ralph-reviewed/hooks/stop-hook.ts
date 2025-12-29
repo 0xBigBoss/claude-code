@@ -29,8 +29,8 @@ import { homedir } from "node:os";
 
 // --- Version ---
 // Update this when making changes to help diagnose cached code issues
-const HOOK_VERSION = "2025-12-28T23:30:00Z";
-const HOOK_BUILD = "v1.2.0-robust-parsing";
+const HOOK_VERSION = "2025-12-28T23:45:00Z";
+const HOOK_BUILD = "v1.2.1";
 
 // --- Crash Reporting ---
 // Session-specific logs stored in ~/.claude/ralphs/{session_id}/
@@ -369,7 +369,7 @@ function parseStateFile(content: string): LoopState | null {
     timestamp: state.timestamp || new Date().toISOString(),
     review_enabled: state.review_enabled ?? true,
     review_count: state.review_count ?? 0,
-    max_review_cycles: state.max_review_cycles ?? 3,
+    max_review_cycles: state.max_review_cycles ?? 5,
     pending_feedback: state.pending_feedback ?? null,
     review_history: state.review_history ?? [],
     debug: state.debug ?? false,

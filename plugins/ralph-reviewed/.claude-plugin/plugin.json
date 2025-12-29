@@ -5,7 +5,7 @@
     "name": "Allen",
     "email": "bigboss@metalrodeo.xyz"
   },
-  "version": "1.2.0",
+  "version": "1.2.1",
   "hooks": {
     "Stop": [
       {
