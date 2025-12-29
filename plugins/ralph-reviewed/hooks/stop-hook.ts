@@ -174,6 +174,25 @@ interface HookOutput {
   reason?: string;
 }
 
+interface ReviewIssue {
+  id: number;
+  severity: "critical" | "major" | "minor";
+  description: string;
+}
+
+interface ResolvedIssue {
+  id: number;
+  verification: string;
+}
+
+interface ReviewHistoryEntry {
+  cycle: number;
+  decision: "APPROVE" | "REJECT";
+  issues: ReviewIssue[];
+  resolved: ResolvedIssue[];
+  notes: string | null;
+}
+
 interface LoopState {
   active: boolean;
   iteration: number;
@@ -185,6 +204,7 @@ interface LoopState {
   review_count: number;
   max_review_cycles: number;
   pending_feedback: string | null;
+  review_history: ReviewHistoryEntry[];
   debug: boolean;
 }
 
@@ -254,6 +274,17 @@ function parseStateFile(content: string): LoopState | null {
       state.pending_feedback = val === "null" ? null : val.replace(/^["']|["']$/g, "");
     } else if (line.startsWith("debug:")) {
       state.debug = line.includes("true");
+    } else if (line.startsWith("review_history:")) {
+      const val = line.split(":").slice(1).join(":").trim();
+      if (val && val !== "[]") {
+        try {
+          state.review_history = JSON.parse(val);
+        } catch {
+          state.review_history = [];
+        }
+      } else {
+        state.review_history = [];
+      }
     }
   }
 
@@ -279,6 +310,7 @@ function parseStateFile(content: string): LoopState | null {
     review_count: state.review_count ?? 0,
     max_review_cycles: state.max_review_cycles ?? 3,
     pending_feedback: state.pending_feedback ?? null,
+    review_history: state.review_history ?? [],
     debug: state.debug ?? false,
   };
 }
@@ -301,6 +333,7 @@ review_enabled: ${state.review_enabled}
 review_count: ${state.review_count}
 max_review_cycles: ${state.max_review_cycles}
 pending_feedback: ${state.pending_feedback ? `"${state.pending_feedback.replace(/"/g, '\\"')}"` : "null"}
+review_history: ${JSON.stringify(state.review_history)}
 debug: ${state.debug}
 ---
 
@@ -363,78 +396,58 @@ function getLastAssistantMessage(transcriptPath: string): string | null {
   return null;
 }
 
-function getWorkSummary(transcriptPath: string): string {
-  // Extract a summary of assistant messages for review context
-  if (!existsSync(transcriptPath)) return "No transcript available.";
-
-  try {
-    const content = readFileSync(transcriptPath, "utf-8");
-    const lines = content.trim().split("\n").filter(Boolean);
-
-    const summaryParts: string[] = [];
-    let charCount = 0;
-    const maxChars = 4000; // Limit summary size
-
-    for (let i = lines.length - 1; i >= 0 && charCount < maxChars; i--) {
-      try {
-        const msg: TranscriptMessage = JSON.parse(lines[i]);
-        if (msg.role === "assistant" && Array.isArray(msg.content)) {
-          const textParts = msg.content
-            .filter((c) => c.type === "text" && c.text)
-            .map((c) => c.text)
-            .join("\n");
-          if (textParts) {
-            summaryParts.unshift(textParts.slice(0, maxChars - charCount));
-            charCount += textParts.length;
-          }
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    return summaryParts.join("\n\n---\n\n") || "No assistant messages found.";
-  } catch {
-    return "Failed to read transcript.";
-  }
-}
-
-// --- Git Operations ---
-
-function getGitDiff(cwd: string): string {
-  try {
-    // Get diff of all changes (staged and unstaged)
-    const result = spawnSync("git", ["diff", "HEAD"], {
-      cwd,
-      encoding: "utf-8",
-      timeout: 10000,
-    });
-
-    if (result.status === 0 && result.stdout) {
-      const diff = result.stdout.trim();
-      // Limit diff size
-      if (diff.length > 8000) {
-        return diff.slice(0, 8000) + "\n\n... (diff truncated)";
-      }
-      return diff || "(no changes)";
-    }
-    return "(no git diff available)";
-  } catch {
-    return "(git diff failed)";
-  }
-}
-
 // --- Codex Review ---
 
 interface ReviewResult {
   approved: boolean;
-  feedback: string | null;
+  issues: ReviewIssue[];
+  resolved: ResolvedIssue[];
+  notes: string | null;
+}
+
+function formatIssuesForDisplay(issues: ReviewIssue[]): string {
+  return issues
+    .map((issue) => `  - [ISSUE-${issue.id}] ${issue.severity}: ${issue.description}`)
+    .join("\n");
+}
+
+function formatResolvedForDisplay(resolved: ResolvedIssue[]): string {
+  return resolved
+    .map((r) => `  - [ISSUE-${r.id}] ✓ ${r.verification}`)
+    .join("\n");
+}
+
+function buildReviewHistorySection(history: ReviewHistoryEntry[]): string {
+  if (history.length === 0) return "";
+
+  const sections = history.map((entry) => {
+    const parts: string[] = [`### Cycle ${entry.cycle}: ${entry.decision}`];
+
+    if (entry.resolved.length > 0) {
+      parts.push(`**Resolved:**\n${formatResolvedForDisplay(entry.resolved)}`);
+    }
+
+    if (entry.issues.length > 0) {
+      parts.push(`**Issues:**\n${formatIssuesForDisplay(entry.issues)}`);
+    }
+
+    if (entry.notes) {
+      parts.push(`**Notes:** ${entry.notes}`);
+    }
+
+    return parts.join("\n");
+  });
+
+  return `## Previous Reviews
+
+${sections.join("\n\n")}
+
+`;
 }
 
 function callCodexReview(
   originalPrompt: string,
-  workSummary: string,
-  gitDiff: string,
+  reviewHistory: ReviewHistoryEntry[],
   reviewCount: number,
   maxReviews: number,
   cwd: string
@@ -446,38 +459,62 @@ function callCodexReview(
   if (whichResult.status !== 0) {
     crash("Codex CLI not found, approving by default");
     debug("Codex CLI not found, approving by default");
-    return { approved: true, feedback: null };
+    return { approved: true, issues: [], resolved: [], notes: null };
   }
   crash(`Codex found at: ${whichResult.stdout?.trim()}`);
 
-  // Build review prompt
-  const reviewPrompt = `# Code Review Request
+  // Build review history section
+  const historySection = buildReviewHistorySection(reviewHistory);
 
-You are reviewing work completed by Claude in an iterative development loop.
+  // Build review prompt with formal issue format
+  const reviewPrompt = `# Code Review
 
-## Original Task
+Review work completed by Claude in an iterative loop. Claude claims the task is complete.
+
+## Assignment
 ${originalPrompt}
 
-## Work Summary (recent assistant output)
-${workSummary.slice(0, 3000)}
+## Git Context
+**Working Directory**: \`pwd\`
+**Repository**: \`basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"\`
+**Branch**: \`git branch --show-current 2>/dev/null || echo "detached/unknown"\`
+**Uncommitted changes**: \`git diff --stat 2>/dev/null || echo "None"\`
+**Staged changes**: \`git diff --cached --stat 2>/dev/null || echo "None"\`
+**Recent commits (last 4 hours)**: \`git log --oneline -5 --since="4 hours ago" 2>/dev/null || echo "None"\`
 
-## Code Changes
-\`\`\`diff
-${gitDiff}
+${historySection}## Review Process
+1. Understand the task (read referenced files as needed)
+2. Review git changes (\`git diff\`, \`git diff --cached\`, \`git log\`, etc.)
+3. Run verification commands from success criteria if applicable
+4. Check ALL requirements - be thorough, not superficial
+
+## Output Format
+
+If approved:
+\`\`\`
+<review>APPROVE</review>
+<notes>Optional notes for the record</notes>
 \`\`\`
 
-## Review Guidelines
-- Focus on: functional correctness, obvious bugs, missing requirements
-- Ignore: style preferences, minor improvements, documentation nits
-- Be practical: if it works and meets requirements, approve it
-- This is review ${reviewCount + 1} of ${maxReviews} maximum
+If issues found:
+\`\`\`
+<review>REJECT</review>
+<resolved>
+[ISSUE-1] How you verified this previous issue is now fixed
+</resolved>
+<issues>
+[ISSUE-1] severity: Description of the issue
+[ISSUE-2] severity: Description of another issue
+</issues>
+<notes>Optional notes visible to future review cycles</notes>
+\`\`\`
 
-## Your Decision
-Output exactly one of:
-- \`<review>APPROVE</review>\` - Work meets requirements, ship it
-- \`<review>REJECT: your specific feedback here</review>\` - Needs changes
+- Severity levels: \`critical\` (blocking), \`major\` (significant), \`minor\` (nice to fix)
+- \`<resolved>\` section: List any previous issues you verified as fixed (omit if none or first review)
+- \`<notes>\` section: Optional, visible to future review cycles
+- Be thorough - report ALL issues found
 
-If rejecting, be specific and actionable. Focus on 1-2 critical issues only.`;
+Review ${reviewCount + 1}/${maxReviews}.`;
 
   // Use unique file paths based on timestamp to avoid collisions
   const uniqueId = Date.now();
@@ -523,27 +560,58 @@ If rejecting, be specific and actionable. Focus on 1-2 critical issues only.`;
       debug(`[ralph-reviewed] No output file created`);
     }
 
+    // Parse notes (present in both APPROVE and REJECT)
+    const notesMatch = output.match(/<notes>([\s\S]*?)<\/notes>/);
+    const notes = notesMatch ? notesMatch[1].trim() : null;
+
     // Parse response
     if (output.includes("<review>APPROVE</review>")) {
       crash("Codex approved");
-      return { approved: true, feedback: null };
+      return { approved: true, issues: [], resolved: [], notes };
     }
 
-    // Look for REJECT pattern
-    const rejectMatch = output.match(/<review>REJECT:\s*([\s\S]*?)<\/review>/);
-    if (rejectMatch) {
-      crash(`Codex rejected with feedback: ${rejectMatch[1].slice(0, 200)}`);
-      return { approved: false, feedback: rejectMatch[1].trim() };
+    if (output.includes("<review>REJECT</review>")) {
+      // Parse issues
+      const issues: ReviewIssue[] = [];
+      const issuesMatch = output.match(/<issues>([\s\S]*?)<\/issues>/);
+      if (issuesMatch) {
+        const issuePattern = /\[ISSUE-(\d+)\]\s*(critical|major|minor):\s*(.+)/gi;
+        let match;
+        while ((match = issuePattern.exec(issuesMatch[1])) !== null) {
+          issues.push({
+            id: parseInt(match[1], 10),
+            severity: match[2].toLowerCase() as "critical" | "major" | "minor",
+            description: match[3].trim(),
+          });
+        }
+      }
+
+      // Parse resolved
+      const resolved: ResolvedIssue[] = [];
+      const resolvedMatch = output.match(/<resolved>([\s\S]*?)<\/resolved>/);
+      if (resolvedMatch) {
+        const resolvedPattern = /\[ISSUE-(\d+)\]\s*(.+)/gi;
+        let match;
+        while ((match = resolvedPattern.exec(resolvedMatch[1])) !== null) {
+          resolved.push({
+            id: parseInt(match[1], 10),
+            verification: match[2].trim(),
+          });
+        }
+      }
+
+      crash(`Codex rejected with ${issues.length} issues, ${resolved.length} resolved`);
+      return { approved: false, issues, resolved, notes };
     }
 
     // Unclear response - default to approve
     crash("Unclear Codex response, approving by default");
     debug("Unclear Codex response, approving by default");
-    return { approved: true, feedback: null };
+    return { approved: true, issues: [], resolved: [], notes: null };
   } catch (e) {
     crash("Codex review call threw exception", e);
     debug(`Codex review failed: ${e}, approving by default`);
-    return { approved: true, feedback: null };
+    return { approved: true, issues: [], resolved: [], notes: null };
   }
 }
 
@@ -684,19 +752,26 @@ async function main() {
 
     // Perform Codex review
     debug(`[ralph-reviewed] Calling Codex for review...`);
-    const workSummary = getWorkSummary(input.transcript_path);
-    const gitDiff = getGitDiff(input.cwd);
 
     const reviewResult = callCodexReview(
       state.original_prompt,
-      workSummary,
-      gitDiff,
+      state.review_history,
       state.review_count,
       state.max_review_cycles,
       input.cwd
     );
 
-    debug(`[ralph-reviewed] Review result: approved=${reviewResult.approved}, feedback=${reviewResult.feedback}`);
+    debug(`[ralph-reviewed] Review result: approved=${reviewResult.approved}, issues=${reviewResult.issues.length}`);
+
+    // Record this review in history
+    const historyEntry: ReviewHistoryEntry = {
+      cycle: state.review_count + 1,
+      decision: reviewResult.approved ? "APPROVE" : "REJECT",
+      issues: reviewResult.issues,
+      resolved: reviewResult.resolved,
+      notes: reviewResult.notes,
+    };
+    state.review_history.push(historyEntry);
 
     if (reviewResult.approved) {
       // Approved - allow exit
@@ -712,28 +787,44 @@ async function main() {
     if (state.review_count >= state.max_review_cycles) {
       // Max reviews reached - allow exit with warning
       debug(
-        `[ralph-reviewed] Max review cycles (${state.max_review_cycles}) reached. Final feedback: ${reviewResult.feedback}`
+        `[ralph-reviewed] Max review cycles (${state.max_review_cycles}) reached. Issues: ${reviewResult.issues.length}`
       );
       cleanupStateFile(stateFilePath);
       output({ decision: "approve" });
       return;
     }
 
-    // Store feedback and continue
-    state.pending_feedback = reviewResult.feedback;
+    // Format issues for Claude's feedback
+    const issuesList = reviewResult.issues
+      .map((issue) => `- [ISSUE-${issue.id}] ${issue.severity}: ${issue.description}`)
+      .join("\n");
+
+    const resolvedList = reviewResult.resolved.length > 0
+      ? `\n\n**Resolved from previous cycle:**\n${reviewResult.resolved.map((r) => `- [ISSUE-${r.id}] ✓ ${r.verification}`).join("\n")}`
+      : "";
+
+    const notesSection = reviewResult.notes
+      ? `\n\n**Reviewer notes:** ${reviewResult.notes}`
+      : "";
+
+    // Store formatted feedback for state
+    state.pending_feedback = issuesList;
     state.iteration++; // Increment iteration for the feedback round
     writeFileSync(stateFilePath, serializeState(state));
 
-    // Build prompt with feedback
+    // Build prompt with structured feedback
     const feedbackPrompt = `# Ralph Loop - Iteration ${state.iteration}/${state.max_iterations}
 
 ## Review Feedback (Cycle ${state.review_count}/${state.max_review_cycles})
 
-Your previous completion was reviewed and requires changes:
+Your previous completion was reviewed and requires changes.
+${resolvedList}
 
-${reviewResult.feedback}
+**Open Issues:**
+${issuesList}
+${notesSection}
 
-Address the feedback above, then output <promise>${state.completion_promise}</promise> when truly complete.
+Address ALL open issues above, then output <promise>${state.completion_promise}</promise> when truly complete.
 
 ---
 
