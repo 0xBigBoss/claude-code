@@ -40,6 +40,7 @@ interface CodexConfig {
   approval_policy?: "untrusted" | "on-failure" | "on-request" | "never";
   bypass_sandbox?: boolean;
   extra_args?: string[];
+  timeout_seconds?: number; // Timeout for Codex CLI call (default: 1200 = 20 min)
 }
 
 interface UserConfig {
@@ -52,6 +53,7 @@ const DEFAULT_CONFIG: UserConfig = {
     approval_policy: "never",
     bypass_sandbox: false,
     extra_args: [],
+    timeout_seconds: 1200, // 20 minutes
   },
 };
 
@@ -624,6 +626,7 @@ If issues found:
 \`\`\`
 
 - Severity levels: \`critical\` (blocking), \`major\` (significant), \`minor\` (nice to fix)
+- Issue IDs must be unique across all cycles - continue numbering from previous reviews (don't restart at ISSUE-1)
 - \`<resolved>\` section: List any previous issues you verified as fixed (omit if none or first review)
 - \`<notes>\` section: Optional, visible to future review cycles
 - Be thorough - report ALL issues found
@@ -667,15 +670,18 @@ Review ${reviewCount + 1}/${maxReviews}.`;
       }
     }
 
+    // Convert timeout from seconds to milliseconds
+    const timeoutMs = (codexConfig.timeout_seconds || 1200) * 1000;
+
     crash(`Codex config: ${JSON.stringify(codexConfig)}`);
     crash(`Codex args: ${JSON.stringify(codexArgs)}`);
+    crash(`Codex timeout: ${timeoutMs}ms (${codexConfig.timeout_seconds || 1200}s)`);
 
-    // NOTE: This timeout (20 min) must be less than plugin.json hook timeout
-    // Plugin hook timeout was 120s which caused "operation aborted" errors
+    // NOTE: This timeout must be less than plugin.json hook timeout (1800s)
     const result = spawnSync("codex", codexArgs, {
       cwd,
       encoding: "utf-8",
-      timeout: 1200000, // 20 minute timeout
+      timeout: timeoutMs,
       maxBuffer: 1024 * 1024,
       input: reviewPrompt,  // pass prompt via stdin
     });
