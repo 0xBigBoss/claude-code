@@ -752,21 +752,30 @@ fn parseYamlInt(line: []const u8, key: []const u8) ?u32 {
 
 /// Parse Ralph state from file content string (YAML frontmatter)
 /// Exposed for testing; returns default RalphState if parsing fails
+/// Note: Only reads fields at the top of frontmatter; large fields like
+/// review_history are ignored, so we don't need the full file content.
 fn parseRalphStateFromContent(content: []const u8) RalphState {
     var state = RalphState{};
 
-    // Find frontmatter bounds (between --- delimiters)
+    // Must start with ---
     if (!std.mem.startsWith(u8, content, "---")) return state;
     const after_first = content[3..];
     // Skip newline after first ---
     const start_idx: usize = if (after_first.len > 0 and after_first[0] == '\n') 1 else 0;
-    const end_idx = std.mem.indexOf(u8, after_first[start_idx..], "---") orelse return state;
-    const frontmatter = after_first[start_idx..][0..end_idx];
 
-    // Parse lines
+    // Find closing --- if present, otherwise parse what we have
+    // (state files can be large due to review_history, but our fields are at the top)
+    const frontmatter = if (std.mem.indexOf(u8, after_first[start_idx..], "\n---")) |end_idx|
+        after_first[start_idx..][0..end_idx]
+    else
+        after_first[start_idx..];
+
+    // Parse lines until we hit closing delimiter or exhaust content
     var lines = std.mem.splitScalar(u8, frontmatter, '\n');
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r");
+        // Stop if we hit the closing delimiter
+        if (std.mem.eql(u8, trimmed, "---")) break;
         if (parseYamlBool(trimmed, "active:")) |v| state.active = v;
         if (parseYamlInt(trimmed, "iteration:")) |v| state.iteration = v;
         if (parseYamlInt(trimmed, "max_iterations:")) |v| state.max_iterations = v;
@@ -784,14 +793,17 @@ fn parseRalphState(allocator: Allocator, git_root: []const u8) RalphState {
     const path = std.fmt.allocPrint(allocator, "{s}/.claude/ralph-loop.local.md", .{git_root}) catch return RalphState{};
     defer allocator.free(path);
 
-    // Read file
+    // Read only first 2KB - our fields (active, iteration, etc.) are at the top
+    // review_history can grow to 8KB+ but comes after our fields
+    // Using fixed buffer avoids allocation and handles any file size
     const file = std.fs.cwd().openFile(path, .{}) catch return RalphState{};
     defer file.close();
 
-    const content = file.readToEndAlloc(allocator, 8192) catch return RalphState{};
-    defer allocator.free(content);
+    var buf: [2048]u8 = undefined;
+    const bytes_read = file.read(&buf) catch return RalphState{};
+    if (bytes_read == 0) return RalphState{};
 
-    return parseRalphStateFromContent(content);
+    return parseRalphStateFromContent(buf[0..bytes_read]);
 }
 
 pub fn main() !void {
@@ -1713,6 +1725,8 @@ test "parseRalphStateFromContent with no frontmatter" {
 }
 
 test "parseRalphStateFromContent with unclosed frontmatter" {
+    // Now we parse what we have even without closing delimiter
+    // (supports truncated reads of large state files)
     const content =
         \\---
         \\active: true
@@ -1721,8 +1735,9 @@ test "parseRalphStateFromContent with unclosed frontmatter" {
     ;
 
     const state = parseRalphStateFromContent(content);
-    // Should return defaults since frontmatter is not closed
-    try std.testing.expect(!state.active);
+    // Should parse available fields even without closing ---
+    try std.testing.expect(state.active);
+    try std.testing.expectEqual(@as(u32, 5), state.iteration);
 }
 
 test "parseRalphStateFromContent with empty content" {
