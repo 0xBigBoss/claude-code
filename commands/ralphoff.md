@@ -50,6 +50,7 @@ The output prompt must include:
 3. **Iteration awareness** - Make Claude know it's in a loop and should review previous work
 4. **Completion promise** - A unique marker Claude outputs when done (e.g., `<promise>COMPLETE</promise>`)
 5. **Escape conditions** - What to do if stuck after many iterations
+6. **State tracking** - Instruction to use TODO.md for cross-iteration memory and VCS visibility
 
 ### Prompting Guidelines
 
@@ -77,6 +78,44 @@ Use this XML-tagged structure optimized for Ralph loops:
 [Files involved with brief descriptions of changes/relevance]
 </key_files>
 
+<iteration_state>
+## State Tracking
+
+Maintain a `TODO.md` file in the working directory as your working memory across iterations.
+
+### TODO.md Format
+```markdown
+# TODO - [Brief Task Summary]
+
+## Completed
+- [x] What was done (iteration N)
+- [x] Another completed item (iteration N)
+
+## In Progress
+- [ ] Currently working on
+
+## Pending
+- [ ] Next task
+- [ ] Future task
+
+## Blocked
+- [ ] Issue preventing progress (if any)
+
+## Notes
+- Key decisions or observations
+```
+
+### Each Iteration Workflow
+1. Read `TODO.md` for progress from previous iterations
+2. Do work
+3. Update `TODO.md` (mark completed, add new items discovered)
+4. Commit code changes WITH `TODO.md` in the same commit
+5. When done, output completion promise
+
+### VCS Tracking
+Commit both `TODO.md` and `.claude/ralph-loop.local.md` for full visibility into loop progression. Never edit `.claude/ralph-loop.local.md` - it is managed by a Claude Code hook.
+</iteration_state>
+
 <success_criteria>
 [Explicit, verifiable conditions that must ALL be true when complete. Examples:
 - All tests in `src/__tests__/` pass
@@ -91,15 +130,19 @@ Run these commands to verify progress. If any fail, fix the issues and re-verify
 1. [First verification command and what to do if it fails]
 2. [Second verification command and what to do if it fails]
 3. [Continue until all pass]
+4. Update TODO.md with current status
+5. Commit changes (include TODO.md): `git add -A && git commit -m "..."`
 
 When ALL verifications pass, output: <promise>COMPLETE</promise>
 </verification_loop>
 
 <if_stuck>
 After 15+ iterations without progress:
-- Document what's blocking in a `BLOCKED.md` file
-- List approaches attempted
-- Suggest alternative paths
+- Update TODO.md "Blocked" section with:
+  - What's preventing progress
+  - Approaches attempted
+  - Suggested alternative paths
+- Commit the updated TODO.md
 - Output: <promise>BLOCKED</promise>
 </if_stuck>
 ```
