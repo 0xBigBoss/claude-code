@@ -29,8 +29,33 @@ import { homedir } from "node:os";
 
 // --- Version ---
 // Update this when making changes to help diagnose cached code issues
-const HOOK_VERSION = "2025-12-28T23:45:00Z";
-const HOOK_BUILD = "v1.2.1";
+const HOOK_VERSION = "2025-12-29T00:00:00Z";
+const HOOK_BUILD = "v1.3.0";
+
+// --- User Config ---
+// User preferences stored in ~/.claude/ralphs/config.json
+
+interface CodexConfig {
+  sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+  approval_policy?: "untrusted" | "on-failure" | "on-request" | "never";
+  bypass_sandbox?: boolean;
+  extra_args?: string[];
+}
+
+interface UserConfig {
+  codex?: CodexConfig;
+}
+
+const DEFAULT_CONFIG: UserConfig = {
+  codex: {
+    sandbox: "read-only",
+    approval_policy: "never",
+    bypass_sandbox: false,
+    extra_args: [],
+  },
+};
+
+let userConfig: UserConfig = DEFAULT_CONFIG;
 
 // --- Crash Reporting ---
 // Session-specific logs stored in ~/.claude/ralphs/{session_id}/
@@ -44,6 +69,34 @@ let crashLogPath = `${ralphsDir}/startup.log`; // Before we know session ID
 try {
   mkdirSync(ralphsDir, { recursive: true });
 } catch { /* ignore */ }
+
+// --- Config Loading ---
+
+function loadUserConfig(): UserConfig {
+  const configPath = `${ralphsDir}/config.json`;
+  try {
+    if (existsSync(configPath)) {
+      const content = readFileSync(configPath, "utf-8");
+      const parsed = JSON.parse(content) as Partial<UserConfig>;
+      // Merge with defaults
+      return {
+        codex: {
+          ...DEFAULT_CONFIG.codex,
+          ...parsed.codex,
+        },
+      };
+    }
+  } catch (e) {
+    // Log but don't fail - use defaults
+    try {
+      appendFileSync(`${ralphsDir}/startup.log`, `[${new Date().toISOString()}] Failed to load config: ${e}\n`);
+    } catch { /* ignore */ }
+  }
+  return DEFAULT_CONFIG;
+}
+
+// Load config at startup
+userConfig = loadUserConfig();
 
 function crash(msg: string, error?: unknown) {
   const timestamp = new Date().toISOString();
@@ -585,13 +638,36 @@ Review ${reviewCount + 1}/${maxReviews}.`;
   crash(`Review prompt length: ${reviewPrompt.length} chars`);
 
   try {
-    const codexArgs = [
+    // Build args dynamically from user config
+    const codexConfig = userConfig.codex || DEFAULT_CONFIG.codex!;
+    const codexArgs: string[] = [
       "exec",
       "-",  // read prompt from stdin
-      "--sandbox", "read-only",  // No writes except output file
-      "-c", 'approval_policy="never"',  // Non-interactive
-      "-o", outputFile,
     ];
+
+    // Sandbox/approval settings (bypass_sandbox overrides both)
+    if (codexConfig.bypass_sandbox) {
+      codexArgs.push("--dangerously-bypass-approvals-and-sandbox");
+    } else {
+      codexArgs.push("--sandbox", codexConfig.sandbox || "read-only");
+      // Use -c config override style (exec doesn't have -a flag)
+      codexArgs.push("-c", `approval_policy="${codexConfig.approval_policy || "never"}"`);
+    }
+
+    // Output file (extra_args could override, but parsing would break)
+    codexArgs.push("-o", outputFile);
+
+    // Extra user-provided args (validated as string array, appended last)
+    // Note: These can override earlier flags if user intends to customize behavior
+    if (Array.isArray(codexConfig.extra_args)) {
+      for (const arg of codexConfig.extra_args) {
+        if (typeof arg === "string") {
+          codexArgs.push(arg);
+        }
+      }
+    }
+
+    crash(`Codex config: ${JSON.stringify(codexConfig)}`);
     crash(`Codex args: ${JSON.stringify(codexArgs)}`);
 
     // NOTE: This timeout (20 min) must be less than plugin.json hook timeout
