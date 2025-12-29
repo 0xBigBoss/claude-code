@@ -29,8 +29,8 @@ import { homedir } from "node:os";
 
 // --- Version ---
 // Update this when making changes to help diagnose cached code issues
-const HOOK_VERSION = "2025-12-29T00:00:00Z";
-const HOOK_BUILD = "v1.3.1";
+const HOOK_VERSION = "2025-12-29T12:00:00Z";
+const HOOK_BUILD = "v1.4.0";
 
 // --- User Config ---
 // User preferences stored in ~/.claude/ralphs/config.json
@@ -868,6 +868,20 @@ async function main() {
     );
     const completionClaimed = lastMessage && promisePattern.test(lastMessage);
     debug(`[ralph-reviewed] Promise pattern: ${promisePattern}, Claimed: ${completionClaimed}`);
+
+    // Check for BLOCKED signal (special termination without review)
+    const blockedPattern = /<promise>\s*BLOCKED\s*<\/promise>/i;
+    const blockedClaimed = lastMessage && blockedPattern.test(lastMessage);
+    debug(`[ralph-reviewed] Blocked pattern check: ${blockedClaimed}`);
+
+    if (blockedClaimed) {
+      // BLOCKED is a special termination signal - exit without Codex review
+      crash("BLOCKED claimed - terminating loop without review");
+      debug(`[ralph-reviewed] BLOCKED signal received. Terminating loop without review.`);
+      cleanupStateFile(stateFilePath);
+      output({ decision: "approve" });
+      return;
+    }
 
     if (!completionClaimed) {
       // Normal iteration - no completion claimed

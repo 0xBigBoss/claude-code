@@ -101,8 +101,28 @@ When the state file has a `completion_promise` set, you MUST follow these rules:
 
 1. Only output `<promise>{COMPLETION_PROMISE}</promise>` when the task is **completely and unequivocally done**
 2. The promise must be TRUE - you cannot lie to exit early
-3. If stuck, document what's blocking rather than outputting a false promise
+3. If stuck, use the BLOCKED escape (see below) rather than outputting a false promise
 4. The loop continues naturally through iterations until genuine completion
+
+## Escape Condition: BLOCKED
+
+If you are genuinely blocked and cannot make progress after multiple attempts:
+
+1. Document the blocker clearly (what's blocking, what you tried)
+2. Output `<promise>BLOCKED</promise>` to terminate the loop early
+
+**When to use BLOCKED:**
+- External dependency is unavailable or broken
+- Pre-existing bug in the codebase prevents completion
+- Missing permissions, credentials, or access
+- Task is impossible given current constraints
+
+**When NOT to use BLOCKED:**
+- You haven't exhausted all approaches
+- The task is just difficult (keep trying)
+- You're unsure how to proceed (ask for clarification first)
+
+The BLOCKED signal terminates the loop immediately WITHOUT triggering a Codex review, since there's nothing to review.
 
 ## Begin Working
 
