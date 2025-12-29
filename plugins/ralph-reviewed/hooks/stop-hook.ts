@@ -29,8 +29,8 @@ import { homedir } from "node:os";
 
 // --- Version ---
 // Update this when making changes to help diagnose cached code issues
-const HOOK_VERSION = "2025-12-28T16:50:00Z";
-const HOOK_BUILD = "v1.1.0-cleanup-fix";
+const HOOK_VERSION = "2025-12-28T23:30:00Z";
+const HOOK_BUILD = "v1.2.0-robust-parsing";
 
 // --- Crash Reporting ---
 // Session-specific logs stored in ~/.claude/ralphs/{session_id}/
@@ -221,6 +221,63 @@ interface TranscriptEntry {
 
 // --- State File Parsing ---
 
+/**
+ * Normalize a review history entry to handle old schema versions.
+ * Ensures all required fields exist with sensible defaults.
+ */
+function normalizeHistoryEntry(entry: unknown): ReviewHistoryEntry {
+  if (typeof entry !== "object" || entry === null) {
+    return {
+      cycle: 0,
+      decision: "REJECT",
+      issues: [],
+      resolved: [],
+      notes: null,
+    };
+  }
+
+  const obj = entry as Record<string, unknown>;
+
+  // Normalize issues array
+  const issues: ReviewIssue[] = [];
+  if (Array.isArray(obj.issues)) {
+    for (const issue of obj.issues) {
+      if (typeof issue === "object" && issue !== null) {
+        const i = issue as Record<string, unknown>;
+        issues.push({
+          id: typeof i.id === "number" ? i.id : 0,
+          severity: (["critical", "major", "minor"].includes(String(i.severity))
+            ? String(i.severity)
+            : "minor") as "critical" | "major" | "minor",
+          description: typeof i.description === "string" ? i.description : "",
+        });
+      }
+    }
+  }
+
+  // Normalize resolved array
+  const resolved: ResolvedIssue[] = [];
+  if (Array.isArray(obj.resolved)) {
+    for (const r of obj.resolved) {
+      if (typeof r === "object" && r !== null) {
+        const res = r as Record<string, unknown>;
+        resolved.push({
+          id: typeof res.id === "number" ? res.id : 0,
+          verification: typeof res.verification === "string" ? res.verification : "",
+        });
+      }
+    }
+  }
+
+  return {
+    cycle: typeof obj.cycle === "number" ? obj.cycle : 0,
+    decision: obj.decision === "APPROVE" ? "APPROVE" : "REJECT",
+    issues,
+    resolved,
+    notes: typeof obj.notes === "string" ? obj.notes : null,
+  };
+}
+
 function parseStateFile(content: string): LoopState | null {
   // Extract YAML frontmatter
   const match = content.match(/^---\n([\s\S]*?)\n---/);
@@ -278,7 +335,11 @@ function parseStateFile(content: string): LoopState | null {
       const val = line.split(":").slice(1).join(":").trim();
       if (val && val !== "[]") {
         try {
-          state.review_history = JSON.parse(val);
+          const parsed = JSON.parse(val);
+          // Normalize each entry to handle old schema versions
+          state.review_history = Array.isArray(parsed)
+            ? parsed.map((entry: unknown) => normalizeHistoryEntry(entry))
+            : [];
         } catch {
           state.review_history = [];
         }
@@ -560,24 +621,35 @@ Review ${reviewCount + 1}/${maxReviews}.`;
       debug(`[ralph-reviewed] No output file created`);
     }
 
-    // Parse notes (present in both APPROVE and REJECT)
-    const notesMatch = output.match(/<notes>([\s\S]*?)<\/notes>/);
-    const notes = notesMatch ? notesMatch[1].trim() : null;
+    // Parse verdict from the END of output to avoid matching echoed examples
+    // Find the last <review>...</review> tag in the output
+    const reviewMatches = [...output.matchAll(/<review>\s*(APPROVE|REJECT)\s*<\/review>/gi)];
+    const lastReviewMatch = reviewMatches.length > 0 ? reviewMatches[reviewMatches.length - 1] : null;
+    const verdict = lastReviewMatch ? lastReviewMatch[1].toUpperCase() : null;
 
-    // Parse response
-    if (output.includes("<review>APPROVE</review>")) {
+    crash(`Verdict parsing: found ${reviewMatches.length} review tags, verdict=${verdict}`);
+
+    // Parse notes (present in both APPROVE and REJECT) - also use last match
+    const notesMatches = [...output.matchAll(/<notes>([\s\S]*?)<\/notes>/gi)];
+    const lastNotesMatch = notesMatches.length > 0 ? notesMatches[notesMatches.length - 1] : null;
+    const notes = lastNotesMatch ? lastNotesMatch[1].trim() : null;
+
+    // Parse response based on extracted verdict
+    if (verdict === "APPROVE") {
       crash("Codex approved");
       return { approved: true, issues: [], resolved: [], notes };
     }
 
-    if (output.includes("<review>REJECT</review>")) {
-      // Parse issues
+    if (verdict === "REJECT") {
+      // Parse issues - use last <issues> block
       const issues: ReviewIssue[] = [];
-      const issuesMatch = output.match(/<issues>([\s\S]*?)<\/issues>/);
-      if (issuesMatch) {
-        const issuePattern = /\[ISSUE-(\d+)\]\s*(critical|major|minor):\s*(.+)/gi;
+      const issuesMatches = [...output.matchAll(/<issues>([\s\S]*?)<\/issues>/gi)];
+      const lastIssuesMatch = issuesMatches.length > 0 ? issuesMatches[issuesMatches.length - 1] : null;
+      if (lastIssuesMatch) {
+        // Use [\s\S]+? for multi-line descriptions, terminated by next issue or end
+        const issuePattern = /\[ISSUE-(\d+)\]\s*(critical|major|minor):\s*([\s\S]+?)(?=\[ISSUE-|\s*$)/gi;
         let match;
-        while ((match = issuePattern.exec(issuesMatch[1])) !== null) {
+        while ((match = issuePattern.exec(lastIssuesMatch[1])) !== null) {
           issues.push({
             id: parseInt(match[1], 10),
             severity: match[2].toLowerCase() as "critical" | "major" | "minor",
@@ -586,13 +658,15 @@ Review ${reviewCount + 1}/${maxReviews}.`;
         }
       }
 
-      // Parse resolved
+      // Parse resolved - use last <resolved> block
       const resolved: ResolvedIssue[] = [];
-      const resolvedMatch = output.match(/<resolved>([\s\S]*?)<\/resolved>/);
-      if (resolvedMatch) {
-        const resolvedPattern = /\[ISSUE-(\d+)\]\s*(.+)/gi;
+      const resolvedMatches = [...output.matchAll(/<resolved>([\s\S]*?)<\/resolved>/gi)];
+      const lastResolvedMatch = resolvedMatches.length > 0 ? resolvedMatches[resolvedMatches.length - 1] : null;
+      if (lastResolvedMatch) {
+        // Use [\s\S]+? for multi-line verifications
+        const resolvedPattern = /\[ISSUE-(\d+)\]\s*([\s\S]+?)(?=\[ISSUE-|\s*$)/gi;
         let match;
-        while ((match = resolvedPattern.exec(resolvedMatch[1])) !== null) {
+        while ((match = resolvedPattern.exec(lastResolvedMatch[1])) !== null) {
           resolved.push({
             id: parseInt(match[1], 10),
             verification: match[2].trim(),
@@ -600,12 +674,19 @@ Review ${reviewCount + 1}/${maxReviews}.`;
         }
       }
 
+      // Handle REJECT with no parsed issues - auto-approve with warning to avoid deadlock
+      if (issues.length === 0) {
+        crash("REJECT verdict but no issues parsed - auto-approving with warning to avoid deadlock");
+        debug("[ralph-reviewed] WARNING: Codex rejected but no issues could be parsed. Auto-approving to avoid deadlock.");
+        return { approved: true, issues: [], resolved: [], notes: notes ? `[AUTO-APPROVED: REJECT with unparseable issues] ${notes}` : "[AUTO-APPROVED: REJECT with unparseable issues]" };
+      }
+
       crash(`Codex rejected with ${issues.length} issues, ${resolved.length} resolved`);
       return { approved: false, issues, resolved, notes };
     }
 
     // Unclear response - default to approve
-    crash("Unclear Codex response, approving by default");
+    crash("Unclear Codex response (no APPROVE/REJECT verdict found), approving by default");
     debug("Unclear Codex response, approving by default");
     return { approved: true, issues: [], resolved: [], notes: null };
   } catch (e) {
