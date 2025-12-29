@@ -203,6 +203,59 @@ const ContextUsage = struct {
     }
 };
 
+/// Ralph Reviewed loop state
+const RalphState = struct {
+    active: bool = false,
+    iteration: u32 = 0,
+    max_iterations: u32 = 50,
+    review_enabled: bool = false,
+    review_count: u32 = 0,
+    max_review_cycles: u32 = 5,
+
+    /// Get progress color with discrete thresholds (matching colors.green/yellow/red):
+    /// 0-50% = green, 50-80% = yellow, 80-100% = red
+    fn progressColor(current: u32, max: u32) []const u8 {
+        if (max == 0) return colors.green;
+        const pct = @min(100.0, (@as(f64, @floatFromInt(current)) / @as(f64, @floatFromInt(max))) * 100.0);
+
+        if (pct < 50.0) {
+            return colors.green;
+        } else if (pct < 80.0) {
+            return colors.yellow;
+        } else {
+            return colors.red;
+        }
+    }
+
+    /// Format Ralph status for statusline display
+    /// Returns true if something was written
+    fn format(self: RalphState, writer: anytype) !bool {
+        if (!self.active) return false;
+
+        // Iteration display: 🔄 N/M
+        const iter_color = progressColor(self.iteration, self.max_iterations);
+        try writer.print(" 🔄 {s}{d}/{d}{s}", .{
+            iter_color,
+            self.iteration,
+            self.max_iterations,
+            colors.reset,
+        });
+
+        // Review display: 🔍 N/M (only if enabled)
+        if (self.review_enabled) {
+            const rev_color = progressColor(self.review_count, self.max_review_cycles);
+            try writer.print(" 🔍 {s}{d}/{d}{s}", .{
+                rev_color,
+                self.review_count,
+                self.max_review_cycles,
+                colors.reset,
+            });
+        }
+
+        return true;
+    }
+};
+
 /// Git file status representation
 const GitStatus = struct {
     added: u32 = 0,
@@ -665,6 +718,82 @@ fn getGitStatus(allocator: Allocator, dir: []const u8) !GitStatus {
     return GitStatus.parse(output);
 }
 
+/// Get git repository root directory
+fn getGitRoot(allocator: Allocator, dir: []const u8) !?[]const u8 {
+    var buf: [256]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buf);
+    const temp_alloc = fba.allocator();
+
+    const cmd = temp_alloc.dupeZ(u8, "git rev-parse --show-toplevel") catch return null;
+
+    const result = execCommand(allocator, cmd, dir) catch return null;
+    if (result.len == 0) {
+        allocator.free(result);
+        return null;
+    }
+    return result;
+}
+
+/// Parse a YAML boolean value from a line
+fn parseYamlBool(line: []const u8, key: []const u8) ?bool {
+    if (!std.mem.startsWith(u8, line, key)) return null;
+    const value = std.mem.trim(u8, line[key.len..], " \t");
+    if (std.mem.eql(u8, value, "true")) return true;
+    if (std.mem.eql(u8, value, "false")) return false;
+    return null;
+}
+
+/// Parse a YAML integer value from a line
+fn parseYamlInt(line: []const u8, key: []const u8) ?u32 {
+    if (!std.mem.startsWith(u8, line, key)) return null;
+    const value = std.mem.trim(u8, line[key.len..], " \t");
+    return std.fmt.parseInt(u32, value, 10) catch null;
+}
+
+/// Parse Ralph state from file content string (YAML frontmatter)
+/// Exposed for testing; returns default RalphState if parsing fails
+fn parseRalphStateFromContent(content: []const u8) RalphState {
+    var state = RalphState{};
+
+    // Find frontmatter bounds (between --- delimiters)
+    if (!std.mem.startsWith(u8, content, "---")) return state;
+    const after_first = content[3..];
+    // Skip newline after first ---
+    const start_idx: usize = if (after_first.len > 0 and after_first[0] == '\n') 1 else 0;
+    const end_idx = std.mem.indexOf(u8, after_first[start_idx..], "---") orelse return state;
+    const frontmatter = after_first[start_idx..][0..end_idx];
+
+    // Parse lines
+    var lines = std.mem.splitScalar(u8, frontmatter, '\n');
+    while (lines.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        if (parseYamlBool(trimmed, "active:")) |v| state.active = v;
+        if (parseYamlInt(trimmed, "iteration:")) |v| state.iteration = v;
+        if (parseYamlInt(trimmed, "max_iterations:")) |v| state.max_iterations = v;
+        if (parseYamlBool(trimmed, "review_enabled:")) |v| state.review_enabled = v;
+        if (parseYamlInt(trimmed, "review_count:")) |v| state.review_count = v;
+        if (parseYamlInt(trimmed, "max_review_cycles:")) |v| state.max_review_cycles = v;
+    }
+
+    return state;
+}
+
+/// Parse Ralph loop state from state file at git root
+fn parseRalphState(allocator: Allocator, git_root: []const u8) RalphState {
+    // Construct path: {git_root}/.claude/ralph-loop.local.md
+    const path = std.fmt.allocPrint(allocator, "{s}/.claude/ralph-loop.local.md", .{git_root}) catch return RalphState{};
+    defer allocator.free(path);
+
+    // Read file
+    const file = std.fs.cwd().openFile(path, .{}) catch return RalphState{};
+    defer file.close();
+
+    const content = file.readToEndAlloc(allocator, 8192) catch return RalphState{};
+    defer allocator.free(content);
+
+    return parseRalphStateFromContent(content);
+}
+
 pub fn main() !void {
     // Use ArenaAllocator for better performance - free everything at once
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -788,6 +917,15 @@ pub fn main() !void {
             }
         } else {
             try writer.print("{s}", .{colors.reset});
+        }
+
+        // Add Ralph loop status if active (only in git repos)
+        if (is_git) {
+            if (try getGitRoot(allocator, current_dir.?)) |git_root| {
+                defer allocator.free(git_root);
+                const ralph_state = parseRalphState(allocator, git_root);
+                _ = try ralph_state.format(writer);
+            }
         }
     }
 
@@ -1415,4 +1553,196 @@ test "current_usage field fallback when missing" {
     // current_usage should be null for older versions
     try std.testing.expect(parsed.value.context_window != null);
     try std.testing.expect(parsed.value.context_window.?.current_usage == null);
+}
+
+test "RalphState default values" {
+    const state = RalphState{};
+    try std.testing.expect(!state.active);
+    try std.testing.expectEqual(@as(u32, 0), state.iteration);
+    try std.testing.expectEqual(@as(u32, 50), state.max_iterations);
+    try std.testing.expect(!state.review_enabled);
+    try std.testing.expectEqual(@as(u32, 0), state.review_count);
+    try std.testing.expectEqual(@as(u32, 5), state.max_review_cycles);
+}
+
+test "RalphState progressColor thresholds" {
+    // 0% = green (0-50% range)
+    try std.testing.expectEqualStrings(colors.green, RalphState.progressColor(0, 100));
+
+    // 49% = still green (0-50% range)
+    try std.testing.expectEqualStrings(colors.green, RalphState.progressColor(49, 100));
+
+    // 50% = yellow (50-80% range)
+    try std.testing.expectEqualStrings(colors.yellow, RalphState.progressColor(50, 100));
+
+    // 79% = still yellow (50-80% range)
+    try std.testing.expectEqualStrings(colors.yellow, RalphState.progressColor(79, 100));
+
+    // 80% = red (80-100% range)
+    try std.testing.expectEqualStrings(colors.red, RalphState.progressColor(80, 100));
+
+    // 100% = red (80-100% range)
+    try std.testing.expectEqualStrings(colors.red, RalphState.progressColor(100, 100));
+
+    // Edge case: max = 0 returns green
+    try std.testing.expectEqualStrings(colors.green, RalphState.progressColor(0, 0));
+}
+
+test "RalphState format inactive returns false" {
+    const state = RalphState{ .active = false };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    const result = try state.format(writer);
+    try std.testing.expect(!result);
+    try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
+}
+
+test "RalphState format active shows iteration" {
+    const state = RalphState{
+        .active = true,
+        .iteration = 3,
+        .max_iterations = 50,
+        .review_enabled = false,
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    const result = try state.format(writer);
+    try std.testing.expect(result);
+    const output = stream.getWritten();
+    // Should contain the loop emoji and iteration count
+    try std.testing.expect(std.mem.indexOf(u8, output, "🔄") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "3/50") != null);
+    // Should contain green color (3/50 = 6% < 50%)
+    try std.testing.expect(std.mem.indexOf(u8, output, colors.green) != null);
+    // Should NOT contain review emoji
+    try std.testing.expect(std.mem.indexOf(u8, output, "🔍") == null);
+}
+
+test "RalphState format active with reviews" {
+    const state = RalphState{
+        .active = true,
+        .iteration = 5,
+        .max_iterations = 30,
+        .review_enabled = true,
+        .review_count = 2,
+        .max_review_cycles = 5,
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    const result = try state.format(writer);
+    try std.testing.expect(result);
+    const output = stream.getWritten();
+    // Should contain both emojis and counts
+    try std.testing.expect(std.mem.indexOf(u8, output, "🔄") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "5/30") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "🔍") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "2/5") != null);
+    // Should contain green for iteration (5/30 = 16%) and yellow for review (2/5 = 40%)
+    try std.testing.expect(std.mem.indexOf(u8, output, colors.green) != null);
+}
+
+test "parseYamlBool function" {
+    try std.testing.expectEqual(true, parseYamlBool("active: true", "active:"));
+    try std.testing.expectEqual(false, parseYamlBool("active: false", "active:"));
+    try std.testing.expect(parseYamlBool("active: maybe", "active:") == null);
+    try std.testing.expect(parseYamlBool("other: true", "active:") == null);
+    try std.testing.expect(parseYamlBool("review_enabled: true", "review_enabled:") == true);
+}
+
+test "parseYamlInt function" {
+    try std.testing.expectEqual(@as(u32, 50), parseYamlInt("max_iterations: 50", "max_iterations:").?);
+    try std.testing.expectEqual(@as(u32, 0), parseYamlInt("iteration: 0", "iteration:").?);
+    try std.testing.expectEqual(@as(u32, 123), parseYamlInt("count: 123", "count:").?);
+    try std.testing.expect(parseYamlInt("iteration: abc", "iteration:") == null);
+    try std.testing.expect(parseYamlInt("other: 50", "iteration:") == null);
+}
+
+test "parseRalphStateFromContent with valid frontmatter" {
+    const content =
+        \\---
+        \\active: true
+        \\iteration: 5
+        \\max_iterations: 30
+        \\review_enabled: true
+        \\review_count: 2
+        \\max_review_cycles: 10
+        \\---
+        \\# Some markdown content
+    ;
+
+    const state = parseRalphStateFromContent(content);
+    try std.testing.expect(state.active);
+    try std.testing.expectEqual(@as(u32, 5), state.iteration);
+    try std.testing.expectEqual(@as(u32, 30), state.max_iterations);
+    try std.testing.expect(state.review_enabled);
+    try std.testing.expectEqual(@as(u32, 2), state.review_count);
+    try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
+}
+
+test "parseRalphStateFromContent with partial fields" {
+    const content =
+        \\---
+        \\active: true
+        \\iteration: 3
+        \\---
+    ;
+
+    const state = parseRalphStateFromContent(content);
+    try std.testing.expect(state.active);
+    try std.testing.expectEqual(@as(u32, 3), state.iteration);
+    // Defaults should be used for missing fields
+    try std.testing.expectEqual(@as(u32, 50), state.max_iterations);
+    try std.testing.expect(!state.review_enabled);
+    try std.testing.expectEqual(@as(u32, 0), state.review_count);
+    try std.testing.expectEqual(@as(u32, 5), state.max_review_cycles);
+}
+
+test "parseRalphStateFromContent with no frontmatter" {
+    const content = "# Just markdown, no frontmatter";
+
+    const state = parseRalphStateFromContent(content);
+    // Should return defaults
+    try std.testing.expect(!state.active);
+    try std.testing.expectEqual(@as(u32, 0), state.iteration);
+}
+
+test "parseRalphStateFromContent with unclosed frontmatter" {
+    const content =
+        \\---
+        \\active: true
+        \\iteration: 5
+        \\# Missing closing delimiter
+    ;
+
+    const state = parseRalphStateFromContent(content);
+    // Should return defaults since frontmatter is not closed
+    try std.testing.expect(!state.active);
+}
+
+test "parseRalphStateFromContent with empty content" {
+    const state = parseRalphStateFromContent("");
+    try std.testing.expect(!state.active);
+}
+
+test "parseRalphStateFromContent with extra fields ignored" {
+    const content =
+        \\---
+        \\active: true
+        \\iteration: 7
+        \\unknown_field: some_value
+        \\completion_promise: "COMPLETE"
+        \\timestamp: "2025-01-01T00:00:00Z"
+        \\---
+    ;
+
+    const state = parseRalphStateFromContent(content);
+    try std.testing.expect(state.active);
+    try std.testing.expectEqual(@as(u32, 7), state.iteration);
+    // Should not crash on unknown fields
 }
