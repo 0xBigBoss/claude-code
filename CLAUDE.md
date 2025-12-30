@@ -77,6 +77,34 @@ Proactively delegate to subagents when one is available for a task. The main con
 - Create helper scripts or temporary files only when requested; clean up after use.
 - Request missing command parameters rather than guessing.
 
+## Process management
+
+Multiple Claude Code sessions may run concurrently across different repos. Never use broad process kills that affect other sessions.
+
+**Forbidden:**
+- `pkill tilt`, `killall tilt`, `pkill node`, etc.
+- Any kill command without filtering by working directory or PID
+
+**Required approach:**
+1. Identify processes spawned from the current repo (check cwd, parent process, or port)
+2. Kill only the specific PID(s) belonging to this session
+3. If unable to isolate the target process, treat as **blocked** and ask the user
+
+**Examples:**
+```bash
+# Good: kill by specific PID after identifying it
+lsof -i :10350 | grep LISTEN  # find process on your port
+kill <specific-pid>
+
+# Good: filter by working directory
+pgrep -f "tilt.*$(pwd)"
+
+# Bad: kills all tilt processes across all sessions
+pkill tilt
+```
+
+When restarting services (tilt, docker-compose, dev servers), always verify you're targeting only processes from your working directory.
+
 ## Context window and state
 - Continue working through context limits. As context tightens, write `progress.md` with: current task, work done, next steps, open questions, files touched, test/lint/build status.
 - On resume: run `pwd`; list key files; read `progress.md`; review recent git log if present; re-run quick verification relevant to the task.
