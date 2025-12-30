@@ -42,7 +42,7 @@ Load all relevant best-practices skills immediately as your first action when wo
 | Go: `.go`, `go.mod` | go-best-practices |
 | Zig: `.zig`, `build.zig`, `build.zig.zon` | zig-best-practices |
 | Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | playwright-best-practices |
-| Tilt: `Tiltfile`, tilt commands | tilt |
+| Tilt: `Tiltfile`, `tilt` CLI, tilt process management | tilt |
 | Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
 
 ### Multi-skill combinations
@@ -78,6 +78,8 @@ Proactively delegate to subagents when one is available for a task. The main con
 - Request missing command parameters rather than guessing.
 
 ## Process management
+
+Load the `tilt` skill before running tilt CLI commands or managing tilt processes.
 
 Multiple Claude Code sessions may run concurrently across different repos. Never use broad process kills that affect other sessions.
 
