@@ -5,6 +5,19 @@ description: Provides Tamagui patterns for config v4, compiler optimization, sty
 
 This skill provides patterns for Tamagui v1.x that go beyond fundamentals. It focuses on Config v4, compiler optimization, compound components, and common mistakes.
 
+## Mandatory Context Loading
+
+When working with these components, read the corresponding pattern file BEFORE writing code:
+
+| Component Type | Required Reading | Cross-Skills |
+|---------------|------------------|--------------|
+| Dialog, Sheet, modal overlays | @DIALOG_PATTERNS.md | |
+| Form, Input, Label, validation | @FORM_PATTERNS.md | `typescript-best-practices` (zod) |
+| Animations, transitions | @ANIMATION_PATTERNS.md | |
+| Popover, Tooltip, Select | @OVERLAY_PATTERNS.md | |
+| Compiler optimization | @COMPILER_PATTERNS.md | |
+| Design tokens, theming | @DESIGN_SYSTEM.md | |
+
 ## Config v4 Quick Start
 
 Use `@tamagui/config/v4` for simplified setup:
@@ -300,6 +313,24 @@ const styles = StyleSheet.create({ box: { padding: 20 } })
 <View padding="$4" backgroundColor="$blue10" />
 ```
 
+### Platform.OS Branching for Dialog/Sheet
+
+```tsx
+// BAD - manual platform branching
+if (Platform.OS === 'web') {
+  return <Dialog>...</Dialog>
+}
+return <Sheet>...</Sheet>
+
+// GOOD - use Adapt (see @DIALOG_PATTERNS.md)
+<Dialog>
+  <Dialog.Portal>...</Dialog.Portal>
+  <Adapt when="sm" platform="touch">
+    <Sheet><Adapt.Contents /></Sheet>
+  </Adapt>
+</Dialog>
+```
+
 ## Fetching Current Documentation
 
 For latest API details, fetch markdown docs directly:
@@ -352,8 +383,11 @@ For HTML pages, use the web-fetch skill with appropriate selectors.
 | `css` | Web | Default, best performance |
 | `react-native-reanimated` | Native | Required for native animations |
 
-## Progressive Disclosure
+## Additional Pattern Files
 
-For compiler optimization details, see @COMPILER_PATTERNS.md
-For Sheet/Dialog/Select patterns, see @COMPONENT_PATTERNS.md
-For design system thinking, see @DESIGN_SYSTEM.md
+- @DIALOG_PATTERNS.md - Dialog, Sheet, Adapt, accessibility
+- @FORM_PATTERNS.md - Form, Input, Label, validation with zod
+- @ANIMATION_PATTERNS.md - Animation drivers, enterStyle/exitStyle
+- @OVERLAY_PATTERNS.md - Popover, Tooltip, Select
+- @COMPILER_PATTERNS.md - Compiler optimization details
+- @DESIGN_SYSTEM.md - Design tokens and theming
