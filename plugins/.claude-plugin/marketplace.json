@@ -3,18 +3,55 @@
   "owner": {
     "name": "0xBigBoss"
   },
+  "metadata": {
+    "description": "Personal Claude Code plugins by 0xBigBoss"
+  },
   "plugins": [
     {
       "name": "ralph-reviewed",
+      "description": "Iterative Ralph loops with Codex CLI review gates at completion",
+      "version": "1.4.0",
+      "author": {
+        "name": "Allen",
+        "email": "bigboss@metalrodeo.xyz"
+      },
       "source": "./ralph-reviewed",
-      "description": "Ralph Reviewed - AI-powered code review loop using Claude CLI",
-      "version": "1.4.0"
+      "hooks": {
+        "Stop": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.ts",
+                "timeout": 1800
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "codex-reviewer",
-      "source": "./codex-reviewer",
       "description": "Codex-powered strict code review gate for Claude Code",
-      "version": "1.1.0"
+      "version": "1.1.0",
+      "author": {
+        "name": "Allen",
+        "email": "bigboss@metalrodeo.xyz"
+      },
+      "source": "./codex-reviewer",
+      "hooks": {
+        "Stop": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.ts",
+                "timeout": 1800
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }
