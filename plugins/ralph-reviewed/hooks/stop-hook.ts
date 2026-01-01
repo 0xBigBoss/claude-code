@@ -424,7 +424,7 @@ function parseStateFile(content: string): LoopState | null {
     timestamp: state.timestamp || new Date().toISOString(),
     review_enabled: state.review_enabled ?? true,
     review_count: state.review_count ?? 0,
-    max_review_cycles: state.max_review_cycles ?? 5,
+    max_review_cycles: state.max_review_cycles ?? state.max_iterations,
     pending_feedback: state.pending_feedback ?? null,
     review_history: state.review_history ?? [],
     debug: state.debug ?? false,

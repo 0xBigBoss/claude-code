@@ -25,7 +25,7 @@ An iterative development loop with Codex review gates. Fork of [ralph-wiggum](ht
 3. When Claude outputs the completion promise, Codex reviews the work
 4. If approved: loop ends successfully
 5. If rejected: Claude receives feedback and continues working
-6. After max review cycles (default 3), loop ends with final feedback
+6. After max review cycles, loop ends with final feedback
 
 ## Installation
 
@@ -74,7 +74,7 @@ Start an iterative loop with review gates.
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--max-iterations` | 50 | Max work iterations before auto-stop |
-| `--max-reviews` | 3 | Max review cycles before force-complete |
+| `--max-reviews` | max-iterations | Max review cycles before force-complete |
 | `--completion-promise` | COMPLETE | Phrase that signals completion |
 | `--no-review` | false | Disable Codex review gate |
 | `--debug` | false | Write debug logs to `/tmp/ralph-reviewed-{session_id}.log` |

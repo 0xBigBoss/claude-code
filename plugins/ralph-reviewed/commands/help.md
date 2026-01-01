@@ -27,7 +27,7 @@ Start an iterative loop with review gates.
 
 **Options:**
 - `--max-iterations <n>` - Max work iterations before auto-stop (default: 50)
-- `--max-reviews <n>` - Max review cycles before force-complete (default: 3)
+- `--max-reviews <n>` - Max review cycles before force-complete (default: --max-iterations)
 - `--completion-promise <text>` - Phrase that signals completion (default: COMPLETE)
 - `--no-review` - Disable Codex review gate
 
@@ -88,5 +88,5 @@ If Codex approves, the loop ends. If rejected, Claude receives specific feedback
 - Check that `--no-review` is not set
 
 **Too many review cycles:**
-- After max reviews (default 3), loop completes with a warning
+- After max reviews, loop completes with a warning
 - Reduce scope or clarify requirements in the task
