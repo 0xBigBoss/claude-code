@@ -1,6 +1,6 @@
 ---
 description: Generate handoff and start Ralph loop in one command
-argument-hint: [completion criteria or additional notes] [--max-iterations N] [--no-review]
+argument-hint: [completion criteria] [--max-iterations N] [--max-reviews N] [--no-review] [--debug]
 ---
 
 # Ralph: Handoff + Loop Combined
@@ -13,7 +13,7 @@ Arguments: $ARGUMENTS
 
 Split arguments into two groups:
 - **HANDOFF_ARGS**: Everything before any `--` flags (passed to ralphoff as completion criteria)
-- **LOOP_FLAGS**: Any `--max-iterations`, `--max-reviews`, `--no-review`, `--debug` flags (passed to ralph-loop)
+- **LOOP_FLAGS**: Any `--max-iterations`, `--max-reviews`, `--completion-promise`, `--no-review`, `--debug` flags (passed to ralph-loop)
 
 Default loop flags if not specified:
 - `--max-iterations 30`
@@ -43,10 +43,12 @@ Do NOT copy the command to clipboard (skip that part of ralphoff) - we're starti
 ## Example Usage
 
 ```
-/ralph                           # Use session context, default settings
-/ralph fix all type errors       # With specific completion criteria
-/ralph --max-iterations 50       # Override iteration limit
-/ralph complete the refactor --no-review --debug  # With criteria and flags
+/ralph                                        # Use session context, default settings
+/ralph fix all type errors                    # With specific completion criteria
+/ralph --max-iterations 50                    # Override iteration limit
+/ralph --max-reviews 3                        # Limit review cycles
+/ralph complete the refactor --no-review      # Skip Codex reviews
+/ralph implement feature --debug              # Enable debug logging
 ```
 
 ## Output
