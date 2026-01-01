@@ -1,0 +1,22 @@
+{
+  "name": "codex-reviewer",
+  "description": "Codex-powered code review gate. Creates a review checkpoint that triggers Codex CLI review when Claude exits.",
+  "author": {
+    "name": "Allen",
+    "email": "bigboss@metalrodeo.xyz"
+  },
+  "version": "1.1.0",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.ts",
+            "timeout": 1800
+          }
+        ]
+      }
+    ]
+  }
+}
