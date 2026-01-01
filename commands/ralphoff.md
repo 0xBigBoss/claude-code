@@ -1,6 +1,6 @@
 ---
 allowed-tools: Bash(*), Edit(~/.claude/handoffs/**)
-argument-hint: [completion criteria or additional notes]
+argument-hint: [completion criteria] [--max-iterations N] [--max-reviews N] [--no-review] [--debug]
 description: Generate Ralph-loop-ready handoff prompt
 ---
 
@@ -8,11 +8,23 @@ description: Generate Ralph-loop-ready handoff prompt
 
 Generate a prompt for handing off work to a Ralph Reviewed loop (`/ralph-reviewed:ralph-loop`). The receiving session runs in an iterative self-improvement loop with Codex review gates until a completion promise is output and approved. The prompt must be self-contained, include clear success criteria, and support automatic verification.
 
+## Parse Arguments
+
+Arguments: $ARGUMENTS
+
+Split arguments into two groups:
+- **HANDOFF_ARGS**: Everything before any `--` flags (used as completion criteria)
+- **LOOP_FLAGS**: Any `--max-iterations`, `--max-reviews`, `--no-review`, `--debug` flags (included in clipboard command)
+
+Default loop flags for clipboard command if not specified:
+- `--max-iterations 30`
+- `--completion-promise "COMPLETE"`
+
 ## Git Context
 
 **Working Directory**: !`pwd`
 
-**Repository**: !`basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`
+**Repository**: !`git rev-parse --show-toplevel 2>/dev/null | xargs basename || basename "$PWD"`
 
 **Branch**: !`git branch --show-current 2>/dev/null || echo "detached/unknown"`
 
@@ -34,7 +46,7 @@ Review the conversation history from this session to understand:
 
 ## Additional Focus / Completion Criteria
 
-$ARGUMENTS
+HANDOFF_ARGS (the completion criteria portion of $ARGUMENTS, excluding any `--` flags)
 
 ## Task
 
@@ -169,15 +181,32 @@ After 15+ iterations without progress:
 
    Run this command in a new Claude Code session:
 
-   /ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task. Output COMPLETE when done." --completion-promise "COMPLETE" --max-iterations 30
+   /ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task. Output COMPLETE when done." --completion-promise "COMPLETE" <LOOP_FLAGS>
    ```
+
+   Where `<LOOP_FLAGS>` includes any flags from $ARGUMENTS (e.g., `--max-iterations 50 --no-review`) or defaults to `--max-iterations 30`.
 
 ### Wrapper Command Format
 
 The clipboard should contain ONLY this single-line command (no extra text):
 
 ```
-/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations." --completion-promise "COMPLETE" --max-iterations 30
+/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations." --completion-promise "COMPLETE" <LOOP_FLAGS>
 ```
 
-Replace `<filename>` with the actual filename (e.g., `ralph-myrepo-feature-x.md`).
+Replace:
+- `<filename>` with the actual filename (e.g., `ralph-myrepo-feature-x.md`)
+- `<LOOP_FLAGS>` with the parsed flags from $ARGUMENTS, or defaults (`--max-iterations 30`) if none provided
+
+### Example Commands
+
+```
+# Default (30 iterations)
+/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/ralph-myrepo-feature-x.md..." --completion-promise "COMPLETE" --max-iterations 30
+
+# With custom flags from /ralphoff --max-iterations 50 --no-review
+/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/ralph-myrepo-feature-x.md..." --completion-promise "COMPLETE" --max-iterations 50 --no-review
+
+# With --debug flag
+/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/ralph-myrepo-feature-x.md..." --completion-promise "COMPLETE" --max-iterations 30 --debug
+```
