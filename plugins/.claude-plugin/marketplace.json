@@ -1,0 +1,20 @@
+{
+  "name": "0xbigboss-plugins",
+  "owner": {
+    "name": "0xBigBoss"
+  },
+  "plugins": [
+    {
+      "name": "ralph-reviewed",
+      "source": "./ralph-reviewed",
+      "description": "Ralph Reviewed - AI-powered code review loop using Claude CLI",
+      "version": "1.4.0"
+    },
+    {
+      "name": "codex-reviewer",
+      "source": "./codex-reviewer",
+      "description": "Codex-powered strict code review gate for Claude Code",
+      "version": "1.1.0"
+    }
+  ]
+}
