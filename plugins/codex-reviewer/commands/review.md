@@ -4,12 +4,13 @@ Create a review gate that triggers Codex CLI review when you exit.
 
 ## Instructions
 
-1. **Ensure `.claude/` directory exists** at the git root (or cwd if not in a repo):
+1. **Find the state directory** (git root, or cwd if not in a repo):
    ```bash
-   mkdir -p "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude"
+   STATE_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude"
+   mkdir -p "$STATE_DIR"
    ```
 
-2. **Create the state file** at `.claude/codex-review.local.md`
+2. **Create the state file** at `{STATE_DIR}/codex-review.local.md` (MUST be at git root, not subdirectory)
 
 3. **State file format:**
 ```yaml

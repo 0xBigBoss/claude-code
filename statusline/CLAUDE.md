@@ -54,6 +54,8 @@ The application is structured as a single-file Zig program with clear separation
 - **ModelType**: Enum for detecting and abbreviating model names (Opus, Sonnet, Haiku)
 - **ContextUsage**: Manages context percentage calculation with color-coded output
 - **GitStatus**: Parses and formats git file status (added, modified, deleted, untracked)
+- **RalphState**: Ralph Reviewed loop iteration and review tracking
+- **CodexReviewState**: Codex Reviewer standalone review gate tracking
 
 ### Key Functions
 
@@ -86,6 +88,68 @@ Uses Zig's built-in JSON parser with proper error handling and type safety throu
 
 ### Performance Focus
 The code is optimized for minimal latency with single-threaded execution and release-fast compilation mode recommended for production use.
+
+## Review Session Tracking
+
+The statusline displays review iteration progress from two plugin systems:
+
+### State File Locations
+
+Both state files are stored in `{GIT_ROOT}/.claude/` and use YAML frontmatter format:
+
+| Plugin | State File | Display |
+|--------|-----------|---------|
+| Ralph Reviewed | `ralph-loop.local.md` | 🔄 iterations, 🔍 reviews |
+| Codex Reviewer | `codex-review.local.md` | 🔎 reviews |
+
+### State File Format
+
+**Ralph loop state** (`ralph-loop.local.md`):
+```yaml
+---
+active: true
+iteration: 3
+max_iterations: 50
+review_enabled: true
+review_count: 1
+max_review_cycles: 5
+review_history: [...]
+---
+```
+
+**Codex review state** (`codex-review.local.md`):
+```yaml
+---
+active: true
+review_count: 4
+max_review_cycles: 5
+review_history: [...]
+---
+```
+
+### Lookup Commands
+
+To check current review status from the command line:
+
+```bash
+# View Ralph loop state
+cat "$(git rev-parse --show-toplevel)/.claude/ralph-loop.local.md"
+
+# View Codex review state
+cat "$(git rev-parse --show-toplevel)/.claude/codex-review.local.md"
+
+# Quick status check (active + counts)
+grep -E '^(active|iteration|review_count):' "$(git rev-parse --show-toplevel)/.claude/"*.local.md
+```
+
+### Color Coding
+
+Progress colors use discrete thresholds:
+- **Green** (0-50%): Safe range
+- **Yellow** (50-80%): Warning range
+- **Red** (80-100%): Critical range
+
+For a 5-cycle max: 1-2 = green, 3 = yellow, 4-5 = red.
 
 ## Development Notes
 

@@ -203,6 +203,21 @@ const ContextUsage = struct {
     }
 };
 
+/// Get progress color with discrete thresholds (matching colors.green/yellow/red):
+/// 0-50% = green, 50-80% = yellow, 80-100% = red
+fn progressColor(current: u32, max: u32) []const u8 {
+    if (max == 0) return colors.green;
+    const pct = @min(100.0, (@as(f64, @floatFromInt(current)) / @as(f64, @floatFromInt(max))) * 100.0);
+
+    if (pct < 50.0) {
+        return colors.green;
+    } else if (pct < 80.0) {
+        return colors.yellow;
+    } else {
+        return colors.red;
+    }
+}
+
 /// Ralph Reviewed loop state
 const RalphState = struct {
     active: bool = false,
@@ -211,21 +226,6 @@ const RalphState = struct {
     review_enabled: bool = false,
     review_count: u32 = 0,
     max_review_cycles: u32 = 5,
-
-    /// Get progress color with discrete thresholds (matching colors.green/yellow/red):
-    /// 0-50% = green, 50-80% = yellow, 80-100% = red
-    fn progressColor(current: u32, max: u32) []const u8 {
-        if (max == 0) return colors.green;
-        const pct = @min(100.0, (@as(f64, @floatFromInt(current)) / @as(f64, @floatFromInt(max))) * 100.0);
-
-        if (pct < 50.0) {
-            return colors.green;
-        } else if (pct < 80.0) {
-            return colors.yellow;
-        } else {
-            return colors.red;
-        }
-    }
 
     /// Format Ralph status for statusline display
     /// Returns true if something was written
@@ -251,6 +251,30 @@ const RalphState = struct {
                 colors.reset,
             });
         }
+
+        return true;
+    }
+};
+
+/// Codex Reviewer state (standalone review gate, not part of Ralph loop)
+const CodexReviewState = struct {
+    active: bool = false,
+    review_count: u32 = 0,
+    max_review_cycles: u32 = 5,
+
+    /// Format Codex review status for statusline display
+    /// Returns true if something was written
+    fn format(self: CodexReviewState, writer: anytype) !bool {
+        if (!self.active) return false;
+
+        // Review display: 🔎 N/M (left-tilted magnifying glass for Codex, distinct from Ralph's 🔍)
+        const rev_color = progressColor(self.review_count, self.max_review_cycles);
+        try writer.print(" 🔎 {s}{d}/{d}{s}", .{
+            rev_color,
+            self.review_count,
+            self.max_review_cycles,
+            colors.reset,
+        });
 
         return true;
     }
@@ -806,6 +830,53 @@ fn parseRalphState(allocator: Allocator, git_root: []const u8) RalphState {
     return parseRalphStateFromContent(buf[0..bytes_read]);
 }
 
+/// Parse Codex review state from file content string (YAML frontmatter)
+/// Exposed for testing; returns default CodexReviewState if parsing fails
+fn parseCodexReviewStateFromContent(content: []const u8) CodexReviewState {
+    var state = CodexReviewState{};
+
+    // Must start with ---
+    if (!std.mem.startsWith(u8, content, "---")) return state;
+    const after_first = content[3..];
+    // Skip newline after first ---
+    const start_idx: usize = if (after_first.len > 0 and after_first[0] == '\n') 1 else 0;
+
+    // Find closing --- if present, otherwise parse what we have
+    const frontmatter = if (std.mem.indexOf(u8, after_first[start_idx..], "\n---")) |end_idx|
+        after_first[start_idx..][0..end_idx]
+    else
+        after_first[start_idx..];
+
+    // Parse lines until we hit closing delimiter or exhaust content
+    var lines = std.mem.splitScalar(u8, frontmatter, '\n');
+    while (lines.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        if (std.mem.eql(u8, trimmed, "---")) break;
+        if (parseYamlBool(trimmed, "active:")) |v| state.active = v;
+        if (parseYamlInt(trimmed, "review_count:")) |v| state.review_count = v;
+        if (parseYamlInt(trimmed, "max_review_cycles:")) |v| state.max_review_cycles = v;
+    }
+
+    return state;
+}
+
+/// Parse Codex review state from state file at git root
+fn parseCodexReviewState(allocator: Allocator, git_root: []const u8) CodexReviewState {
+    // Construct path: {git_root}/.claude/codex-review.local.md
+    const path = std.fmt.allocPrint(allocator, "{s}/.claude/codex-review.local.md", .{git_root}) catch return CodexReviewState{};
+    defer allocator.free(path);
+
+    // Read only first 2KB - our fields (active, review_count, etc.) are at the top
+    const file = std.fs.cwd().openFile(path, .{}) catch return CodexReviewState{};
+    defer file.close();
+
+    var buf: [2048]u8 = undefined;
+    const bytes_read = file.read(&buf) catch return CodexReviewState{};
+    if (bytes_read == 0) return CodexReviewState{};
+
+    return parseCodexReviewStateFromContent(buf[0..bytes_read]);
+}
+
 pub fn main() !void {
     // Use ArenaAllocator for better performance - free everything at once
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -931,12 +1002,18 @@ pub fn main() !void {
             try writer.print("{s}", .{colors.reset});
         }
 
-        // Add Ralph loop status if active (only in git repos)
+        // Add Ralph loop and Codex review status if active (only in git repos)
         if (is_git) {
             if (try getGitRoot(allocator, current_dir.?)) |git_root| {
                 defer allocator.free(git_root);
+
+                // Ralph loop status (iterations + optional review count)
                 const ralph_state = parseRalphState(allocator, git_root);
                 _ = try ralph_state.format(writer);
+
+                // Codex review status (standalone review gate)
+                const codex_state = parseCodexReviewState(allocator, git_root);
+                _ = try codex_state.format(writer);
             }
         }
     }
@@ -1579,25 +1656,25 @@ test "RalphState default values" {
 
 test "RalphState progressColor thresholds" {
     // 0% = green (0-50% range)
-    try std.testing.expectEqualStrings(colors.green, RalphState.progressColor(0, 100));
+    try std.testing.expectEqualStrings(colors.green, progressColor(0, 100));
 
     // 49% = still green (0-50% range)
-    try std.testing.expectEqualStrings(colors.green, RalphState.progressColor(49, 100));
+    try std.testing.expectEqualStrings(colors.green, progressColor(49, 100));
 
     // 50% = yellow (50-80% range)
-    try std.testing.expectEqualStrings(colors.yellow, RalphState.progressColor(50, 100));
+    try std.testing.expectEqualStrings(colors.yellow, progressColor(50, 100));
 
     // 79% = still yellow (50-80% range)
-    try std.testing.expectEqualStrings(colors.yellow, RalphState.progressColor(79, 100));
+    try std.testing.expectEqualStrings(colors.yellow, progressColor(79, 100));
 
     // 80% = red (80-100% range)
-    try std.testing.expectEqualStrings(colors.red, RalphState.progressColor(80, 100));
+    try std.testing.expectEqualStrings(colors.red, progressColor(80, 100));
 
     // 100% = red (80-100% range)
-    try std.testing.expectEqualStrings(colors.red, RalphState.progressColor(100, 100));
+    try std.testing.expectEqualStrings(colors.red, progressColor(100, 100));
 
     // Edge case: max = 0 returns green
-    try std.testing.expectEqualStrings(colors.green, RalphState.progressColor(0, 0));
+    try std.testing.expectEqualStrings(colors.green, progressColor(0, 0));
 }
 
 test "RalphState format inactive returns false" {
@@ -1760,4 +1837,120 @@ test "parseRalphStateFromContent with extra fields ignored" {
     try std.testing.expect(state.active);
     try std.testing.expectEqual(@as(u32, 7), state.iteration);
     // Should not crash on unknown fields
+}
+
+test "CodexReviewState default values" {
+    const state = CodexReviewState{};
+    try std.testing.expect(!state.active);
+    try std.testing.expectEqual(@as(u32, 0), state.review_count);
+    try std.testing.expectEqual(@as(u32, 5), state.max_review_cycles);
+}
+
+test "CodexReviewState format inactive returns false" {
+    const state = CodexReviewState{ .active = false };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    const result = try state.format(writer);
+    try std.testing.expect(!result);
+    try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
+}
+
+test "CodexReviewState format active shows review count" {
+    const state = CodexReviewState{
+        .active = true,
+        .review_count = 2,
+        .max_review_cycles = 5,
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    const result = try state.format(writer);
+    try std.testing.expect(result);
+    const output = stream.getWritten();
+    // Should contain the magnifying glass emoji and review count
+    try std.testing.expect(std.mem.indexOf(u8, output, "🔎") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "2/5") != null);
+    // Should contain green color (2/5 = 40% < 50%)
+    try std.testing.expect(std.mem.indexOf(u8, output, colors.green) != null);
+}
+
+test "CodexReviewState format with high review count shows yellow" {
+    const state = CodexReviewState{
+        .active = true,
+        .review_count = 3,
+        .max_review_cycles = 5,
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    const result = try state.format(writer);
+    try std.testing.expect(result);
+    const output = stream.getWritten();
+    // 3/5 = 60% should be yellow (50-80% range)
+    try std.testing.expect(std.mem.indexOf(u8, output, colors.yellow) != null);
+}
+
+test "CodexReviewState format with critical review count shows red" {
+    const state = CodexReviewState{
+        .active = true,
+        .review_count = 4,
+        .max_review_cycles = 5,
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    const result = try state.format(writer);
+    try std.testing.expect(result);
+    const output = stream.getWritten();
+    // 4/5 = 80% should be red (80-100% range)
+    try std.testing.expect(std.mem.indexOf(u8, output, colors.red) != null);
+}
+
+test "parseCodexReviewStateFromContent with valid frontmatter" {
+    const content =
+        \\---
+        \\active: true
+        \\review_count: 3
+        \\max_review_cycles: 10
+        \\---
+        \\# Some markdown content
+    ;
+
+    const state = parseCodexReviewStateFromContent(content);
+    try std.testing.expect(state.active);
+    try std.testing.expectEqual(@as(u32, 3), state.review_count);
+    try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
+}
+
+test "parseCodexReviewStateFromContent with partial fields" {
+    const content =
+        \\---
+        \\active: true
+        \\review_count: 2
+        \\---
+    ;
+
+    const state = parseCodexReviewStateFromContent(content);
+    try std.testing.expect(state.active);
+    try std.testing.expectEqual(@as(u32, 2), state.review_count);
+    // Default should be used for missing max_review_cycles
+    try std.testing.expectEqual(@as(u32, 5), state.max_review_cycles);
+}
+
+test "parseCodexReviewStateFromContent with no frontmatter" {
+    const content = "# Just markdown, no frontmatter";
+
+    const state = parseCodexReviewStateFromContent(content);
+    try std.testing.expect(!state.active);
+    try std.testing.expectEqual(@as(u32, 0), state.review_count);
+}
+
+test "parseCodexReviewStateFromContent with empty content" {
+    const state = parseCodexReviewStateFromContent("");
+    try std.testing.expect(!state.active);
 }
