@@ -10,7 +10,7 @@
     {
       "name": "ralph-reviewed",
       "description": "Iterative Ralph loops with Codex CLI review gates at completion",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "author": {
         "name": "Allen",
         "email": "bigboss@metalrodeo.xyz"
