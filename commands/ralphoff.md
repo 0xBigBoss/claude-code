@@ -125,7 +125,7 @@ Maintain a `TODO.md` file in the working directory as your working memory across
 5. When done, output completion promise
 
 ### VCS Tracking
-Commit both `TODO.md` and `.claude/ralph-loop.local.md` for full visibility into loop progression. Never edit `.claude/ralph-loop.local.md` - it is managed by a Claude Code hook.
+Commit `TODO.md` with each code change for iteration visibility. Never edit `.claude/ralph-loop.local.md` - it is managed by a Claude Code hook and should not be tracked in VCS.
 </iteration_state>
 
 <success_criteria>
