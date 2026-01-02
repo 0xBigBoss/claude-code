@@ -30,7 +30,7 @@ import { homedir } from "node:os";
 // --- Version ---
 // Update this when making changes to help diagnose cached code issues
 const HOOK_VERSION = "2026-01-02T00:00:00Z";
-const HOOK_BUILD = "v1.5.1";
+const HOOK_BUILD = "v1.6.0";
 
 // --- User Config ---
 // User preferences stored in ~/.claude/ralphs/config.json
@@ -924,6 +924,24 @@ async function main() {
       debug(`[ralph-reviewed] Reviews disabled, approving exit`);
       cleanupStateFile(stateFilePath);
       output({ decision: "approve" });
+      return;
+    }
+
+    // Require git repository - Codex needs a trusted directory
+    if (!gitRoot) {
+      crash("Not in a git repository - BLOCKING (Codex requires git repo)");
+      output({
+        decision: "block",
+        reason: `# Review Gate Error: Not a Git Repository
+
+Codex requires a git repository to run. The current directory is not inside a git repo.
+
+**Current directory:** \`${input.cwd}\`
+
+**To fix:** Initialize a git repository with \`git init\`, or move the project into an existing git repo.
+
+**To escape this loop:** Run \`/ralph-reviewed:cancel-ralph\` to remove the loop, then exit normally.`
+      });
       return;
     }
 

@@ -20,7 +20,7 @@ import { join } from "node:path";
 
 // --- Version ---
 const HOOK_VERSION = "2026-01-02T00:00:00Z";
-const HOOK_BUILD = "v1.1.1";
+const HOOK_BUILD = "v1.2.0";
 
 // --- Timeout Constants ---
 // Must align with plugin.json hook timeout
@@ -832,6 +832,24 @@ ${remainingIssues}
 **To escape this gate:** Run \`/codex-reviewer:cancel\` to remove the review gate, then exit normally.
 
 This is a strict gate - exit requires either Codex approval or explicit cancellation.`
+      });
+      return;
+    }
+
+    // Require git repository - Codex needs a trusted directory
+    if (!gitRoot) {
+      crash("Not in a git repository - BLOCKING (Codex requires git repo)");
+      output({
+        decision: "block",
+        reason: `# Review Gate Error: Not a Git Repository
+
+Codex requires a git repository to run. The current directory is not inside a git repo.
+
+**Current directory:** \`${input.cwd}\`
+
+**To fix:** Initialize a git repository with \`git init\`, or move the project into an existing git repo.
+
+**To escape this gate:** Run \`/codex-reviewer:cancel\` to remove the review gate, then exit normally.`
       });
       return;
     }
