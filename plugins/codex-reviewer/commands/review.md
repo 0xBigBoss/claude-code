@@ -1,11 +1,23 @@
 ---
 description: Start a Codex review gate - generates handoff context for the reviewer
+argument-hint: [review focus]
 allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(**/.claude/codex-review.local.md), Read(~/.claude/handoffs/**), Read(**/.claude/codex-review.local.md)
 ---
 
 # Start Codex Review Gate
 
 Create a review gate that triggers Codex CLI review when you exit.
+
+## Parse Arguments
+
+Arguments: $ARGUMENTS
+
+If arguments are provided, use them as the **review focus**. Otherwise use the default focus.
+
+**Examples:**
+- `/codex-reviewer:review` → default focus (verify changes and correctness)
+- `/codex-reviewer:review "focus on security vulnerabilities"` → security review
+- `/codex-reviewer:review "verify error handling and edge cases"` → error handling review
 
 ## Step 0: Check for Existing Gate
 
@@ -33,8 +45,12 @@ Then exit. The stop hook will automatically run Codex and either:
 
 ## Step 1: Generate Review Context
 
-First, invoke the `/handoff` skill with this focus:
+First, invoke the `/handoff` skill with the review focus.
 
+**If custom focus provided (from $ARGUMENTS):**
+> Generate a handoff for a code reviewer. {custom focus from arguments}
+
+**Default focus (no arguments):**
 > Generate a handoff for a code reviewer who will verify the changes made in this session. Focus on what was changed, why, and how to verify correctness.
 
 The handoff will be written to `~/.claude/handoffs/handoff-<repo>-<shortname>.md` (where `<shortname>` is derived from the branch name).
