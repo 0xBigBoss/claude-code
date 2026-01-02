@@ -53,12 +53,44 @@ python3 ~/.claude/skills/extract-transcripts/extract_codex_transcript.py ~/.code
 ## Session File Locations
 
 ### Claude Code
-- macOS: `~/Library/Application Support/Claude/sessions/`
-- Linux: `~/.config/claude/sessions/`
+- Sessions: `~/.claude/projects/<project-path>/<session-id>.jsonl`
 
 ### Codex CLI
 - Sessions: `~/.codex/sessions/<session_id>/rollout.jsonl`
 - History: `~/.codex/history.jsonl`
+
+## DuckDB-Based Transcript Index
+
+For querying across many sessions, use the DuckDB-based indexer:
+
+```bash
+# Index all sessions (incremental - only new/changed files)
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py index
+
+# Force full reindex
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py index --full
+
+# Limit number of files to process
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py index --limit 10
+
+# List recent sessions
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py recent
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py recent --limit 20
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py recent --project myapp
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py recent --since 7d
+
+# Search across sessions
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py search "error handling"
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py search "query" --cwd ~/myproject
+
+# Show a session transcript
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py show <file_path>
+python3 ~/.claude/skills/extract-transcripts/transcript_index.py show <file_path> --summary
+```
+
+**Requirements:** DuckDB (`pip install duckdb`)
+
+**Database location:** `~/.claude/transcript-index/sessions.duckdb`
 
 ## Output Format
 
