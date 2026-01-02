@@ -19,8 +19,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 // --- Version ---
-const HOOK_VERSION = "2026-01-02T00:00:00Z";
-const HOOK_BUILD = "v1.2.0";
+const HOOK_VERSION = "2026-01-02T12:00:00Z";
+const HOOK_BUILD = "v1.3.0";
 
 // --- Timeout Constants ---
 // Must align with plugin.json hook timeout
@@ -951,7 +951,9 @@ ${resolvedList}
 ${issuesList}
 ${notesSection}
 
-Address ALL open issues above, then try to exit again when complete.
+Address ALL open issues above. When done, simply exit - the review gate is still active and will trigger the next review automatically.
+
+**Do NOT call \`/codex-reviewer:review\` again** - that would reset the review cycle. Just exit when ready.
 
 ---
 

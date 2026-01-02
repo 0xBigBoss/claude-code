@@ -1,11 +1,35 @@
 ---
 description: Start a Codex review gate - generates handoff context for the reviewer
-allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(**/.claude/codex-review.local.md), Read(~/.claude/handoffs/**)
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(**/.claude/codex-review.local.md), Read(~/.claude/handoffs/**), Read(**/.claude/codex-review.local.md)
 ---
 
 # Start Codex Review Gate
 
 Create a review gate that triggers Codex CLI review when you exit.
+
+## Step 0: Check for Existing Gate
+
+**IMPORTANT**: Before creating a new gate, check if one already exists:
+
+```bash
+STATE_FILE="$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/codex-review.local.md"
+cat "$STATE_FILE" 2>/dev/null || echo "NO_STATE_FILE"
+```
+
+**If a state file exists with `active: true`:**
+
+The review gate is already active. Do NOT create a new one - that would reset the review count!
+
+Simply output:
+```
+Review gate already active. Exiting to trigger next review cycle...
+```
+
+Then exit. The stop hook will automatically run Codex and either:
+- APPROVE: exit succeeds
+- REJECT: you receive feedback and continue working
+
+**Only proceed to Step 1 if no state file exists or `active: false`.**
 
 ## Step 1: Generate Review Context
 
