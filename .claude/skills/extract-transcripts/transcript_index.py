@@ -18,9 +18,14 @@ except ImportError:
 
 # Default paths
 DEFAULT_DB_PATH = Path.home() / ".claude" / "transcript-index" / "sessions.duckdb"
-DEFAULT_SESSIONS_PATH = Path.home() / ".claude" / "projects"
+# Check both possible session locations
+DEFAULT_SESSIONS_PATHS = [
+    Path.home() / "Library" / "Application Support" / "Claude" / "sessions",  # macOS
+    Path.home() / ".claude" / "projects",  # Claude Code CLI projects
+    Path.home() / ".config" / "claude" / "sessions",  # Linux
+]
 
-# Schema - DuckDB uses sequences for auto-increment
+# Schema - matches PLAN.md
 SCHEMA = """
 -- sessions table: file_path is the unique key (not session_id)
 CREATE TABLE IF NOT EXISTS sessions (
@@ -41,28 +46,31 @@ CREATE TABLE IF NOT EXISTS sessions (
     indexed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- messages table (no auto-increment, use composite key)
+-- messages table with id and foreign key reference
+CREATE SEQUENCE IF NOT EXISTS messages_id_seq;
 CREATE TABLE IF NOT EXISTS messages (
-    file_path TEXT NOT NULL,
+    id INTEGER DEFAULT nextval('messages_id_seq') PRIMARY KEY,
+    file_path TEXT NOT NULL REFERENCES sessions(file_path),
     message_idx INTEGER NOT NULL,
     role TEXT NOT NULL,
     content TEXT,
     timestamp TIMESTAMP,
     has_thinking BOOLEAN DEFAULT FALSE,
-    PRIMARY KEY(file_path, message_idx)
+    UNIQUE(file_path, message_idx)
 );
 
--- tool_calls table (use sequence for ID)
+-- tool_calls table with id and foreign key reference
 CREATE SEQUENCE IF NOT EXISTS tool_calls_id_seq;
 CREATE TABLE IF NOT EXISTS tool_calls (
-    id INTEGER DEFAULT nextval('tool_calls_id_seq'),
-    file_path TEXT NOT NULL,
+    id INTEGER DEFAULT nextval('tool_calls_id_seq') PRIMARY KEY,
+    file_path TEXT NOT NULL REFERENCES sessions(file_path),
     message_idx INTEGER,
     tool_name TEXT NOT NULL
 );
 
--- Index for content search
+-- Indexes for search and lookup
 CREATE INDEX IF NOT EXISTS idx_messages_file_path ON messages(file_path);
+CREATE INDEX IF NOT EXISTS idx_messages_content ON messages(content);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_file_path ON tool_calls(file_path);
 """
 
@@ -270,7 +278,7 @@ def index_file(file_path: Path, con: duckdb.DuckDBPyConnection) -> bool:
     # Insert messages
     for msg in data['messages']:
         con.execute("""
-            INSERT OR REPLACE INTO messages (file_path, message_idx, role, content, timestamp, has_thinking)
+            INSERT INTO messages (file_path, message_idx, role, content, timestamp, has_thinking)
             VALUES (?, ?, ?, ?, ?, ?)
         """, [
             str(file_path),
@@ -308,14 +316,27 @@ def cleanup_deleted_files(con: duckdb.DuckDBPyConnection) -> int:
 
 def cmd_index(args, con: duckdb.DuckDBPyConnection):
     """Index command handler."""
-    sessions_path = Path(args.path) if args.path else DEFAULT_SESSIONS_PATH
+    if args.path:
+        # User-specified path - expand ~ and check existence
+        sessions_path = Path(args.path).expanduser()
+        if not sessions_path.exists():
+            print(f"Error: Sessions directory not found: {sessions_path}", file=sys.stderr)
+            sys.exit(1)
+        sessions_paths = [sessions_path]
+    else:
+        # Use default paths - check all that exist
+        sessions_paths = [p for p in DEFAULT_SESSIONS_PATHS if p.exists()]
+        if not sessions_paths:
+            print("Error: No sessions directory found. Checked:", file=sys.stderr)
+            for p in DEFAULT_SESSIONS_PATHS:
+                print(f"  - {p}", file=sys.stderr)
+            sys.exit(1)
 
-    if not sessions_path.exists():
-        print(f"Error: Sessions directory not found: {sessions_path}", file=sys.stderr)
-        sys.exit(1)
-
-    # Get all JSONL files (recursively for project directories)
-    files = sorted(sessions_path.glob('**/*.jsonl'), key=lambda p: p.stat().st_mtime, reverse=True)
+    # Get all JSONL files from all paths (recursively for project directories)
+    all_files = []
+    for sessions_path in sessions_paths:
+        all_files.extend(sessions_path.glob('**/*.jsonl'))
+    files = sorted(all_files, key=lambda p: p.stat().st_mtime, reverse=True)
 
     if args.limit:
         files = files[:args.limit]
@@ -358,14 +379,18 @@ def cmd_recent(args, con: duckdb.DuckDBPyConnection):
     if args.since:
         # Parse duration like "7d", "24h"
         since = args.since.lower()
-        if since.endswith('d'):
-            days = int(since[:-1])
-            cutoff = datetime.now() - timedelta(days=days)
-        elif since.endswith('h'):
-            hours = int(since[:-1])
-            cutoff = datetime.now() - timedelta(hours=hours)
-        else:
-            print(f"Invalid --since format: {args.since}. Use '7d' or '24h'", file=sys.stderr)
+        try:
+            if since.endswith('d'):
+                days = int(since[:-1])
+                cutoff = datetime.now() - timedelta(days=days)
+            elif since.endswith('h'):
+                hours = int(since[:-1])
+                cutoff = datetime.now() - timedelta(hours=hours)
+            else:
+                print(f"Invalid --since format: {args.since}. Use '7d' or '24h'", file=sys.stderr)
+                sys.exit(1)
+        except ValueError:
+            print(f"Invalid --since value: {args.since}. Use format like '7d' or '24h'", file=sys.stderr)
             sys.exit(1)
         conditions.append("started_at >= ?")
         params.append(cutoff)
@@ -528,7 +553,7 @@ def main():
 
     # index command
     index_parser = subparsers.add_parser('index', help='Index session files')
-    index_parser.add_argument('--path', type=str, help=f'Sessions directory (default: {DEFAULT_SESSIONS_PATH})')
+    index_parser.add_argument('--path', type=str, help='Sessions directory (default: auto-detect)')
     index_parser.add_argument('--full', action='store_true', help='Force full reindex')
     index_parser.add_argument('--limit', type=int, help='Limit number of files to process')
     index_parser.add_argument('--quiet', '-q', action='store_true', help='Quiet mode')

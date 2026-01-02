@@ -9,6 +9,10 @@
 - [x] Implement show command (iteration 1)
 - [x] Update SKILL.md documentation (iteration 1)
 - [x] Run verification loop - all commands tested successfully (iteration 1)
+- [x] Fix DEFAULT_SESSIONS_PATH to check multiple locations (iteration 2)
+- [x] Add expanduser() for --path argument (iteration 2)
+- [x] Fix schema to match PLAN.md with proper id, foreign keys, and indexes (iteration 2)
+- [x] Add error handling for --since parsing with ValueError (iteration 2)
 
 ## In Progress
 - None
@@ -20,7 +24,8 @@
 - None
 
 ## Notes
-- DuckDB uses different syntax than SQLite (no AUTOINCREMENT, use sequences)
-- Session files are in ~/.claude/projects/ not ~/Library/Application Support/Claude/sessions/
+- DuckDB uses sequences for auto-increment (not AUTOINCREMENT keyword)
+- Session files found in ~/.claude/projects/ (macOS may also have ~/Library/Application Support/Claude/sessions/)
+- Script checks multiple default paths for sessions
 - Incremental indexing uses file mtime + size for change detection
-- Required: `pip install duckdb` (uses venv at /tmp/transcript-venv for testing)
+- Required: `pip install duckdb`
