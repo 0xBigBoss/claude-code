@@ -81,6 +81,15 @@ Use this XML-tagged structure:
 [Files involved with brief descriptions of changes/relevance]
 </key_files>
 
+<spec>
+[OPTIONAL - Include ONLY if a spec, requirements doc, or acceptance criteria exists for this work.
+Reference the spec file path and summarize key requirements. Examples:
+- "See SPEC.md for full requirements. Key criteria: ..."
+- "From issue #123: must support X, Y, Z"
+- "Acceptance criteria from ticket: ..."
+Omit this section entirely if no spec exists.]
+</spec>
+
 <next_steps>
 [Action-oriented tasks for the receiving agent. Be specific. Examples:
 - "Continue implementing the X feature by adding Y to Z file"
