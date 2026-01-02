@@ -19,8 +19,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 // --- Version ---
-const HOOK_VERSION = "2026-01-02T12:00:00Z";
-const HOOK_BUILD = "v1.3.0";
+const HOOK_VERSION = "2026-01-02T20:30:00Z";
+const HOOK_BUILD = "v1.4.0";
 
 // --- Timeout Constants ---
 // Must align with plugin.json hook timeout
@@ -210,9 +210,18 @@ interface HookInput {
   hook_event_name: "Stop";
 }
 
+/**
+ * Hook output schema for Claude Code stop hooks.
+ * See: https://code.claude.com/docs/en/hooks.md
+ *
+ * - decision: "approve" allows exit, "block" prevents it
+ * - reason: Message shown to Claude when blocking (ignored on approve)
+ * - systemMessage: Optional message shown to user regardless of decision
+ */
 interface HookOutput {
   decision: "approve" | "block";
   reason?: string;
+  systemMessage?: string;
 }
 
 interface ReviewIssue {
@@ -896,7 +905,17 @@ ${reviewResult.errorMessage}
     if (reviewResult.status === "approved") {
       debug(`[codex-reviewer] Codex approved! Exiting.`);
       cleanupStateFile(stateFilePath);
-      output({ decision: "approve" });
+
+      // Build approval summary for user visibility
+      const notesLine = reviewResult.notes ? `\n**Reviewer notes:** ${reviewResult.notes}` : "";
+      const approvalMessage = `# Codex Review: APPROVED
+
+**Review cycle:** ${state.review_count + 1}/${state.max_review_cycles}
+**Files reviewed:** ${state.files_changed.length > 0 ? state.files_changed.join(", ") : "(from git diff)"}${notesLine}
+
+The review gate has been cleared. You may now exit or continue with next steps.`;
+
+      output({ decision: "approve", systemMessage: approvalMessage });
       return;
     }
 

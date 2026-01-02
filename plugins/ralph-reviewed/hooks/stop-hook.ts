@@ -29,8 +29,8 @@ import { homedir } from "node:os";
 
 // --- Version ---
 // Update this when making changes to help diagnose cached code issues
-const HOOK_VERSION = "2026-01-02T00:00:00Z";
-const HOOK_BUILD = "v1.6.0";
+const HOOK_VERSION = "2026-01-02T20:30:00Z";
+const HOOK_BUILD = "v1.7.0";
 
 // --- User Config ---
 // User preferences stored in ~/.claude/ralphs/config.json
@@ -224,9 +224,18 @@ interface HookInput {
   hook_event_name: "Stop";
 }
 
+/**
+ * Hook output schema for Claude Code stop hooks.
+ * See: https://code.claude.com/docs/en/hooks.md
+ *
+ * - decision: "approve" allows exit, "block" prevents it
+ * - reason: Message shown to Claude when blocking (ignored on approve)
+ * - systemMessage: Optional message shown to user regardless of decision
+ */
 interface HookOutput {
   decision: "approve" | "block";
   reason?: string;
+  systemMessage?: string;
 }
 
 interface ReviewIssue {
@@ -879,7 +888,14 @@ async function main() {
       crash("BLOCKED claimed - terminating loop without review");
       debug(`[ralph-reviewed] BLOCKED signal received. Terminating loop without review.`);
       cleanupStateFile(stateFilePath);
-      output({ decision: "approve" });
+      output({
+        decision: "approve",
+        systemMessage: `# Ralph Loop: BLOCKED
+
+**Iteration:** ${state.iteration}/${state.max_iterations}
+
+Task reported as blocked. Loop terminated without review.`
+      });
       return;
     }
 
@@ -892,7 +908,14 @@ async function main() {
         // Max iterations reached - allow exit
         debug(`[ralph-reviewed] Max iterations (${state.max_iterations}) reached, exiting loop`);
         cleanupStateFile(stateFilePath);
-        output({ decision: "approve" });
+        output({
+          decision: "approve",
+          systemMessage: `# Ralph Loop: Max Iterations Reached
+
+**Iteration:** ${state.iteration}/${state.max_iterations}
+
+Loop ended without completion claim. Review the work and consider restarting if needed.`
+        });
         return;
       }
 
@@ -972,7 +995,17 @@ Codex requires a git repository to run. The current directory is not inside a gi
       // Approved - allow exit
       debug(`[ralph-reviewed] Codex approved! Exiting loop.`);
       cleanupStateFile(stateFilePath);
-      output({ decision: "approve" });
+
+      // Build approval summary for user visibility
+      const notesLine = reviewResult.notes ? `\n**Reviewer notes:** ${reviewResult.notes}` : "";
+      const approvalMessage = `# Ralph Loop: Codex APPROVED
+
+**Iteration:** ${state.iteration}/${state.max_iterations}
+**Review cycle:** ${state.review_count + 1}/${state.max_review_cycles}${notesLine}
+
+The review gate has been cleared. Task completed successfully.`;
+
+      output({ decision: "approve", systemMessage: approvalMessage });
       return;
     }
 
@@ -985,7 +1018,24 @@ Codex requires a git repository to run. The current directory is not inside a gi
         `[ralph-reviewed] Max review cycles (${state.max_review_cycles}) reached. Issues: ${reviewResult.issues.length}`
       );
       cleanupStateFile(stateFilePath);
-      output({ decision: "approve" });
+
+      // Build summary with remaining issues
+      const remainingIssues = reviewResult.issues.length > 0
+        ? reviewResult.issues.map(i => `- [ISSUE-${i.id}] ${i.severity}: ${i.description}`).join("\n")
+        : "(no issues parsed)";
+
+      output({
+        decision: "approve",
+        systemMessage: `# Ralph Loop: Max Review Cycles Reached
+
+**Iteration:** ${state.iteration}/${state.max_iterations}
+**Review cycle:** ${state.review_count}/${state.max_review_cycles}
+
+**Unresolved issues:**
+${remainingIssues}
+
+Loop ended without Codex approval. Review remaining issues manually.`
+      });
       return;
     }
 
