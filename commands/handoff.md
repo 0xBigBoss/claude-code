@@ -12,7 +12,7 @@ Generate a prompt for handing off work to another AI agent (Codex, Claude Code).
 
 **Working Directory**: !`pwd`
 
-**Repository**: !`basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`
+**Repository**: !`git rev-parse --show-toplevel 2>/dev/null | xargs basename || echo "unknown"`
 
 **Branch**: !`git branch --show-current 2>/dev/null || echo "detached/unknown"`
 
