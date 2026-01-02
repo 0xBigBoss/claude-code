@@ -19,8 +19,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 // --- Version ---
-const HOOK_VERSION = "2025-12-31T00:00:00Z";
-const HOOK_BUILD = "v1.1.0";
+const HOOK_VERSION = "2026-01-02T00:00:00Z";
+const HOOK_BUILD = "v1.1.1";
 
 // --- Timeout Constants ---
 // Must align with plugin.json hook timeout
@@ -584,7 +584,7 @@ Review ${reviewCount + 1}/${maxReviews}.`;
       cwd,
       encoding: "utf-8",
       timeout: timeoutMs,
-      maxBuffer: 1024 * 1024,
+      maxBuffer: 16 * 1024 * 1024,
       input: reviewPrompt,
     });
 

@@ -29,8 +29,8 @@ import { homedir } from "node:os";
 
 // --- Version ---
 // Update this when making changes to help diagnose cached code issues
-const HOOK_VERSION = "2026-01-01T00:00:00Z";
-const HOOK_BUILD = "v1.5.0";
+const HOOK_VERSION = "2026-01-02T00:00:00Z";
+const HOOK_BUILD = "v1.5.1";
 
 // --- User Config ---
 // User preferences stored in ~/.claude/ralphs/config.json
@@ -682,7 +682,7 @@ Review ${reviewCount + 1}/${maxReviews}.`;
       cwd,
       encoding: "utf-8",
       timeout: timeoutMs,
-      maxBuffer: 1024 * 1024,
+      maxBuffer: 16 * 1024 * 1024,
       input: reviewPrompt,  // pass prompt via stdin
     });
 
