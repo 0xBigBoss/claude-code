@@ -1,8 +1,21 @@
+---
+description: Start a Codex review gate - generates handoff context for the reviewer
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(**/.claude/codex-review.local.md), Read(~/.claude/handoffs/**)
+---
+
 # Start Codex Review Gate
 
 Create a review gate that triggers Codex CLI review when you exit.
 
-## Instructions
+## Step 1: Generate Review Context
+
+First, invoke the `/handoff` skill with this focus:
+
+> Generate a handoff for a code reviewer who will verify the changes made in this session. Focus on what was changed, why, and how to verify correctness.
+
+The handoff will be written to `~/.claude/handoffs/handoff-<repo>-<shortname>.md` (where `<shortname>` is derived from the branch name).
+
+## Step 2: Create State File
 
 1. **Find the state directory** (git root, or cwd if not in a repo):
    ```bash
@@ -10,14 +23,20 @@ Create a review gate that triggers Codex CLI review when you exit.
    mkdir -p "$STATE_DIR"
    ```
 
-2. **Create the state file** at `{STATE_DIR}/codex-review.local.md` (MUST be at git root, not subdirectory)
+2. **Read the handoff** you just generated from `~/.claude/handoffs/handoff-<repo>-<shortname>.md`
 
-3. **State file format:**
+3. **Get files changed** from git:
+   ```bash
+   git status --porcelain
+   ```
+
+4. **Create the state file** at `{STATE_DIR}/codex-review.local.md`:
+
 ```yaml
 ---
 active: true
 task_description: |
-  [Summarize the task/work completed - extract from conversation context]
+  [PASTE THE ENTIRE HANDOFF CONTENT HERE - all XML sections]
 files_changed: ["file1.ts", "file2.ts"]
 review_count: 0
 max_review_cycles: 5
@@ -31,32 +50,29 @@ debug: false
 Review gate active. Run `/codex-reviewer:cancel` to abort.
 ```
 
-4. **Populate task_description** from:
-   - The original user request
-   - Summary of work completed
-   - Success criteria if mentioned
+The `task_description` should contain the FULL handoff with all sections:
+- `<role>` - reviewer framing
+- `<context>` - what was done and why
+- `<current_state>` - completion status
+- `<key_files>` - files changed with descriptions
+- `<next_steps>` - what the reviewer should verify
 
-5. **Populate files_changed** with files you modified (check git status)
+This gives Codex rich context about the work, not just a summary.
 
-6. **Output a summary** of work completed for the user
+## Step 3: Confirm and Exit
 
-7. **Exit** to trigger the review gate - the stop hook will intercept and call Codex
-
-## Example
+Output a brief summary for the user:
 
 ```markdown
 ## Work Summary
 
-I've implemented the user authentication feature:
-- Created `src/auth/jwt.ts` with token generation
-- Added `src/middleware/auth.ts` for route protection
-- Updated `src/routes/user.ts` with login/logout endpoints
+[2-3 bullet points of what was done]
 
 Review gate is now active. Exiting to trigger Codex review...
 ```
 
 Then exit. The stop hook will:
-1. Call Codex CLI with the review prompt
+1. Call Codex CLI with the review prompt (using your handoff as context)
 2. If APPROVE: allow exit, clean up state
 3. If REJECT: block exit, inject feedback for you to address
 
