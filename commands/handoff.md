@@ -12,15 +12,15 @@ Generate a prompt for handing off work to another AI agent (Codex, Claude Code).
 
 **Working Directory**: !`pwd`
 
-**Repository**: !`git rev-parse --show-toplevel`
+**Repository**: !`git rev-parse --show-toplevel 2>/dev/null || echo "Not a git repository"`
 
-**Branch**: !`git branch --show-current`
+**Branch**: !`git branch --show-current 2>/dev/null || echo "N/A"`
 
-**Uncommitted changes**: !`git diff --stat`
+**Uncommitted changes**: !`git diff --stat 2>/dev/null || echo "N/A"`
 
-**Staged changes**: !`git diff --cached --stat`
+**Staged changes**: !`git diff --cached --stat 2>/dev/null || echo "N/A"`
 
-**Recent commits (last 4 hours)**: !`git log --oneline -5 --since="4 hours ago"`
+**Recent commits (last 4 hours)**: !`git log --oneline -5 --since="4 hours ago" 2>/dev/null || echo "N/A"`
 
 ## Session Context
 
@@ -38,7 +38,13 @@ $ARGUMENTS
 
 ## Task
 
-Write a handoff prompt to `~/.claude/handoffs/handoff-<repo>-<shortname>.md` where `<repo>` is the repository name and `<shortname>` is derived from the branch name (e.g., `handoff-myapp-sen-69.md`, `handoff-api-fix-auth.md`). Copy to clipboard after writing.
+Write a handoff prompt to `~/.claude/handoffs/handoff-<repo>-<shortname>.md` where:
+- `<repo>` is the repository name (or directory basename if not a git repo)
+- `<shortname>` is derived from the branch name, or use `main` if not in a git repo
+
+Examples: `handoff-myapp-sen-69.md`, `handoff-api-fix-auth.md`, `handoff-scripts-main.md`
+
+Copy to clipboard after writing.
 
 The prompt must be standalone and actionable for an agent with zero prior context.
 
@@ -103,8 +109,8 @@ Omit this section entirely if no spec exists.]
 1. Ensure directory exists: `mkdir -p ~/.claude/handoffs`
 
 2. Write the handoff prompt to `~/.claude/handoffs/handoff-<repo>-<shortname>.md` where:
-   - `<repo>` is the repository basename
-   - `<shortname>` is derived from the branch name (e.g., `handoff-myapp-sen-69.md`, `handoff-api-fix-auth.md`)
+   - `<repo>` is the repository basename (or directory basename if not a git repo)
+   - `<shortname>` is derived from the branch name, or `main` if not in a git repo
 
 3. Copy to clipboard: `cat ~/.claude/handoffs/<filename> | pbcopy`
 
