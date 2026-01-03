@@ -7,6 +7,9 @@
 - [x] Verified all 4915 sessions indexed without errors (iteration 1)
 - [x] Verified search command works (iteration 1)
 - [x] Verified recent command works (iteration 1)
+- [x] Removed .claude/ralph-loop.local.md from VCS (iteration 2)
+- [x] Removed __pycache__ from VCS (iteration 2)
+- [x] Added .gitignore with proper ignore rules (iteration 2)
 
 ## In Progress
 - None

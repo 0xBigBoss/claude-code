@@ -1,0 +1,11 @@
+# Ralph loop state (managed by hook, not tracked in VCS)
+.claude/ralph-loop.local.md
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# DuckDB database files
+*.duckdb
+*.duckdb.wal
