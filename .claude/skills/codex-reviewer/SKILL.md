@@ -49,61 +49,85 @@ interface CodexConfig {
 
 ## Review Prompt Structure
 
-Structure prompts with clear sections for context and expectations:
+Structure prompts with the CRITICAL output requirement upfront to prevent malformed responses:
 
 ```markdown
 # Code Review
 
-Review work completed by Claude in an iterative loop. Claude claims the task is complete.
+## CRITICAL: Required Output Format
 
-## Assignment
-${originalPrompt}
+Your response MUST end with exactly one of these verdict tags:
+
+<review>APPROVE</review>
+
+OR
+
+<review>REJECT</review>
+<issues>
+[ISSUE-N] severity: description
+</issues>
+
+The <review> tag is MANDATORY. Without it, your review cannot be processed and will be rejected. Do not output status messages like "Checked working directory" - you must complete the full review and output the verdict tag.
+
+---
+
+## Task to Review
+
+Claude claims this task is complete and ready for review:
+
+${taskDescription}
 
 ## Git Context
-**Working Directory**: `pwd`
-**Repository**: `basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`
-**Branch**: `git branch --show-current 2>/dev/null || echo "detached/unknown"`
-**Uncommitted changes**: `git diff --stat 2>/dev/null || echo "None"`
-**Staged changes**: `git diff --cached --stat 2>/dev/null || echo "None"`
-**Recent commits (last 4 hours)**: `git log --oneline -5 --since="4 hours ago" 2>/dev/null || echo "None"`
+
+${filesSection}Run these commands to gather context:
+- Working directory: run `pwd`
+- Repository name: run `basename "$(git rev-parse --show-toplevel)"`
+- Current branch: run `git branch --show-current`
+- Uncommitted changes: run `git diff --stat`
+- Staged changes: run `git diff --cached --stat`
+- Recent commits: run `git log --oneline -5 --since="4 hours ago"`
 
 ${previousReviewHistory}
 
 ## Review Process
+
 1. Understand the task (read referenced files as needed)
-2. Review git changes (`git diff`, `git diff --cached`, `git log`, etc.)
+2. Review git changes (git diff, git diff --cached, git log)
 3. Run verification commands from success criteria if applicable
 4. Check ALL requirements - be thorough, not superficial
+5. Output your verdict using the REQUIRED format below
 
-## Output Format
+## Output Format (MANDATORY)
 
 If approved:
-\`\`\`
 <review>APPROVE</review>
 <notes>Optional notes for the record</notes>
-\`\`\`
 
 If issues found:
-\`\`\`
 <review>REJECT</review>
 <resolved>
 [ISSUE-1] How you verified this previous issue is now fixed
 </resolved>
 <issues>
-[ISSUE-1] severity: Description of the issue
-[ISSUE-2] severity: Description of another issue
+[ISSUE-N] severity: Description of the issue
 </issues>
 <notes>Optional notes visible to future review cycles</notes>
-\`\`\`
 
-- Severity levels: `critical` (blocking), `major` (significant), `minor` (nice to fix)
-- Issue IDs must be unique across all cycles - continue numbering from previous reviews (don't restart at ISSUE-1)
-- `<resolved>` section: List any previous issues you verified as fixed (omit if none or first review)
-- `<notes>` section: Optional, visible to future review cycles
+Rules:
+- Severity levels: critical (blocking), major (significant), minor (nice to fix)
+- Issue IDs must be unique across all cycles - continue numbering from previous reviews
+- <resolved> section: List previous issues verified as fixed (omit if none or first review)
+- <notes> section: Optional, visible to future review cycles
 - Be thorough - report ALL issues found
 
-Review ${currentCycle}/${maxCycles}.
+Review ${currentCycle}/${maxCycles}. Remember: your response MUST contain <review>APPROVE</review> or <review>REJECT</review>.
 ```
+
+**Key prompt design decisions:**
+- Output requirement at the TOP, not buried at the end
+- Explicit anti-pattern warning ("Do not output status messages...")
+- Commands as instructions ("run `pwd`") not inline templates
+- Repeated reminder at the end
 
 ## Output Format Specification
 

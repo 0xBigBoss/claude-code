@@ -19,8 +19,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 // --- Version ---
-const HOOK_VERSION = "2026-01-02T20:30:00Z";
-const HOOK_BUILD = "v1.4.0";
+const HOOK_VERSION = "2026-01-03T04:30:00Z";
+const HOOK_BUILD = "v1.5.0";
 
 // --- Timeout Constants ---
 // Must align with plugin.json hook timeout
@@ -495,54 +495,71 @@ function callCodexReview(
 
   const reviewPrompt = `# Code Review
 
-Review work completed by Claude. Claude claims the task is complete and ready for review.
+## CRITICAL: Required Output Format
 
-## Task
+Your response MUST end with exactly one of these verdict tags:
+
+<review>APPROVE</review>
+
+OR
+
+<review>REJECT</review>
+<issues>
+[ISSUE-N] severity: description
+</issues>
+
+The <review> tag is MANDATORY. Without it, your review cannot be processed and will be rejected. Do not output status messages like "Checked working directory" - you must complete the full review and output the verdict tag.
+
+---
+
+## Task to Review
+
+Claude claims this task is complete and ready for review:
+
 ${taskDescription}
 
 ## Git Context
-${filesSection}
-**Working Directory**: \`pwd\`
-**Repository**: \`basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"\`
-**Branch**: \`git branch --show-current 2>/dev/null || echo "detached/unknown"\`
-**Uncommitted changes**: \`git diff --stat 2>/dev/null || echo "None"\`
-**Staged changes**: \`git diff --cached --stat 2>/dev/null || echo "None"\`
-**Recent commits (last 4 hours)**: \`git log --oneline -5 --since="4 hours ago" 2>/dev/null || echo "None"\`
+
+${filesSection}Run these commands to gather context:
+- Working directory: run \`pwd\`
+- Repository name: run \`basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"\`
+- Current branch: run \`git branch --show-current\`
+- Uncommitted changes: run \`git diff --stat\`
+- Staged changes: run \`git diff --cached --stat\`
+- Recent commits: run \`git log --oneline -5 --since="4 hours ago"\`
 
 ${historySection}## Review Process
+
 1. Understand the task (read referenced files as needed)
-2. Review git changes (\`git diff\`, \`git diff --cached\`, \`git log\`, etc.)
+2. Review git changes (git diff, git diff --cached, git log)
 3. Run verification commands from success criteria if applicable
 4. Check ALL requirements - be thorough, not superficial
+5. Output your verdict using the REQUIRED format below
 
-## Output Format
+## Output Format (MANDATORY)
 
 If approved:
-\`\`\`
 <review>APPROVE</review>
 <notes>Optional notes for the record</notes>
-\`\`\`
 
 If issues found:
-\`\`\`
 <review>REJECT</review>
 <resolved>
 [ISSUE-1] How you verified this previous issue is now fixed
 </resolved>
 <issues>
-[ISSUE-1] severity: Description of the issue
-[ISSUE-2] severity: Description of another issue
+[ISSUE-N] severity: Description of the issue
 </issues>
 <notes>Optional notes visible to future review cycles</notes>
-\`\`\`
 
-- Severity levels: \`critical\` (blocking), \`major\` (significant), \`minor\` (nice to fix)
-- Issue IDs must be unique across all cycles - continue numbering from previous reviews (don't restart at ISSUE-1)
-- \`<resolved>\` section: List any previous issues you verified as fixed (omit if none or first review)
-- \`<notes>\` section: Optional, visible to future review cycles
+Rules:
+- Severity levels: critical (blocking), major (significant), minor (nice to fix)
+- Issue IDs must be unique across all cycles - continue numbering from previous reviews
+- <resolved> section: List previous issues verified as fixed (omit if none or first review)
+- <notes> section: Optional, visible to future review cycles
 - Be thorough - report ALL issues found
 
-Review ${reviewCount + 1}/${maxReviews}.`;
+Review ${reviewCount + 1}/${maxReviews}. Remember: your response MUST contain <review>APPROVE</review> or <review>REJECT</review>.`;
 
   const uniqueId = Date.now();
   const outputFile = `/tmp/codex-review-output-${uniqueId}.txt`;
