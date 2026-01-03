@@ -69,8 +69,9 @@ CREATE TABLE IF NOT EXISTS tool_calls (
 );
 
 -- Indexes for search and lookup
+-- Note: No index on messages.content - ILIKE search works without it and
+-- avoids DuckDB's ART index key size limit (122KB) for large message content
 CREATE INDEX IF NOT EXISTS idx_messages_file_path ON messages(file_path);
-CREATE INDEX IF NOT EXISTS idx_messages_content ON messages(content);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_file_path ON tool_calls(file_path);
 """
 
