@@ -12,15 +12,15 @@ Generate a prompt for handing off work to another AI agent (Codex, Claude Code).
 
 **Working Directory**: !`pwd`
 
-**Repository**: !`git rev-parse --show-toplevel 2>/dev/null | xargs basename || echo "unknown"`
+**Repository**: !`git rev-parse --show-toplevel`
 
-**Branch**: !`git branch --show-current 2>/dev/null || echo "detached/unknown"`
+**Branch**: !`git branch --show-current`
 
-**Uncommitted changes**: !`git diff --stat 2>/dev/null || echo "None"`
+**Uncommitted changes**: !`git diff --stat`
 
-**Staged changes**: !`git diff --cached --stat 2>/dev/null || echo "None"`
+**Staged changes**: !`git diff --cached --stat`
 
-**Recent commits (last 4 hours)**: !`git log --oneline -5 --since="4 hours ago" 2>/dev/null || echo "None"`
+**Recent commits (last 4 hours)**: !`git log --oneline -5 --since="4 hours ago"`
 
 ## Session Context
 
