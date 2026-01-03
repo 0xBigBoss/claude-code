@@ -245,13 +245,55 @@ interface ReviewHistoryEntry {
 
 interface ReviewState {
   active: boolean;
-  task_description: string;
+  handoff_path: string | null;  // Path to handoff file (preferred)
+  task_description: string | null;  // Embedded content (backwards compat)
   files_changed: string[];
   review_count: number;
   max_review_cycles: number;
   review_history: ReviewHistoryEntry[];
   timestamp: string;
   debug: boolean;
+}
+
+// --- Handoff File Reading ---
+
+/**
+ * Read the handoff file content.
+ * Returns null if file doesn't exist or can't be read.
+ */
+function readHandoffFile(handoffPath: string): string | null {
+  try {
+    // Expand ~ to home directory
+    const expandedPath = handoffPath.replace(/^~/, homedir());
+    if (existsSync(expandedPath)) {
+      const content = readFileSync(expandedPath, "utf-8");
+      crash(`Read handoff file: ${expandedPath} (${content.length} chars)`);
+      return content;
+    }
+    crash(`Handoff file not found: ${expandedPath}`);
+    return null;
+  } catch (e) {
+    crash(`Failed to read handoff file: ${handoffPath}`, e);
+    return null;
+  }
+}
+
+/**
+ * Get the task description for Codex review.
+ * Prefers reading from handoff_path, falls back to embedded task_description.
+ */
+function getTaskDescription(state: ReviewState): string | null {
+  // Prefer handoff file (latest content)
+  if (state.handoff_path) {
+    const content = readHandoffFile(state.handoff_path);
+    if (content) {
+      return content;
+    }
+    crash(`Handoff file missing, falling back to embedded task_description`);
+  }
+
+  // Fall back to embedded content (backwards compat)
+  return state.task_description;
 }
 
 // --- State File Parsing ---
@@ -351,6 +393,9 @@ function parseStateFile(content: string): ReviewState | null {
       state.timestamp = line.split(":").slice(1).join(":").trim().replace(/^["']|["']$/g, "");
     } else if (line.startsWith("debug:")) {
       state.debug = line.includes("true");
+    } else if (line.startsWith("handoff_path:")) {
+      const val = line.split(":").slice(1).join(":").trim().replace(/^["']|["']$/g, "");
+      state.handoff_path = val === "null" ? null : val;
     } else if (line.startsWith("review_history:")) {
       const val = line.split(":").slice(1).join(":").trim();
       if (val && val !== "[]") {
@@ -368,13 +413,15 @@ function parseStateFile(content: string): ReviewState | null {
     }
   }
 
-  if (state.active === undefined || !state.task_description) {
+  // Require either handoff_path or task_description (backwards compat)
+  if (state.active === undefined || (!state.handoff_path && !state.task_description)) {
     return null;
   }
 
   return {
     active: state.active,
-    task_description: state.task_description,
+    handoff_path: state.handoff_path ?? null,
+    task_description: state.task_description ?? null,
     files_changed: state.files_changed ?? [],
     review_count: state.review_count ?? 0,
     max_review_cycles: state.max_review_cycles ?? 5,
@@ -385,15 +432,23 @@ function parseStateFile(content: string): ReviewState | null {
 }
 
 function serializeState(state: ReviewState): string {
-  const descriptionIndented = state.task_description
-    .split("\n")
-    .map((line) => `  ${line}`)
-    .join("\n");
+  // Build task_description section (for backwards compat, or if no handoff_path)
+  let taskDescSection = "";
+  if (state.task_description) {
+    const descriptionIndented = state.task_description
+      .split("\n")
+      .map((line) => `  ${line}`)
+      .join("\n");
+    taskDescSection = `task_description: |
+${descriptionIndented}`;
+  } else {
+    taskDescSection = `task_description: null`;
+  }
 
   return `---
 active: ${state.active}
-task_description: |
-${descriptionIndented}
+handoff_path: ${state.handoff_path ? `"${state.handoff_path}"` : "null"}
+${taskDescSection}
 files_changed: ${JSON.stringify(state.files_changed)}
 review_count: ${state.review_count}
 max_review_cycles: ${state.max_review_cycles}
@@ -882,8 +937,25 @@ Codex requires a git repository to run. The current directory is not inside a gi
 
     debug(`[codex-reviewer] Review gate active, calling Codex...`);
 
+    // Get task description from handoff file (preferred) or embedded content (fallback)
+    const taskDescription = getTaskDescription(state);
+    if (!taskDescription) {
+      crash("No task description available - handoff file missing and no embedded content");
+      output({
+        decision: "block",
+        reason: `# Review Gate Error: No Task Description
+
+The handoff file could not be read and no embedded task description exists.
+
+**Handoff path:** \`${state.handoff_path || "(not set)"}\`
+
+**To fix:** Regenerate the handoff with \`/handoff\` or run \`/codex-reviewer:cancel\` to escape.`
+      });
+      return;
+    }
+
     const reviewResult = callCodexReview(
-      state.task_description,
+      taskDescription,
       state.files_changed,
       state.review_history,
       state.review_count,

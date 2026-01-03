@@ -30,16 +30,32 @@ cat "$STATE_FILE" 2>/dev/null || echo "NO_STATE_FILE"
 
 **If a state file exists with `active: true`:**
 
-The review gate is already active. Do NOT create a new one - that would reset the review count!
+The review gate is already active.
 
-Simply output:
+**ALLOWED when gate is active:**
+- Regenerate the handoff file (`/handoff`) to capture your latest work
+- The handoff file at `~/.claude/handoffs/` can be updated freely
+
+**FORBIDDEN when gate is active:**
+- Writing to the state file (`.claude/codex-review.local.md`)
+- Updating `review_count`, `review_history`, or `task_description`
+- Any `cat >` or `Write` to `codex-review.local.md`
+
+The stop hook owns all state file updates:
+- It increments `review_count` after each Codex review
+- It appends to `review_history` with Codex's feedback
+- It manages the review cycle lifecycle
+
+After updating the handoff (optional), output:
 ```
 Review gate already active. Exiting to trigger next review cycle...
 ```
 
-Then exit. The stop hook will automatically run Codex and either:
-- APPROVE: exit succeeds
-- REJECT: you receive feedback and continue working
+Then exit immediately. The stop hook will:
+- Run Codex with the task description
+- Update state file with review results
+- APPROVE: exit succeeds, state file deleted
+- REJECT: inject feedback, you continue working
 
 **Only proceed to Step 1 if no state file exists or `active: false`.**
 
@@ -63,7 +79,7 @@ The handoff will be written to `~/.claude/handoffs/handoff-<repo>-<shortname>.md
    mkdir -p "$STATE_DIR"
    ```
 
-2. **Read the handoff** you just generated from `~/.claude/handoffs/handoff-<repo>-<shortname>.md`
+2. **Note the handoff path** you just generated (e.g., `~/.claude/handoffs/handoff-<repo>-<shortname>.md`)
 
 3. **Get files changed** from git:
    ```bash
@@ -75,8 +91,8 @@ The handoff will be written to `~/.claude/handoffs/handoff-<repo>-<shortname>.md
 ```yaml
 ---
 active: true
-task_description: |
-  [PASTE THE ENTIRE HANDOFF CONTENT HERE - all XML sections]
+handoff_path: "~/.claude/handoffs/handoff-<repo>-<shortname>.md"
+task_description: null
 files_changed: ["file1.ts", "file2.ts"]
 review_count: 0
 max_review_cycles: 5
@@ -90,14 +106,7 @@ debug: false
 Review gate active. Run `/codex-reviewer:cancel` to abort.
 ```
 
-The `task_description` should contain the FULL handoff with all sections:
-- `<role>` - reviewer framing
-- `<context>` - what was done and why
-- `<current_state>` - completion status
-- `<key_files>` - files changed with descriptions
-- `<next_steps>` - what the reviewer should verify
-
-This gives Codex rich context about the work, not just a summary.
+**Important:** The `handoff_path` points to your handoff file. The stop hook reads this file at review time, so you can update the handoff between review cycles without touching the state file.
 
 ## Step 3: Confirm and Exit
 
