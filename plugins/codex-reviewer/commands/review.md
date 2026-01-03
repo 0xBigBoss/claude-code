@@ -1,6 +1,6 @@
 ---
 description: Start a Codex review gate - generates handoff context for the reviewer
-argument-hint: [review focus]
+argument-hint: ["review focus"] [--max-cycles N]
 allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(**/.claude/codex-review.local.md), Read(~/.claude/handoffs/**), Read(**/.claude/codex-review.local.md)
 ---
 
@@ -12,12 +12,20 @@ Create a review gate that triggers Codex CLI review when you exit.
 
 Arguments: $ARGUMENTS
 
-If arguments are provided, use them as the **review focus**. Otherwise use the default focus.
+Parse the following from arguments:
+- **FOCUS**: Everything before the first `--` flag (the review focus)
+- **--max-cycles**: Number (default: 5) - maximum review cycles before auto-approve
+
+**Parsing rules:**
+1. Text before any `--` flags is the review focus
+2. Extract `--max-cycles N` if present (N must be a positive integer)
+3. If no focus text provided, use the default focus
 
 **Examples:**
-- `/codex-reviewer:review` → default focus (verify changes and correctness)
-- `/codex-reviewer:review "focus on security vulnerabilities"` → security review
-- `/codex-reviewer:review "verify error handling and edge cases"` → error handling review
+- `/codex-reviewer:review` → default focus, max 5 cycles
+- `/codex-reviewer:review "focus on security vulnerabilities"` → security review, max 5 cycles
+- `/codex-reviewer:review --max-cycles 3` → default focus, max 3 cycles
+- `/codex-reviewer:review "verify error handling" --max-cycles 10` → error handling review, max 10 cycles
 
 ## Step 0: Check for Existing Gate
 
@@ -95,7 +103,7 @@ handoff_path: "~/.claude/handoffs/handoff-<repo>-<shortname>.md"
 task_description: null
 files_changed: ["file1.ts", "file2.ts"]
 review_count: 0
-max_review_cycles: 5
+max_review_cycles: <parsed value or 5>
 review_history: []
 timestamp: "[current ISO timestamp]"
 debug: false
@@ -106,7 +114,9 @@ debug: false
 Review gate active. Run `/codex-reviewer:cancel` to abort.
 ```
 
-**Important:** The `handoff_path` points to your handoff file. The stop hook reads this file at review time, so you can update the handoff between review cycles without touching the state file.
+**Important:**
+- Use the `--max-cycles` value if provided, otherwise default to 5
+- The `handoff_path` points to your handoff file. The stop hook reads this file at review time, so you can update the handoff between review cycles without touching the state file.
 
 ## Step 3: Confirm and Exit
 
@@ -128,6 +138,6 @@ Then exit. The stop hook will:
 ## Notes
 
 - Codex review can take 5-20+ minutes depending on complexity
-- Max 5 review cycles by default (configurable in state file)
+- Max 5 review cycles by default; use `--max-cycles N` to customize
 - Use `/codex-reviewer:cancel` to abort the review gate
 - Debug logs at `~/.claude/codex/{session_id}/crash.log`

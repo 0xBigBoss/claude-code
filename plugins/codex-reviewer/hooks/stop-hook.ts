@@ -360,7 +360,9 @@ function parseStateFile(content: string): ReviewState | null {
         continue;
       } else {
         inDescription = false;
-        state.task_description = descriptionLines.join("\n").trim();
+        const content = descriptionLines.join("\n").trim();
+        // Treat "null" or empty as actual null
+        state.task_description = (content === "null" || content === "") ? null : content;
       }
     }
 
@@ -372,7 +374,9 @@ function parseStateFile(content: string): ReviewState | null {
         inDescription = true;
         descriptionLines = [];
       } else {
-        state.task_description = inline.replace(/^["']|["']$/g, "");
+        // Treat "null" or empty as actual null
+        const val = inline.replace(/^["']|["']$/g, "");
+        state.task_description = (val === "null" || val === "") ? null : val;
       }
     } else if (line.startsWith("files_changed:")) {
       const val = line.split(":").slice(1).join(":").trim();
@@ -1065,7 +1069,7 @@ Address ALL open issues above. When done, simply exit - the review gate is still
 
 ---
 
-Original task: ${state.task_description}`;
+Original task: ${taskDescription}`;
 
     output({ decision: "block", reason: feedbackPrompt });
   } catch (e) {
