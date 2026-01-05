@@ -19,8 +19,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 // --- Version ---
-const HOOK_VERSION = "2026-01-03T04:30:00Z";
-const HOOK_BUILD = "v1.5.0";
+const HOOK_VERSION = "2026-01-05T20:30:00Z";
+const HOOK_BUILD = "v1.6.0";
 
 // --- Timeout Constants ---
 // Must align with plugin.json hook timeout
@@ -179,17 +179,42 @@ Check logs at \`~/.claude/codex/${sessionId}/crash.log\` for details.`
 
 // --- Git Utilities ---
 
+/**
+ * Get the true root git repository, walking up through submodules.
+ * If cwd is inside a submodule, returns the top-level parent repo.
+ * Returns null if not in a git repo or git command fails.
+ */
 function getGitRoot(cwd: string): string | null {
   try {
-    const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd,
-      encoding: "utf-8",
-      timeout: 5000,
-    });
-    if (result.status === 0 && result.stdout) {
-      return result.stdout.trim();
+    let dir = cwd;
+
+    // Walk up through submodule hierarchy to find true root
+    while (true) {
+      // Check if we're in a submodule (has a parent superproject)
+      const superResult = spawnSync("git", ["rev-parse", "--show-superproject-working-tree"], {
+        cwd: dir,
+        encoding: "utf-8",
+        timeout: 5000,
+      });
+
+      const superproject = superResult.status === 0 ? superResult.stdout.trim() : "";
+
+      if (!superproject) {
+        // No parent superproject - this is the true root (or we're not in a submodule)
+        const rootResult = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+          cwd: dir,
+          encoding: "utf-8",
+          timeout: 5000,
+        });
+        if (rootResult.status === 0 && rootResult.stdout) {
+          return rootResult.stdout.trim();
+        }
+        return null;
+      }
+
+      // Move up to the parent repo and check again (handles nested submodules)
+      dir = superproject;
     }
-    return null;
   } catch {
     return null;
   }
