@@ -40,15 +40,15 @@ tilt get uiresource/<name> -o json | jq '.status.updateStatus'
 tilt wait --for=condition=Ready uiresource/<name> --timeout=60s
 
 # Check recent logs for reload confirmation
-tilt-logs <resource> --since 1m
-tilt-logs <resource> --since 5m | rg -i "reload|restart|updated|synced"
+tilt logs <resource> --since 1m
+tilt logs <resource> --since 5m | rg -i "reload|restart|updated|synced"
 ```
 
 ## Instructions
 
 - Use `tilt get uiresources -o json` to query resource status programmatically
 - Use `tilt get uiresource/<name> -o json` for detailed single resource state
-- Use `tilt-logs` CLI for log retrieval (preferred over `tilt logs`)
+- Use `tilt logs` with `--since`, `--tail`, `--json` flags for log retrieval
 - Use `tilt trigger <resource>` to force updates when auto-reload didn't trigger
 - Use `tilt wait` to block until resources reach ready state
 - For Tiltfile authoring, see @TILTFILE_API.md
@@ -71,9 +71,10 @@ tilt wait --for=condition=Ready uiresource/<name> --timeout=120s
 ### Get Resource Logs
 
 ```bash
-tilt-logs <resource>              # Current logs
-tilt-logs <resource> --since 5m   # Logs from last 5 minutes
-tilt-logs <resource> --tail 100   # Last 100 lines
+tilt logs <resource>              # Current logs
+tilt logs <resource> --since 5m   # Logs from last 5 minutes
+tilt logs <resource> --tail 100   # Last 100 lines
+tilt logs --json                  # JSON Lines output
 ```
 
 ### Trigger Update
