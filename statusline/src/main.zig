@@ -225,7 +225,7 @@ const RalphState = struct {
     max_iterations: u32 = 50,
     review_enabled: bool = false,
     review_count: u32 = 0,
-    max_review_cycles: u32 = 5,
+    max_review_cycles: u32 = 10,
 
     /// Format Ralph status for statusline display
     /// Returns true if something was written
@@ -260,7 +260,7 @@ const RalphState = struct {
 const CodexReviewState = struct {
     active: bool = false,
     review_count: u32 = 0,
-    max_review_cycles: u32 = 5,
+    max_review_cycles: u32 = 10,
 
     /// Format Codex review status for statusline display
     /// Returns true if something was written
@@ -1651,7 +1651,7 @@ test "RalphState default values" {
     try std.testing.expectEqual(@as(u32, 50), state.max_iterations);
     try std.testing.expect(!state.review_enabled);
     try std.testing.expectEqual(@as(u32, 0), state.review_count);
-    try std.testing.expectEqual(@as(u32, 5), state.max_review_cycles);
+    try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
 }
 
 test "RalphState progressColor thresholds" {
@@ -1789,7 +1789,7 @@ test "parseRalphStateFromContent with partial fields" {
     try std.testing.expectEqual(@as(u32, 50), state.max_iterations);
     try std.testing.expect(!state.review_enabled);
     try std.testing.expectEqual(@as(u32, 0), state.review_count);
-    try std.testing.expectEqual(@as(u32, 5), state.max_review_cycles);
+    try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
 }
 
 test "parseRalphStateFromContent with no frontmatter" {
@@ -1843,7 +1843,7 @@ test "CodexReviewState default values" {
     const state = CodexReviewState{};
     try std.testing.expect(!state.active);
     try std.testing.expectEqual(@as(u32, 0), state.review_count);
-    try std.testing.expectEqual(@as(u32, 5), state.max_review_cycles);
+    try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
 }
 
 test "CodexReviewState format inactive returns false" {
@@ -1939,7 +1939,7 @@ test "parseCodexReviewStateFromContent with partial fields" {
     try std.testing.expect(state.active);
     try std.testing.expectEqual(@as(u32, 2), state.review_count);
     // Default should be used for missing max_review_cycles
-    try std.testing.expectEqual(@as(u32, 5), state.max_review_cycles);
+    try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
 }
 
 test "parseCodexReviewStateFromContent with no frontmatter" {

@@ -453,7 +453,7 @@ function parseStateFile(content: string): ReviewState | null {
     task_description: state.task_description ?? null,
     files_changed: state.files_changed ?? [],
     review_count: state.review_count ?? 0,
-    max_review_cycles: state.max_review_cycles ?? 5,
+    max_review_cycles: state.max_review_cycles ?? 10,
     review_history: state.review_history ?? [],
     timestamp: state.timestamp || new Date().toISOString(),
     debug: state.debug ?? false,

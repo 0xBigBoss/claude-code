@@ -112,7 +112,7 @@ iteration: 3
 max_iterations: 50
 review_enabled: true
 review_count: 1
-max_review_cycles: 5
+max_review_cycles: 10
 review_history: [...]
 ---
 ```
@@ -122,7 +122,7 @@ review_history: [...]
 ---
 active: true
 review_count: 4
-max_review_cycles: 5
+max_review_cycles: 10
 review_history: [...]
 ---
 ```
