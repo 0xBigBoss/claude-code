@@ -145,6 +145,16 @@ pkill tilt
 
 When restarting services (tilt, docker-compose, dev servers), always verify you're targeting only processes from your working directory.
 
+## Reproducible environments
+
+Codify all environment setup; never rely on ad-hoc manual configuration.
+
+- Use `gen-env` skill for instance provisioning (ports, data isolation, browser state)
+- Leverage Tilt and Kubernetes for service orchestration; define infrastructure as code
+- Setup scripts must be idempotent and runnable from scratch
+- Document environment requirements in project config, not tribal knowledge
+- Bootstrap processes should be automated and version-controlled
+
 ## Context window and state
 - Continue working through context limits. As context tightens, write `progress.md` with: current task, work done, next steps, open questions, files touched, test/lint/build status.
 - On resume: run `pwd`; list key files; read `progress.md`; review recent git log if present; re-run quick verification relevant to the task.
@@ -155,6 +165,22 @@ When restarting services (tilt, docker-compose, dev servers), always verify you'
 - After tool use, give a one-line status of what was done/found.
 - Use brief bullets when it improves scanability; paths in backticks; code fences only when helpful.
 - Technical documentation in third person; instructions in second person; avoid first person.
+
+## Idempotency and resilience
+
+Design operations to be safely re-runnable with predictable outcomes.
+
+**Idempotency:**
+- Check current state before making changes; skip if already in desired state
+- Use explicit guards (file markers, database flags, state checks) for non-idempotent operations
+- Operations must produce the same result whether run once or multiple times
+- Prefer declarative state descriptions over imperative change sequences
+
+**Timeouts and retries:**
+- All external calls (network, I/O, subprocesses) must have explicit timeouts; never block indefinitely
+- Retries must be bounded with a maximum count; fail after the limit
+- Use exponential backoff between retries to avoid thundering herd
+- Surface timeout/retry failures clearly; do not silently swallow them
 
 ## Error handling and completeness
 - **Errors must be handled or returned to callers**; every error requires explicit handling at every level of the stack (universal principle across all languages).
