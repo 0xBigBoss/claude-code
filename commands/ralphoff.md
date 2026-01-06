@@ -24,7 +24,7 @@ Default loop flags for clipboard command if not specified:
 
 **Working Directory**: !`pwd`
 
-**Repository**: !`git rev-parse --show-toplevel 2>/dev/null | xargs basename || basename "$PWD"`
+**Repository**: !`git rev-parse --show-toplevel 2>/dev/null || echo "Not a git repository"`
 
 **Branch**: !`git branch --show-current 2>/dev/null || echo "detached/unknown"`
 
