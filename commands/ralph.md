@@ -16,7 +16,8 @@ Split arguments into two groups:
 - **LOOP_FLAGS**: Any `--max-iterations`, `--max-reviews`, `--completion-promise`, `--no-review`, `--debug` flags (passed to ralph-loop)
 
 Default loop flags if not specified:
-- `--max-iterations 30`
+- `--max-iterations 15`
+- `--max-reviews 10`
 - `--completion-promise "COMPLETE"`
 
 ## Workflow
