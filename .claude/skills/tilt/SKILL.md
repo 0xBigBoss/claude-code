@@ -44,6 +44,39 @@ tilt logs <resource> --since 1m
 tilt logs <resource> --since 5m | rg -i "reload|restart|updated|synced"
 ```
 
+## Running tilt up
+
+**Always run `tilt up` in a tmux session.** This ensures tilt survives Claude Code session reloads.
+
+```bash
+SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
+
+# Start tilt in tmux (idempotent)
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux new-session -d -s "$SESSION" -n tilt 'tilt up'
+  echo "Started tilt in tmux session: $SESSION"
+elif ! tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -q "^tilt$"; then
+  tmux new-window -t "$SESSION" -n tilt 'tilt up'
+  echo "Added tilt window to session: $SESSION"
+else
+  echo "Tilt already running in session: $SESSION"
+fi
+```
+
+To check tilt output:
+```bash
+SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
+tmux capture-pane -p -t "$SESSION:tilt" -S -50
+```
+
+To stop tilt:
+```bash
+SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
+tmux send-keys -t "$SESSION:tilt" C-c
+```
+
+Never run `tilt up` directly in foreground or with `run_in_background`. Always use tmux.
+
 ## Instructions
 
 - Use `tilt get uiresources -o json` to query resource status programmatically

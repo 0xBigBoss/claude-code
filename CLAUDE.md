@@ -77,6 +77,44 @@ Proactively delegate to subagents when one is available for a task. The main con
 - Create helper scripts or temporary files only when requested; clean up after use.
 - Request missing command parameters rather than guessing.
 
+## Long-running processes via tmux
+
+Prefer tmux for processes expected to outlive the conversation (dev servers, watchers, tilt, builds). This survives Claude Code session reloads.
+
+### Session naming
+
+Derive session name from the current context:
+1. **Git worktree name**: `basename $(git rev-parse --show-toplevel)`
+2. **Fallback**: directory name
+
+Pattern: `{project}` for single process, `{project}` with named windows for multiple.
+
+```bash
+SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
+```
+
+### Isolation
+
+Each Claude Code session operates in its own tmux session based on project. Never attach to, modify, or kill tmux sessions belonging to other projects.
+
+### Quick reference
+
+```bash
+# Start process in tmux
+tmux new-session -d -s "$SESSION" '<command>'
+
+# Check output
+tmux capture-pane -p -t "$SESSION" -S -50
+
+# List sessions
+tmux ls
+
+# Kill own session only
+tmux kill-session -t "$SESSION"
+```
+
+Load `tmux-processes` skill when managing background work.
+
 ## Process management
 
 Load the `tilt` skill before running tilt CLI commands or managing tilt processes.
