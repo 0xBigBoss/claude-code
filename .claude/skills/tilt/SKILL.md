@@ -46,17 +46,21 @@ tilt logs <resource> --since 5m | rg -i "reload|restart|updated|synced"
 
 ## Running tilt up
 
-**Always run `tilt up` in a tmux session.** This ensures tilt survives Claude Code session reloads.
+**Always run `tilt up` in a tmux session using send-keys.** This ensures:
+- Tilt survives Claude Code session reloads
+- Shell initialization runs (PATH, direnv, etc.)
 
 ```bash
 SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
 
-# Start tilt in tmux (idempotent)
+# Start tilt in tmux (idempotent, send-keys for proper shell init)
 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-  tmux new-session -d -s "$SESSION" -n tilt 'tilt up'
+  tmux new-session -d -s "$SESSION" -n tilt
+  tmux send-keys -t "$SESSION:tilt" 'tilt up' Enter
   echo "Started tilt in tmux session: $SESSION"
 elif ! tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -q "^tilt$"; then
-  tmux new-window -t "$SESSION" -n tilt 'tilt up'
+  tmux new-window -t "$SESSION" -n tilt
+  tmux send-keys -t "$SESSION:tilt" 'tilt up' Enter
   echo "Added tilt window to session: $SESSION"
 else
   echo "Tilt already running in session: $SESSION"
