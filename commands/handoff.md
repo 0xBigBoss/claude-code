@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(pbcopy:*), Bash(basename:*), Bash(mkdir:*), Edit(~/.claude/handoffs/**)
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Write(~/.claude/handoffs/**), Read(~/.claude/handoffs/**)
 argument-hint: [optional focus area or additional notes]
 description: Generate concise handoff summary with context
 ---
@@ -43,8 +43,6 @@ Write a handoff prompt to `~/.claude/handoffs/handoff-<repo>-<shortname>.md` whe
 - `<shortname>` is derived from the branch name, or use `main` if not in a git repo
 
 Examples: `handoff-myapp-sen-69.md`, `handoff-api-fix-auth.md`, `handoff-scripts-main.md`
-
-Copy to clipboard after writing.
 
 The prompt must be standalone and actionable for an agent with zero prior context.
 
@@ -112,6 +110,4 @@ Omit this section entirely if no spec exists.]
    - `<repo>` is the repository basename (or directory basename if not a git repo)
    - `<shortname>` is derived from the branch name, or `main` if not in a git repo
 
-3. Copy to clipboard: `cat ~/.claude/handoffs/<filename> | pbcopy`
-
-4. Confirm: "Handoff saved to ~/.claude/handoffs/<filename> and copied to clipboard."
+3. Confirm with the path: "Handoff saved to `~/.claude/handoffs/<filename>`"

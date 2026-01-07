@@ -19,8 +19,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 // --- Version ---
-const HOOK_VERSION = "2026-01-05T20:30:00Z";
-const HOOK_BUILD = "v1.6.0";
+const HOOK_VERSION = "2026-01-07T18:35:00Z";
+const HOOK_BUILD = "v1.6.2";
 
 // --- Timeout Constants ---
 // Must align with plugin.json hook timeout
@@ -180,50 +180,110 @@ Check logs at \`~/.claude/codex/${sessionId}/crash.log\` for details.`
 // --- Git Utilities ---
 
 /**
- * Get the true root git repository, walking up through submodules.
- * If cwd is inside a submodule, returns the top-level parent repo.
+ * Get the git root for the current directory (not walking up through submodules).
  * Returns null if not in a git repo or git command fails.
  */
-function getGitRoot(cwd: string): string | null {
+function getImmediateGitRoot(cwd: string): string | null {
   try {
-    let dir = cwd;
-
-    // Walk up through submodule hierarchy to find true root
-    while (true) {
-      // Check if we're in a submodule (has a parent superproject)
-      const superResult = spawnSync("git", ["rev-parse", "--show-superproject-working-tree"], {
-        cwd: dir,
-        encoding: "utf-8",
-        timeout: 5000,
-      });
-
-      const superproject = superResult.status === 0 ? superResult.stdout.trim() : "";
-
-      if (!superproject) {
-        // No parent superproject - this is the true root (or we're not in a submodule)
-        const rootResult = spawnSync("git", ["rev-parse", "--show-toplevel"], {
-          cwd: dir,
-          encoding: "utf-8",
-          timeout: 5000,
-        });
-        if (rootResult.status === 0 && rootResult.stdout) {
-          return rootResult.stdout.trim();
-        }
-        return null;
-      }
-
-      // Move up to the parent repo and check again (handles nested submodules)
-      dir = superproject;
+    const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf-8",
+      timeout: 5000,
+    });
+    if (result.status === 0 && result.stdout) {
+      return result.stdout.trim();
     }
+    return null;
   } catch {
     return null;
   }
 }
 
+/**
+ * Get the parent superproject of a git directory, if it exists.
+ * Returns null if not in a submodule.
+ */
+function getParentSuperproject(cwd: string): string | null {
+  try {
+    const result = spawnSync("git", ["rev-parse", "--show-superproject-working-tree"], {
+      cwd,
+      encoding: "utf-8",
+      timeout: 5000,
+    });
+    if (result.status === 0 && result.stdout.trim()) {
+      return result.stdout.trim();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Quick check if a state file is active without full parsing.
+ * Returns true if file exists and contains "active: true".
+ */
+function isStateFileActive(path: string): boolean {
+  try {
+    if (!existsSync(path)) return false;
+    const content = readFileSync(path, "utf-8");
+    return content.includes("active: true");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Find the state file by checking each level of the git hierarchy.
+ * Starts at the current repo and walks up through parent superprojects.
+ * Returns the first ACTIVE state file path, or the current repo's path if none found.
+ * An inactive state file at a lower level does not mask an active one at a higher level.
+ */
 function getStateFilePath(cwd: string): string {
-  const gitRoot = getGitRoot(cwd);
-  const baseDir = gitRoot || cwd;
-  return join(baseDir, ".claude", "codex-review.local.md");
+  let dir = cwd;
+  const checked: string[] = [];
+  let fallbackPath: string | null = null;
+
+  while (true) {
+    const gitRoot = getImmediateGitRoot(dir);
+    if (!gitRoot) {
+      // Not in a git repo, use cwd
+      break;
+    }
+
+    const stateFile = join(gitRoot, ".claude", "codex-review.local.md");
+    checked.push(stateFile);
+
+    // Remember the first repo level as fallback (for creating new state files)
+    if (!fallbackPath) {
+      fallbackPath = stateFile;
+    }
+
+    // Check if state file exists AND is active at this level
+    if (isStateFileActive(stateFile)) {
+      crash(`Found ACTIVE state file at: ${stateFile} (checked: ${checked.join(", ")})`);
+      return stateFile;
+    }
+
+    // If file exists but inactive, log and continue walking up
+    if (existsSync(stateFile)) {
+      crash(`Found INACTIVE state file at: ${stateFile}, continuing to check parents`);
+    }
+
+    // Check if there's a parent superproject
+    const parent = getParentSuperproject(gitRoot);
+    if (!parent) {
+      // No parent, return fallback path (current repo level)
+      crash(`No active state file found, using fallback: ${fallbackPath} (checked: ${checked.join(", ")})`);
+      return fallbackPath;
+    }
+
+    // Move up to parent
+    dir = parent;
+  }
+
+  // Fallback to cwd
+  return fallbackPath || join(cwd, ".claude", "codex-review.local.md");
 }
 
 // --- Types ---
@@ -875,7 +935,7 @@ async function main() {
       throw parseErr;
     }
 
-    const gitRoot = getGitRoot(input.cwd);
+    const gitRoot = getImmediateGitRoot(input.cwd);
     stateFilePath = getStateFilePath(input.cwd);
     crash(`State file: ${stateFilePath}, Git root: ${gitRoot || "none"}, cwd: ${input.cwd}`);
 

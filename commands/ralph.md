@@ -31,15 +31,30 @@ This will:
 - Write a context file to `~/.claude/handoffs/ralph-<repo>-<shortname>.md`
 - Prepare the task description with success criteria and verification loops
 
-**Important**: After ralphoff completes, note the exact filename it created (e.g., `ralph-myrepo-feature-x.md`).
+**Important**: Note the exact filename created (e.g., `ralph-myrepo-feature-x.md`).
 
-### Step 2: Start Ralph Loop
+---
 
-Immediately invoke `/ralph-reviewed:ralph-loop` with:
+### MANDATORY: Step 2 - Start Ralph Loop
+
+**CRITICAL: After the handoff context is saved, you MUST continue with this step. The Ralph loop is NOT active until you invoke ralph-loop. Do not stop after the handoff.**
+
+Invoke `/ralph-reviewed:ralph-loop` with:
 - The task prompt: `Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations.`
-- The parsed LOOP_FLAGS
+- The parsed LOOP_FLAGS (or defaults: `--max-iterations 15 --max-reviews 10 --completion-promise "COMPLETE"`)
 
-Do NOT copy the command to clipboard (skip that part of ralphoff) - we're starting the loop directly.
+---
+
+### MANDATORY: Step 3 - Verify Loop Started
+
+**CRITICAL: You MUST complete this step. Verify the loop state file was created.**
+
+1. **Verify the state file exists**:
+   ```bash
+   cat "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/ralph-loop.local.md" | head -5
+   ```
+
+2. If the state file exists, the loop is active. Begin working on the task immediately.
 
 ## Example Usage
 

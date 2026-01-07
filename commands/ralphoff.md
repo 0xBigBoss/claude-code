@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(*), Edit(~/.claude/handoffs/**)
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Write(~/.claude/handoffs/**), Read(~/.claude/handoffs/**)
 argument-hint: [completion criteria] [--max-iterations N] [--max-reviews N] [--no-review] [--debug]
 description: Generate Ralph-loop-ready handoff prompt
 ---
@@ -14,9 +14,9 @@ Arguments: $ARGUMENTS
 
 Split arguments into two groups:
 - **HANDOFF_ARGS**: Everything before any `--` flags (used as completion criteria)
-- **LOOP_FLAGS**: Any `--max-iterations`, `--max-reviews`, `--no-review`, `--debug` flags (included in clipboard command)
+- **LOOP_FLAGS**: Any `--max-iterations`, `--max-reviews`, `--no-review`, `--debug` flags (passed to ralph-loop)
 
-Default loop flags for clipboard command if not specified:
+Default loop flags if not specified:
 - `--max-iterations 30`
 - `--completion-promise "COMPLETE"`
 
@@ -52,7 +52,7 @@ HANDOFF_ARGS (the completion criteria portion of $ARGUMENTS, excluding any `--` 
 
 Write a Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>.md` where `<repo>` is the repository name and `<shortname>` is derived from the branch name (e.g., `ralph-myapp-sen-69.md`).
 
-The context file contains the detailed task description. A simple wrapper command referencing this file is copied to clipboard for direct use with ralph-loop.
+The context file contains the detailed task description for use with `/ralph-reviewed:ralph-loop`.
 
 ### Ralph Loop Prompt Requirements
 
@@ -176,28 +176,11 @@ After 15+ iterations without progress:
    - `<repo>` is the repository basename
    - `<shortname>` is derived from the branch name (e.g., `ralph-myapp-sen-69.md`)
 
-3. Generate a simple, bash-safe wrapper command. The wrapper prompt must:
-   - Reference the context file by path
-   - Be a single line with no newlines
-   - Avoid special characters that break bash (backticks, unescaped quotes, $)
-   - Include the completion promise
-
-4. Copy the **wrapper command** (not the context file) to clipboard
-
-5. Confirm with usage instructions showing the exact command to run:
-   ```
-   Ralph-loop context saved to ~/.claude/handoffs/<filename>
-
-   Run this command in a new Claude Code session:
-
-   /ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task. Output COMPLETE when done." --completion-promise "COMPLETE" <LOOP_FLAGS>
-   ```
-
-   Where `<LOOP_FLAGS>` includes any flags from $ARGUMENTS (e.g., `--max-iterations 50 --no-review`) or defaults to `--max-iterations 30`.
+3. Confirm with the path: "Ralph-loop context saved to `~/.claude/handoffs/<filename>`"
 
 ### Wrapper Command Format
 
-The clipboard should contain ONLY this single-line command (no extra text):
+When using this context file with `/ralph-reviewed:ralph-loop`, the command format is:
 
 ```
 /ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations." --completion-promise "COMPLETE" <LOOP_FLAGS>
@@ -206,16 +189,3 @@ The clipboard should contain ONLY this single-line command (no extra text):
 Replace:
 - `<filename>` with the actual filename (e.g., `ralph-myrepo-feature-x.md`)
 - `<LOOP_FLAGS>` with the parsed flags from $ARGUMENTS, or defaults (`--max-iterations 30`) if none provided
-
-### Example Commands
-
-```
-# Default (30 iterations)
-/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/ralph-myrepo-feature-x.md..." --completion-promise "COMPLETE" --max-iterations 30
-
-# With custom flags from /ralphoff --max-iterations 50 --no-review
-/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/ralph-myrepo-feature-x.md..." --completion-promise "COMPLETE" --max-iterations 50 --no-review
-
-# With --debug flag
-/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/ralph-myrepo-feature-x.md..." --completion-promise "COMPLETE" --max-iterations 30 --debug
-```

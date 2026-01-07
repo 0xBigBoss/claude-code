@@ -1,7 +1,7 @@
 ---
 description: Start a Codex review gate - generates handoff context for the reviewer
 argument-hint: ["review focus"] [--max-cycles N]
-allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(**/.claude/codex-review.local.md), Read(~/.claude/handoffs/**), Read(**/.claude/codex-review.local.md)
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(head:*), Bash(grep:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(**/.claude/codex-review.local.md), Read(~/.claude/handoffs/**), Read(**/.claude/codex-review.local.md)
 ---
 
 # Start Codex Review Gate
@@ -29,14 +29,29 @@ Parse the following from arguments:
 
 ## Step 0: Check for Existing Gate
 
-**IMPORTANT**: Before creating a new gate, check if one already exists:
+**IMPORTANT**: Before creating a new gate, check if an ACTIVE one already exists. The stop hook checks the current repo AND walks up through all parent superprojects, looking for the first ACTIVE gate. An inactive file does not block - continue checking parents:
 
 ```bash
-STATE_FILE="$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/codex-review.local.md"
-cat "$STATE_FILE" 2>/dev/null || echo "NO_STATE_FILE"
+# Check current repo and all ancestor superprojects for ACTIVE gate
+DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+FOUND_ACTIVE=""
+while [ -n "$DIR" ]; do
+  STATE_FILE="$DIR/.claude/codex-review.local.md"
+  if [ -f "$STATE_FILE" ] && grep -q "active: true" "$STATE_FILE"; then
+    echo "Found ACTIVE state file at: $STATE_FILE"
+    cat "$STATE_FILE"
+    FOUND_ACTIVE="true"
+    break
+  fi
+  # Check for parent superproject
+  PARENT="$(git -C "$DIR" rev-parse --show-superproject-working-tree 2>/dev/null)"
+  [ -z "$PARENT" ] && break
+  DIR="$PARENT"
+done
+[ -z "$FOUND_ACTIVE" ] && echo "NO_ACTIVE_STATE_FILE"
 ```
 
-**If a state file exists with `active: true`:**
+**If an ACTIVE state file exists (in current repo OR any ancestor):**
 
 The review gate is already active.
 
@@ -69,7 +84,7 @@ Then exit immediately. The stop hook will:
 
 ## Step 1: Generate Review Context
 
-First, invoke the `/handoff` skill with the review focus.
+Invoke the `/handoff` skill with the review focus.
 
 **If custom focus provided (from $ARGUMENTS):**
 > Generate a handoff for a code reviewer. {custom focus from arguments}
@@ -77,9 +92,13 @@ First, invoke the `/handoff` skill with the review focus.
 **Default focus (no arguments):**
 > Generate a handoff for a code reviewer who will verify the changes made in this session. Focus on what was changed, why, and how to verify correctness.
 
-The handoff will be written to `~/.claude/handoffs/handoff-<repo>-<shortname>.md` (where `<shortname>` is derived from the branch name).
+The handoff will be written to `~/.claude/handoffs/handoff-<repo>-<shortname>.md`.
 
-## Step 2: Create State File
+---
+
+## MANDATORY: Step 2 - Create State File
+
+**CRITICAL: After the handoff is saved, you MUST continue with this step. The review gate is NOT active until the state file exists. Do not stop after the handoff.**
 
 1. **Find the state directory** (git root, or cwd if not in a repo):
    ```bash
@@ -87,14 +106,12 @@ The handoff will be written to `~/.claude/handoffs/handoff-<repo>-<shortname>.md
    mkdir -p "$STATE_DIR"
    ```
 
-2. **Note the handoff path** you just generated (e.g., `~/.claude/handoffs/handoff-<repo>-<shortname>.md`)
-
-3. **Get files changed** from git:
+2. **Get files changed** from git:
    ```bash
    git status --porcelain
    ```
 
-4. **Create the state file** at `{STATE_DIR}/codex-review.local.md`:
+3. **Create the state file** using the Write tool at `{STATE_DIR}/codex-review.local.md`:
 
 ```yaml
 ---
@@ -115,25 +132,34 @@ Review gate active. Run `/codex-reviewer:cancel` to abort.
 ```
 
 **Important:**
+- Use the actual handoff path from Step 1
 - Use the `--max-cycles` value if provided, otherwise default to 10
-- The `handoff_path` points to your handoff file. The stop hook reads this file at review time, so you can update the handoff between review cycles without touching the state file.
+- The stop hook reads `handoff_path` at review time
 
-## Step 3: Confirm and Exit
+---
 
-Output a brief summary for the user:
+## MANDATORY: Step 3 - Confirm and Exit
 
-```markdown
-## Work Summary
+**CRITICAL: You MUST complete this step. Verify the state file was created, then exit.**
 
-[2-3 bullet points of what was done]
+1. **Verify the state file exists**:
+   ```bash
+   cat "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/codex-review.local.md" | head -5
+   ```
 
-Review gate is now active. Exiting to trigger Codex review...
-```
+2. **Output summary**:
+   ```markdown
+   ## Work Summary
 
-Then exit. The stop hook will:
-1. Call Codex CLI with the review prompt (using your handoff as context)
-2. If APPROVE: allow exit, clean up state
-3. If REJECT: block exit, inject feedback for you to address
+   [2-3 bullet points of what was done]
+
+   Review gate is now active. Exiting to trigger Codex review...
+   ```
+
+3. **Exit** - The stop hook will:
+   - Call Codex CLI with the review prompt (using your handoff as context)
+   - If APPROVE: allow exit, clean up state
+   - If REJECT: block exit, inject feedback for you to address
 
 ## Notes
 
