@@ -62,3 +62,18 @@ rm ~/.claude/plugins/cache/0xbigboss-plugins/<plugin>/*/.orphaned_at
 # Or force reinstall
 claude plugin update <plugin-name>
 ```
+
+## Publishing Plugin Updates
+
+Plugin versions must be updated in **two places** to stay in sync:
+
+1. **Individual plugin manifest**: `plugins/<plugin-name>/.claude-plugin/plugin.json`
+2. **Marketplace index**: `.claude-plugin/marketplace.json`
+
+The marketplace UI reads versions from `marketplace.json`, while installation uses individual `plugin.json` files. If these diverge, the marketplace shows stale versions even though installations get the correct version.
+
+**When bumping a version:**
+```bash
+# Update both files, then refresh the marketplace
+claude plugin marketplace update 0xbigboss-plugins
+```
