@@ -6,6 +6,7 @@
     "email": "bigboss@metalrodeo.xyz"
   },
   "version": "1.6.2",
+  "commands": "./commands/",
   "hooks": {
     "Stop": [
       {
