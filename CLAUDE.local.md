@@ -44,3 +44,21 @@ cd ~/code/dotfiles/claude/.claude
 rm broken-symlink
 ln -s ../../claude-code/target target
 ```
+
+## Plugin Troubleshooting
+
+When plugins fail to load (e.g., after Claude Code updates change the manifest schema), they may be marked as orphaned rather than removed. Symptoms:
+- Plugin shows in `/plugin` list but hooks don't trigger
+- `/doctor` shows plugin errors
+
+Fix orphaned plugins:
+```bash
+# Check for orphan markers
+find ~/.claude/plugins/cache -name ".orphaned_at"
+
+# Remove markers for specific plugin
+rm ~/.claude/plugins/cache/0xbigboss-plugins/<plugin>/*/.orphaned_at
+
+# Or force reinstall
+claude plugin update <plugin-name>
+```
