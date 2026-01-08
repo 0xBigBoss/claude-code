@@ -5,14 +5,18 @@
     "name": "Allen",
     "email": "bigboss@metalrodeo.xyz"
   },
-  "version": "1.8.1",
+  "version": "1.8.2",
   "commands": "./commands/",
   "hooks": {
     "Stop": [
       {
-        "type": "command",
-        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.ts",
-        "timeout": 1800
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.ts",
+            "timeout": 1800
+          }
+        ]
       }
     ]
   }
