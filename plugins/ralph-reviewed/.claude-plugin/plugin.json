@@ -5,6 +5,7 @@
     "name": "Allen",
     "email": "bigboss@metalrodeo.xyz"
   },
-  "version": "1.8.5",
-  "commands": "./commands/"
+  "version": "1.8.7",
+  "commands": "./commands/",
+  "hooks": "./hooks/hooks.json"
 }

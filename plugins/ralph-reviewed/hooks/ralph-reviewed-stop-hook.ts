@@ -31,6 +31,7 @@ import { homedir } from "node:os";
 // Update this when making changes to help diagnose cached code issues
 const HOOK_VERSION = "2026-01-08T05:00:00Z";
 const HOOK_BUILD = "v1.8.4";
+const STDIN_TIMEOUT_MS = 2000;
 
 // --- User Config ---
 // User preferences stored in ~/.claude/ralphs/config.json
@@ -144,8 +145,8 @@ process.on("uncaughtException", (err) => {
       crash(`Cleaned up state file on uncaught exception: ${stateFilePath}`);
     } catch { /* ignore cleanup errors */ }
   }
-  // Output approve to avoid trapping user
-  console.log(JSON.stringify({ decision: "approve" }));
+  // Output empty JSON to avoid trapping user
+  console.log(JSON.stringify({}));
   process.exit(1);
 });
 
@@ -158,8 +159,8 @@ process.on("unhandledRejection", (reason) => {
       crash(`Cleaned up state file on unhandled rejection: ${stateFilePath}`);
     } catch { /* ignore cleanup errors */ }
   }
-  // Output approve to avoid trapping user
-  console.log(JSON.stringify({ decision: "approve" }));
+  // Output empty JSON to avoid trapping user
+  console.log(JSON.stringify({}));
   process.exit(1);
 });
 
@@ -240,23 +241,27 @@ function getStateFilePath(cwd: string): string {
 
 interface HookInput {
   session_id: string;
-  transcript_path: string;
-  cwd: string;
+  transcript_path?: string;
+  cwd?: string;
+  permission_mode?: string;
   hook_event_name: "Stop";
+  stop_hook_active?: boolean;
 }
 
 /**
  * Hook output schema for Claude Code stop hooks.
  * See: https://code.claude.com/docs/en/hooks.md
  *
- * - decision: "approve" allows exit, "block" prevents it
- * - reason: Message shown to Claude when blocking (ignored on approve)
+ * - decision: "block" prevents stopping (omit to allow)
+ * - reason: Message shown to Claude when blocking
  * - systemMessage: Optional message shown to user regardless of decision
  */
 interface HookOutput {
-  decision: "approve" | "block";
+  decision?: "block";
   reason?: string;
   systemMessage?: string;
+  continue?: boolean;
+  stopReason?: string;
 }
 
 interface ReviewIssue {
@@ -811,11 +816,64 @@ Review ${reviewCount + 1}/${maxReviews}.`;
 // --- Main Hook Logic ---
 
 async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString("utf-8");
+  if (process.stdin.isTTY) return "";
+
+  return await new Promise((resolve, reject) => {
+    let data = "";
+    let resolved = false;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      process.stdin.off("data", onData);
+      process.stdin.off("end", onEnd);
+      process.stdin.off("error", onError);
+      process.stdin.pause();
+    };
+
+    const tryResolve = () => {
+      if (resolved) return;
+      try {
+        JSON.parse(data);
+        resolved = true;
+        cleanup();
+        resolve(data);
+      } catch {
+        // keep reading
+      }
+    };
+
+    const onData = (chunk: string | Buffer) => {
+      data += chunk.toString();
+      tryResolve();
+    };
+
+    const onEnd = () => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(data);
+    };
+
+    const onError = (err: Error) => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      reject(err);
+    };
+
+    const timer = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(data);
+    }, STDIN_TIMEOUT_MS);
+
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", onData);
+    process.stdin.on("end", onEnd);
+    process.stdin.on("error", onError);
+    process.stdin.resume();
+  });
 }
 
 function output(result: HookOutput): void {
@@ -831,29 +889,42 @@ async function main() {
     crash(`Stdin received: ${inputRaw.length} bytes`);
 
     let input: HookInput;
-    try {
-      input = JSON.parse(inputRaw);
-      // Switch to session-specific crash log immediately
-      setSessionId(input.session_id);
-      crash(`Input parsed: session_id=${input.session_id}, cwd=${input.cwd}, event=${input.hook_event_name}`);
-    } catch (parseErr) {
-      crash("Failed to parse input JSON", parseErr);
-      crash(`Raw input was: ${inputRaw.slice(0, 500)}`);
-      throw parseErr;
+    const trimmed = inputRaw.trim();
+    if (!trimmed) {
+      crash("No stdin payload received; using fallback context");
+      input = {
+        session_id: "unknown",
+        transcript_path: "",
+        cwd: process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+        hook_event_name: "Stop",
+      };
+    } else {
+      try {
+        input = JSON.parse(trimmed);
+      } catch (parseErr) {
+        crash("Failed to parse input JSON", parseErr);
+        crash(`Raw input was: ${trimmed.slice(0, 500)}`);
+        throw parseErr;
+      }
     }
 
+    // Switch to session-specific crash log immediately
+    setSessionId(input.session_id || "unknown");
+    const cwd = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    crash(`Input parsed: session_id=${input.session_id}, cwd=${cwd}, event=${input.hook_event_name}`);
+
     // Use git repo root for state file to handle directory changes within repo
-    const gitRoot = getGitRoot(input.cwd);
-    stateFilePath = getStateFilePath(input.cwd);
+    const gitRoot = getGitRoot(cwd);
+    stateFilePath = getStateFilePath(cwd);
 
     // Set session-specific file paths
     debugLogPath = `${sessionLogDir}/debug.log`;
-    crash(`State file: ${stateFilePath}, Git root: ${gitRoot || "none"}, cwd: ${input.cwd}, logs: ${sessionLogDir}`);
+    crash(`State file: ${stateFilePath}, Git root: ${gitRoot || "none"}, cwd: ${cwd}, logs: ${sessionLogDir}`);
 
     // Check for active loop
     if (!existsSync(stateFilePath)) {
       crash("No state file found, approving exit");
-      output({ decision: "approve" });
+      output({});
       return;
     }
     crash("State file exists, reading...");
@@ -866,7 +937,7 @@ async function main() {
       // Corrupt state file - clean up and exit
       crash("Failed to parse state file, cleaning up");
       cleanupStateFile(stateFilePath);
-      output({ decision: "approve" });
+      output({});
       return;
     }
 
@@ -874,7 +945,7 @@ async function main() {
       // Loop was deactivated - clean up stale file and exit
       crash("Loop inactive, cleaning up stale state file");
       cleanupStateFile(stateFilePath);
-      output({ decision: "approve" });
+      output({});
       return;
     }
 
@@ -885,10 +956,11 @@ async function main() {
     }
 
     // Get last assistant message
-    const lastMessage = getLastAssistantMessage(input.transcript_path);
+    const transcriptPath = input.transcript_path || "";
+    const lastMessage = transcriptPath ? getLastAssistantMessage(transcriptPath) : null;
 
     // Debug logging
-    debug(`[ralph-reviewed] Iteration: ${state.iteration}, Transcript: ${input.transcript_path}`);
+    debug(`[ralph-reviewed] Iteration: ${state.iteration}, Transcript: ${transcriptPath || "none"}`);
     debug(`[ralph-reviewed] Last message (truncated): ${lastMessage?.slice(-200) || "null"}`);
 
     // Check for completion promise
@@ -910,7 +982,6 @@ async function main() {
       debug(`[ralph-reviewed] BLOCKED signal received. Terminating loop without review.`);
       cleanupStateFile(stateFilePath);
       output({
-        decision: "approve",
         systemMessage: `# Ralph Loop: BLOCKED
 
 **Iteration:** ${state.iteration}/${state.max_iterations}
@@ -929,8 +1000,7 @@ Task reported as blocked. Loop terminated without review.`
         // Max iterations reached - allow exit
         debug(`[ralph-reviewed] Max iterations (${state.max_iterations}) reached, exiting loop`);
         cleanupStateFile(stateFilePath);
-        output({
-          decision: "approve",
+      output({
           systemMessage: `# Ralph Loop: Max Iterations Reached
 
 **Iteration:** ${state.iteration}/${state.max_iterations}
@@ -967,7 +1037,7 @@ Loop ended without completion claim. Review the work and consider restarting if 
       // Reviews disabled - allow exit
       debug(`[ralph-reviewed] Reviews disabled, approving exit`);
       cleanupStateFile(stateFilePath);
-      output({ decision: "approve" });
+      output({});
       return;
     }
 
@@ -980,7 +1050,7 @@ Loop ended without completion claim. Review the work and consider restarting if 
 
 Codex requires a git repository to run. The current directory is not inside a git repo.
 
-**Current directory:** \`${input.cwd}\`
+**Current directory:** \`${cwd}\`
 
 **To fix:** Initialize a git repository with \`git init\`, or move the project into an existing git repo.
 
@@ -997,7 +1067,7 @@ Codex requires a git repository to run. The current directory is not inside a gi
       state.review_history,
       state.review_count,
       state.max_review_cycles,
-      input.cwd
+      cwd
     );
 
     debug(`[ralph-reviewed] Review result: approved=${reviewResult.approved}, issues=${reviewResult.issues.length}`);
@@ -1026,7 +1096,7 @@ Codex requires a git repository to run. The current directory is not inside a gi
 
 The review gate has been cleared. Task completed successfully.`;
 
-      output({ decision: "approve", systemMessage: approvalMessage });
+      output({ systemMessage: approvalMessage });
       return;
     }
 
@@ -1046,7 +1116,6 @@ The review gate has been cleared. Task completed successfully.`;
         : "(no issues parsed)";
 
       output({
-        decision: "approve",
         systemMessage: `# Ralph Loop: Max Review Cycles Reached
 
 **Iteration:** ${state.iteration}/${state.max_iterations}
@@ -1108,7 +1177,7 @@ ${state.original_prompt}`;
       } catch { /* ignore cleanup errors */ }
     }
     // On error, allow exit to avoid trapping user
-    output({ decision: "approve" });
+    output({});
   }
   crash("main() exiting normally");
 }
@@ -1123,6 +1192,6 @@ main().catch((e) => {
       crash(`Cleaned up state file on main() rejection: ${stateFilePath}`);
     } catch { /* ignore cleanup errors */ }
   }
-  console.log(JSON.stringify({ decision: "approve" }));
+  console.log(JSON.stringify({}));
   process.exit(1);
 });

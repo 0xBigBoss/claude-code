@@ -28,6 +28,7 @@ const HOOK_TIMEOUT_SECONDS = 1800;
 const BUFFER_SECONDS = 120;
 const MIN_CODEX_TIMEOUT_SECONDS = 60;
 const MAX_CODEX_TIMEOUT_SECONDS = HOOK_TIMEOUT_SECONDS - BUFFER_SECONDS; // 1680s
+const STDIN_TIMEOUT_MS = 2000;
 
 // --- User Config ---
 // User preferences stored in ~/.claude/codex/config.json
@@ -290,23 +291,27 @@ function getStateFilePath(cwd: string): string {
 
 interface HookInput {
   session_id: string;
-  transcript_path: string;
-  cwd: string;
+  transcript_path?: string;
+  cwd?: string;
+  permission_mode?: string;
   hook_event_name: "Stop";
+  stop_hook_active?: boolean;
 }
 
 /**
  * Hook output schema for Claude Code stop hooks.
  * See: https://code.claude.com/docs/en/hooks.md
  *
- * - decision: "approve" allows exit, "block" prevents it
- * - reason: Message shown to Claude when blocking (ignored on approve)
+ * - decision: "block" prevents stopping (omit to allow)
+ * - reason: Message shown to Claude when blocking
  * - systemMessage: Optional message shown to user regardless of decision
  */
 interface HookOutput {
-  decision: "approve" | "block";
+  decision?: "block";
   reason?: string;
   systemMessage?: string;
+  continue?: boolean;
+  stopReason?: string;
 }
 
 interface ReviewIssue {
@@ -905,11 +910,64 @@ Review ${reviewCount + 1}/${maxReviews}. Remember: your response MUST contain <r
 // --- Main Hook Logic ---
 
 async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString("utf-8");
+  if (process.stdin.isTTY) return "";
+
+  return await new Promise((resolve, reject) => {
+    let data = "";
+    let resolved = false;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      process.stdin.off("data", onData);
+      process.stdin.off("end", onEnd);
+      process.stdin.off("error", onError);
+      process.stdin.pause();
+    };
+
+    const tryResolve = () => {
+      if (resolved) return;
+      try {
+        JSON.parse(data);
+        resolved = true;
+        cleanup();
+        resolve(data);
+      } catch {
+        // keep reading
+      }
+    };
+
+    const onData = (chunk: string | Buffer) => {
+      data += chunk.toString();
+      tryResolve();
+    };
+
+    const onEnd = () => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(data);
+    };
+
+    const onError = (err: Error) => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      reject(err);
+    };
+
+    const timer = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(data);
+    }, STDIN_TIMEOUT_MS);
+
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", onData);
+    process.stdin.on("end", onEnd);
+    process.stdin.on("error", onError);
+    process.stdin.resume();
+  });
 }
 
 function output(result: HookOutput): void {
@@ -925,19 +983,32 @@ async function main() {
     crash(`Stdin received: ${inputRaw.length} bytes`);
 
     let input: HookInput;
-    try {
-      input = JSON.parse(inputRaw);
-      setSessionId(input.session_id);
-      crash(`Input parsed: session_id=${input.session_id}, cwd=${input.cwd}, event=${input.hook_event_name}`);
-    } catch (parseErr) {
-      crash("Failed to parse input JSON", parseErr);
-      crash(`Raw input was: ${inputRaw.slice(0, 500)}`);
-      throw parseErr;
+    const trimmed = inputRaw.trim();
+    if (!trimmed) {
+      crash("No stdin payload received; using fallback context");
+      input = {
+        session_id: "unknown",
+        transcript_path: "",
+        cwd: process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+        hook_event_name: "Stop",
+      };
+    } else {
+      try {
+        input = JSON.parse(trimmed);
+      } catch (parseErr) {
+        crash("Failed to parse input JSON", parseErr);
+        crash(`Raw input was: ${trimmed.slice(0, 500)}`);
+        throw parseErr;
+      }
     }
 
-    const gitRoot = getImmediateGitRoot(input.cwd);
-    stateFilePath = getStateFilePath(input.cwd);
-    crash(`State file: ${stateFilePath}, Git root: ${gitRoot || "none"}, cwd: ${input.cwd}`);
+    setSessionId(input.session_id || "unknown");
+    const cwd = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    crash(`Input parsed: session_id=${input.session_id}, cwd=${cwd}, event=${input.hook_event_name}`);
+
+    const gitRoot = getImmediateGitRoot(cwd);
+    stateFilePath = getStateFilePath(cwd);
+    crash(`State file: ${stateFilePath}, Git root: ${gitRoot || "none"}, cwd: ${cwd}`);
 
     // Check for active review gate
     if (!existsSync(stateFilePath)) {
@@ -1015,7 +1086,7 @@ This is a strict gate - exit requires either Codex approval or explicit cancella
 
 Codex requires a git repository to run. The current directory is not inside a git repo.
 
-**Current directory:** \`${input.cwd}\`
+**Current directory:** \`${cwd}\`
 
 **To fix:** Initialize a git repository with \`git init\`, or move the project into an existing git repo.
 
@@ -1049,7 +1120,7 @@ The handoff file could not be read and no embedded task description exists.
       state.review_history,
       state.review_count,
       state.max_review_cycles,
-      input.cwd
+      cwd
     );
 
     debug(`[codex-reviewer] Review result: status=${reviewResult.status}, issues=${reviewResult.issues.length}`);
@@ -1093,7 +1164,7 @@ ${reviewResult.errorMessage}
 
 The review gate has been cleared. You may now exit or continue with next steps.`;
 
-      output({ decision: "approve", systemMessage: approvalMessage });
+      output({ systemMessage: approvalMessage });
       return;
     }
 
