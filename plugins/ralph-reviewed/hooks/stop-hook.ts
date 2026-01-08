@@ -29,8 +29,8 @@ import { homedir } from "node:os";
 
 // --- Version ---
 // Update this when making changes to help diagnose cached code issues
-const HOOK_VERSION = "2026-01-05T20:30:00Z";
-const HOOK_BUILD = "v1.8.0";
+const HOOK_VERSION = "2026-01-08T05:00:00Z";
+const HOOK_BUILD = "v1.8.4";
 
 // --- User Config ---
 // User preferences stored in ~/.claude/ralphs/config.json

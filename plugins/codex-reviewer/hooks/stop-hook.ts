@@ -19,8 +19,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 // --- Version ---
-const HOOK_VERSION = "2026-01-07T18:35:00Z";
-const HOOK_BUILD = "v1.6.2";
+const HOOK_VERSION = "2026-01-08T05:00:00Z";
+const HOOK_BUILD = "v1.6.5";
 
 // --- Timeout Constants ---
 // Must align with plugin.json hook timeout
@@ -941,8 +941,8 @@ async function main() {
 
     // Check for active review gate
     if (!existsSync(stateFilePath)) {
-      crash("No state file found, approving exit");
-      output({ decision: "approve" });
+      crash("No state file found, allowing exit (no output)");
+      // Don't output anything - let other hooks decide
       return;
     }
     crash("State file exists, reading...");
@@ -971,7 +971,7 @@ The review gate state file exists but could not be parsed. This may indicate fil
     if (!state.active) {
       crash("Review gate inactive, cleaning up stale state file");
       cleanupStateFile(stateFilePath);
-      output({ decision: "approve" });
+      // Don't output anything - let other hooks decide
       return;
     }
 
