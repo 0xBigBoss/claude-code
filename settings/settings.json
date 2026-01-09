@@ -5,6 +5,16 @@
     "type": "command",
     "command": "statusline"
   },
+  "enabledPlugins": {
+    "linear-cli@0xsend-marketplace": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "gopls-lsp@claude-plugins-official": true,
+    "ralph-reviewed@0xbigboss-plugins": true,
+    "codex-reviewer@0xbigboss-plugins": true,
+    "canton-skills@0xsend-marketplace": true
+  },
   "alwaysThinkingEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1754076652911

@@ -14,7 +14,7 @@
       "name": "ralph-reviewed",
       "source": "./plugins/ralph-reviewed",
       "description": "Iterative Ralph loops with Codex CLI review gates at completion",
-      "version": "1.8.7",
+      "version": "1.8.8",
       "author": {
         "name": "Allen",
         "email": "bigboss@metalrodeo.xyz"
@@ -26,7 +26,7 @@
       "name": "codex-reviewer",
       "source": "./plugins/codex-reviewer",
       "description": "Codex-powered code review gate for Claude Code",
-      "version": "1.6.8",
+      "version": "1.6.9",
       "author": {
         "name": "Allen",
         "email": "bigboss@metalrodeo.xyz"
