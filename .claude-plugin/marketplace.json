@@ -33,6 +33,18 @@
       },
       "keywords": ["codex", "review", "gate"],
       "category": "workflow"
+    },
+    {
+      "name": "codex-handoff",
+      "source": "./plugins/codex-handoff",
+      "description": "Codex-powered handoff gate for Claude Code",
+      "version": "1.0.0",
+      "author": {
+        "name": "Allen",
+        "email": "bigboss@metalrodeo.xyz"
+      },
+      "keywords": ["codex", "handoff", "gate"],
+      "category": "workflow"
     }
   ]
 }

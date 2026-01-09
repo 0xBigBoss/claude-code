@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/codex-handoff-stop-hook.ts",
+            "timeout": 1800
+          }
+        ]
+      }
+    ]
+  }
+}
