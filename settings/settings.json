@@ -13,7 +13,8 @@
     "gopls-lsp@claude-plugins-official": true,
     "ralph-reviewed@0xbigboss-plugins": true,
     "codex-reviewer@0xbigboss-plugins": true,
-    "canton-skills@0xsend-marketplace": true
+    "canton-skills@0xsend-marketplace": true,
+    "codex-handoff@0xbigboss-plugins": true
   },
   "alwaysThinkingEnabled": true,
   "feedbackSurveyState": {
