@@ -1,19 +1,34 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "allow": [
+      "Edit(~/.claude/handoffs/**)"
+    ],
+    "additionalDirectories": [
+      "~/.claude/handoffs"
+    ]
+  },
   "hooks": {},
   "statusLine": {
     "type": "command",
     "command": "statusline"
   },
   "enabledPlugins": {
-    "linear-cli@0xsend-marketplace": true,
+    "linear-cli@linear-cli-marketplace": true,
+    "canton-skills@0xsend-marketplace": true,
     "pr-review-toolkit@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "gopls-lsp@claude-plugins-official": true,
-    "ralph-reviewed@0xbigboss-plugins": true,
+    "jdtls-lsp@claude-plugins-official": true,
+    "clangd-lsp@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true,
     "codex-reviewer@0xbigboss-plugins": true,
-    "canton-skills@0xsend-marketplace": true,
+    "ralph-reviewed@0xbigboss-plugins": true,
     "codex-handoff@0xbigboss-plugins": true
   },
   "alwaysThinkingEnabled": true,
@@ -21,3 +36,4 @@
     "lastShownTime": 1754076652911
   }
 }
+
