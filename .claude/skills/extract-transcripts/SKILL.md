@@ -13,22 +13,22 @@ Extracts readable markdown transcripts from Claude Code and Codex CLI session JS
 
 ```bash
 # Extract a single session
-python3 ~/.claude/skills/extract-transcripts/extract_transcript.py <session.jsonl>
+uv run ~/.claude/skills/extract-transcripts/extract_transcript.py <session.jsonl>
 
 # With tool calls and thinking blocks
-python3 ~/.claude/skills/extract-transcripts/extract_transcript.py <session.jsonl> --include-tools --include-thinking
+uv run ~/.claude/skills/extract-transcripts/extract_transcript.py <session.jsonl> --include-tools --include-thinking
 
 # Extract all sessions from a directory
-python3 ~/.claude/skills/extract-transcripts/extract_transcript.py <directory> --all
+uv run ~/.claude/skills/extract-transcripts/extract_transcript.py <directory> --all
 
 # Output to file
-python3 ~/.claude/skills/extract-transcripts/extract_transcript.py <session.jsonl> -o output.md
+uv run ~/.claude/skills/extract-transcripts/extract_transcript.py <session.jsonl> -o output.md
 
 # Summary only (quick overview)
-python3 ~/.claude/skills/extract-transcripts/extract_transcript.py <session.jsonl> --summary
+uv run ~/.claude/skills/extract-transcripts/extract_transcript.py <session.jsonl> --summary
 
 # Skip empty/warmup-only sessions
-python3 ~/.claude/skills/extract-transcripts/extract_transcript.py <directory> --all --skip-empty
+uv run ~/.claude/skills/extract-transcripts/extract_transcript.py <directory> --all --skip-empty
 ```
 
 **Options:**
@@ -44,10 +44,10 @@ python3 ~/.claude/skills/extract-transcripts/extract_transcript.py <directory> -
 
 ```bash
 # Extract a Codex session
-python3 ~/.claude/skills/extract-transcripts/extract_codex_transcript.py <session.jsonl>
+uv run ~/.claude/skills/extract-transcripts/extract_codex_transcript.py <session.jsonl>
 
 # Extract from Codex history file
-python3 ~/.claude/skills/extract-transcripts/extract_codex_transcript.py ~/.codex/history.jsonl --history
+uv run ~/.claude/skills/extract-transcripts/extract_codex_transcript.py ~/.codex/history.jsonl --history
 ```
 
 ## Session File Locations
@@ -65,30 +65,30 @@ For querying across many sessions, use the DuckDB-based indexer:
 
 ```bash
 # Index all sessions (incremental - only new/changed files)
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py index
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py index
 
 # Force full reindex
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py index --full
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py index --full
 
 # Limit number of files to process
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py index --limit 10
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py index --limit 10
 
 # List recent sessions
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py recent
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py recent --limit 20
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py recent --project myapp
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py recent --since 7d
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py recent
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py recent --limit 20
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py recent --project myapp
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py recent --since 7d
 
 # Search across sessions
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py search "error handling"
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py search "query" --cwd ~/myproject
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py search "error handling"
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py search "query" --cwd ~/myproject
 
 # Show a session transcript
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py show <file_path>
-python3 ~/.claude/skills/extract-transcripts/transcript_index.py show <file_path> --summary
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py show <file_path>
+uv run ~/.claude/skills/extract-transcripts/transcript_index.py show <file_path> --summary
 ```
 
-**Requirements:** DuckDB (`pip install duckdb`)
+**Requirements:** uv (dependencies auto-installed via inline script metadata)
 
 **Database location:** `~/.claude/transcript-index/sessions.duckdb`
 

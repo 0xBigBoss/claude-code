@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["duckdb"]
+# ///
 """DuckDB-based indexer for Claude Code session transcripts."""
 
 import argparse
@@ -9,11 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-try:
-    import duckdb
-except ImportError:
-    print("Error: duckdb not installed. Run: pip install duckdb", file=sys.stderr)
-    sys.exit(1)
+import duckdb
 
 
 # Default paths
