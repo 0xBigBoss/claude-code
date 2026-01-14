@@ -42,8 +42,9 @@ Load all relevant best-practices skills immediately as your first action when wo
 | Go: `.go`, `go.mod` | go-best-practices |
 | Zig: `.zig`, `build.zig`, `build.zig.zon` | zig-best-practices |
 | Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | playwright-best-practices |
-| Tilt: `Tiltfile`, `tilt` CLI, tilt process management | tilt |
+| Tilt: `Tiltfile`, tilt commands | tilt |
 | Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
+| Canton Network: `.daml`, `daml.yaml`, Canton/Splice repos, LF versions | canton-network-repos |
 
 ### Multi-skill combinations
 
@@ -65,128 +66,21 @@ Invoke skills proactively:
 
 Skills provide error handling conventions, code quality patterns, type-first development guidance, and review standards specific to each language or tool.
 
-## Subagents
-
-Proactively delegate to subagents when one is available for a task. The main conversation is for steering and planning; push implementation details into subagents. This enables long sessions spanning days by keeping the main context focused on progress and direction rather than intermediate work.
-
-## Tool use
-- Prefer project-standard tools; default to `rg` for search.
-- Read relevant files before responding; cite paths.
-- Run commands sequentially unless independent; parallelize only independent reads/searches.
-- After tool results, evaluate quality and determine next steps before proceeding.
-- Create helper scripts or temporary files only when requested; clean up after use.
-- Request missing command parameters rather than guessing.
-
-## Long-running processes via tmux
-
-Prefer tmux for processes expected to outlive the conversation (dev servers, watchers, tilt, builds). This survives Claude Code session reloads.
-
-### Session naming
-
-Derive session name from the current context:
-1. **Git worktree name**: `basename $(git rev-parse --show-toplevel)`
-2. **Fallback**: directory name
-
-Pattern: `{project}` for single process, `{project}` with named windows for multiple.
-
-```bash
-SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
-```
-
-### Isolation
-
-Each Claude Code session operates in its own tmux session based on project. Never attach to, modify, or kill tmux sessions belonging to other projects.
-
-### Quick reference
-
-```bash
-# Start process in tmux
-tmux new-session -d -s "$SESSION" '<command>'
-
-# Check output
-tmux capture-pane -p -t "$SESSION" -S -50
-
-# List sessions
-tmux ls
-
-# Kill own session only
-tmux kill-session -t "$SESSION"
-```
-
-Load `tmux-processes` skill when managing background work.
-
-## Process management
-
-Load the `tilt` skill before running tilt CLI commands or managing tilt processes.
-
-Multiple Claude Code sessions may run concurrently across different repos. Never use broad process kills that affect other sessions.
-
-**Forbidden:**
-- `pkill tilt`, `killall tilt`, `pkill node`, etc.
-- Any kill command without filtering by working directory or PID
-
-**Required approach:**
-1. Identify processes spawned from the current repo (check cwd, parent process, or port)
-2. Kill only the specific PID(s) belonging to this session
-3. If unable to isolate the target process, treat as **blocked** and ask the user
-
-**Examples:**
-```bash
-# Good: kill by specific PID after identifying it
-lsof -i :10350 | grep LISTEN  # find process on your port
-kill <specific-pid>
-
-# Good: filter by working directory
-pgrep -f "tilt.*$(pwd)"
-
-# Bad: kills all tilt processes across all sessions
-pkill tilt
-```
-
-When restarting services (tilt, docker-compose, dev servers), always verify you're targeting only processes from your working directory.
-
-## Reproducible environments
-
-Codify all environment setup; never rely on ad-hoc manual configuration.
-
-- Use `gen-env` skill for instance provisioning (ports, data isolation, browser state)
-- Leverage Tilt and Kubernetes for service orchestration; define infrastructure as code
-- Setup scripts must be idempotent and runnable from scratch
-- Document environment requirements in project config, not tribal knowledge
-- Bootstrap processes should be automated and version-controlled
-
-## Context window and state
-- Continue working through context limits. As context tightens, write `progress.md` with: current task, work done, next steps, open questions, files touched, test/lint/build status.
-- On resume: run `pwd`; list key files; read `progress.md`; review recent git log if present; re-run quick verification relevant to the task.
-- For multi-window tasks, use JSON (`tests.json`) for structured status; use `progress.md` for unstructured notes. Update after each run; continue incrementally with verification each window.
-
 ## Communication style
 - Concise teammate tone; plain text without emojis; brevity over perfect grammar.
 - After tool use, give a one-line status of what was done/found.
 - Use brief bullets when it improves scanability; paths in backticks; code fences only when helpful.
 - Technical documentation in third person; instructions in second person; avoid first person.
 
-## Idempotency and resilience
-
-Design operations to be safely re-runnable with predictable outcomes.
-
-**Idempotency:**
-- Check current state before making changes; skip if already in desired state
-- Use explicit guards (file markers, database flags, state checks) for non-idempotent operations
-- Operations must produce the same result whether run once or multiple times
-- Prefer declarative state descriptions over imperative change sequences
-
-**Timeouts and retries:**
-- All external calls (network, I/O, subprocesses) must have explicit timeouts; never block indefinitely
-- Retries must be bounded with a maximum count; fail after the limit
-- Use exponential backoff between retries to avoid thundering herd
-- Surface timeout/retry failures clearly; do not silently swallow them
-
 ## Error handling and completeness
 - **Errors must be handled or returned to callers**; every error requires explicit handling at every level of the stack (universal principle across all languages).
 - Fail loudly with clear messages on missing data or unsupported cases (silent failures compound into system-wide issues).
 - Propagate errors up the call stack; transform exceptions into meaningful results or rethrow.
 - Handle edge cases explicitly (empty inputs, nil/null, default branches).
+
+## Idempotency and resilience
+- Check state before changes; skip if already correct; prefer declarative over imperative.
+- External calls need explicit timeouts; retries must be bounded with backoff.
 
 ## Test integrity
 
