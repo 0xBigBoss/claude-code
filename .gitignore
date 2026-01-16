@@ -9,3 +9,6 @@ __pycache__/
 # DuckDB database files
 *.duckdb
 *.duckdb.wal
+
+# Local commands (not ready for sharing)
+commands/blog-context.md
