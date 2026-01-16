@@ -6,7 +6,78 @@
   },
   "permissions": {
     "allow": [
-      "Edit(~/.claude/handoffs/**)"
+      "Edit(~/.claude/handoffs/**)",
+
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git fetch:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git remote -v:*)",
+      "Bash(git add:*)",
+      "Bash(git stash:*)",
+      "Bash(git commit:*)",
+
+      "Bash(npm test:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run compile:*)",
+      "Bash(npm view:*)",
+
+      "Bash(bun test:*)",
+      "Bash(bun run test:*)",
+      "Bash(bun run build:*)",
+      "Bash(bun run lint:*)",
+      "Bash(bun run typecheck:*)",
+      "Bash(bun run check:*)",
+
+      "Bash(yarn test:*)",
+      "Bash(yarn build:*)",
+      "Bash(yarn lint:*)",
+      "Bash(yarn typecheck:*)",
+      "Bash(yarn install:*)",
+
+      "Bash(zig build:*)",
+      "Bash(zig fmt:*)",
+
+      "Bash(go test:*)",
+      "Bash(go build:*)",
+      "Bash(go vet:*)",
+
+      "Bash(uv sync:*)",
+
+      "Bash(tilt get:*)",
+      "Bash(tilt logs:*)",
+      "Bash(tilt status:*)",
+      "Bash(tilt wait:*)",
+      "Bash(tilt-logs:*)",
+
+      "Bash(kubectl get:*)",
+      "Bash(kubectl logs:*)",
+      "Bash(kubectl describe:*)",
+      "Bash(kubectl config:*)",
+
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker inspect:*)",
+      "Bash(docker images:*)",
+
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr status:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue list:*)",
+
+      "Bash(ls:*)",
+      "Bash(pwd:*)",
+      "Bash(which:*)",
+      "Bash(date:*)",
+      "Bash(wc:*)"
     ],
     "additionalDirectories": [
       "~/.claude/handoffs"
