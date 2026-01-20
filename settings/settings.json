@@ -100,11 +100,12 @@
     "swift-lsp@claude-plugins-official": true,
     "codex-reviewer@0xbigboss-plugins": true,
     "ralph-reviewed@0xbigboss-plugins": true,
-    "codex-handoff@0xbigboss-plugins": true
+    "codex-handoff@0xbigboss-plugins": true,
+    "recall@0xbigboss-recall": true,
+    "silo@0xbigboss-silo": true
   },
   "alwaysThinkingEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1754076652911
   }
 }
-
