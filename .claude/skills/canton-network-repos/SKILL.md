@@ -1,3 +1,8 @@
+---
+name: canton-network-repos
+description: Canton Network, DAML, and Splice repository knowledge. Use when working with Canton participants, DAML smart contracts, Splice applications, LF version compatibility, or package ID mismatches. Triggers on Canton, DAML, Splice, decentralized-canton-sync, or LF version queries.
+---
+
 # Canton Network Open-Source Repositories
 
 This skill provides comprehensive knowledge about the Canton Network open-source ecosystem, repository relationships, and build processes.
