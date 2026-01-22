@@ -8,6 +8,16 @@
     "allow": [
       "Edit(~/.claude/handoffs/**)",
 
+      "Skill(typescript-best-practices)",
+      "Skill(react-best-practices)",
+      "Skill(playwright-best-practices)",
+      "Skill(tilt)",
+      "Skill(web-fetch)",
+      "Skill(zig-best-practices)",
+      "Skill(python-best-practices)",
+      "Skill(tamagui-best-practices)",
+      "Skill(go-best-practices)",
+
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
