@@ -45,6 +45,7 @@ Load all relevant best-practices skills immediately as your first action when wo
 | Tilt: `Tiltfile`, tilt commands | tilt |
 | Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
 | Canton Network: `.daml`, `daml.yaml`, Canton/Splice repos, LF versions | canton-network-repos |
+| Atlas: `atlas.hcl`, `.hcl` schema files, Atlas CLI commands | atlas-best-practices |
 
 ### Multi-skill combinations
 
