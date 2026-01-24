@@ -8,7 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 USER_SKILLS_DIR="$REPO_DIR/.claude/skills"
-CODEX_SKILLS_DIR="$HOME/code/dotfiles/codex/.codex/skills"
+CODEX_SKILLS_DIR="$HOME/dotfiles/codex/.codex/skills"
 PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
 
 # Options
