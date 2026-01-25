@@ -62,7 +62,7 @@ The output prompt must include:
 3. **Iteration awareness** - Make Claude know it's in a loop and should review previous work
 4. **Completion promise** - A unique marker Claude outputs when done (e.g., `<promise>COMPLETE</promise>`)
 5. **Escape conditions** - What to do if stuck after many iterations
-6. **State tracking** - Instruction to use TODO.md for cross-iteration memory and VCS visibility
+6. **State tracking** - Instruction to use TODO.md for cross-iteration memory
 
 ### Prompting Guidelines
 
@@ -130,11 +130,11 @@ Maintain a `TODO.md` file in the working directory as your working memory across
 1. Read `TODO.md` for progress from previous iterations
 2. Do work
 3. Update `TODO.md` (mark completed, add new items discovered)
-4. Commit code changes WITH `TODO.md` in the same commit
+4. Commit code changes
 5. When done, output completion promise
 
-### VCS Tracking
-Commit `TODO.md` with each code change for iteration visibility. Never edit `.claude/ralph-loop.local.md` - it is managed by a Claude Code hook and should not be tracked in VCS.
+### Note
+`TODO.md` is working memory for the agent across iterations. It does not need to be committed to VCS. Never edit `.claude/ralph-loop.local.md` - it is managed by a Claude Code hook.
 </iteration_state>
 
 <success_criteria>
@@ -152,7 +152,7 @@ Run these commands to verify progress. If any fail, fix the issues and re-verify
 2. [Second verification command and what to do if it fails]
 3. [Continue until all pass]
 4. Update TODO.md with current status
-5. Commit changes (include TODO.md): `git add -A && git commit -m "..."`
+5. Commit code changes
 
 When ALL verifications pass, output: <promise>COMPLETE</promise>
 </verification_loop>
@@ -163,7 +163,6 @@ After 15+ iterations without progress:
   - What's preventing progress
   - Approaches attempted
   - Suggested alternative paths
-- Commit the updated TODO.md
 - Output: <promise>BLOCKED</promise>
 </if_stuck>
 ```
