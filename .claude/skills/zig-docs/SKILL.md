@@ -7,7 +7,7 @@ description: Fetches Zig language and standard library documentation via CLI. Ac
 
 ## Instructions
 
-- Use raw GitHub sources for std lib documentation (most reliable)
+- Use raw Codeberg sources for std lib documentation (most reliable)
 - Use pandoc for language reference from ziglang.org (works for prose content)
 - The std lib HTML docs at ziglang.org are JavaScript-rendered and return empty content; avoid them
 - Zig source files contain doc comments (`//!` for module docs, `///` for item docs) that serve as authoritative documentation
@@ -20,21 +20,21 @@ Standard library modules are self-documenting. Fetch source directly:
 
 ```bash
 # Module source with doc comments
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/<module>.zig"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/<module>.zig"
 
 # Common modules:
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/log.zig"
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/mem.zig"
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/fs.zig"
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/heap.zig"
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/debug.zig"
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/testing.zig"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/log.zig"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/mem.zig"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/fs.zig"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/heap.zig"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/debug.zig"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/testing.zig"
 ```
 
 ### Fetch Allocator Interface
 
 ```bash
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/mem/Allocator.zig"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/mem/Allocator.zig"
 ```
 
 ### Fetch Language Reference (Prose)
@@ -50,11 +50,11 @@ pandoc -f html -t plain "https://ziglang.org/documentation/master/" | head -200
 ### List Standard Library Contents
 
 ```bash
-# List all std lib modules via GitHub API
-curl -sL "https://api.github.com/repos/ziglang/zig/contents/lib/std" | jq -r '.[].name'
+# List all std lib modules via Codeberg API
+curl -sL "https://codeberg.org/api/v1/repos/ziglang/zig/contents/lib/std" | jq -r '.[].name'
 
 # List subdirectory contents
-curl -sL "https://api.github.com/repos/ziglang/zig/contents/lib/std/mem" | jq -r '.[].name'
+curl -sL "https://codeberg.org/api/v1/repos/ziglang/zig/contents/lib/std/mem" | jq -r '.[].name'
 ```
 
 ### Fetch zig.guide Content
@@ -68,10 +68,10 @@ pandoc -f html -t plain "https://zig.guide/"
 
 | Source | URL Pattern | Notes |
 |--------|-------------|-------|
-| Std lib source | `raw.githubusercontent.com/ziglang/zig/master/lib/std/<path>` | Most reliable; includes doc comments |
+| Std lib source | `codeberg.org/ziglang/zig/raw/branch/master/lib/std/<path>` | Most reliable; includes doc comments |
 | Language reference | `ziglang.org/documentation/master/` | Use pandoc; prose content |
 | zig.guide | `zig.guide/` | Beginner-friendly; use pandoc |
-| GitHub API | `api.github.com/repos/ziglang/zig/contents/lib/std` | List directory contents |
+| Codeberg API | `codeberg.org/api/v1/repos/ziglang/zig/contents/lib/std` | List directory contents |
 
 ## Common Module Paths
 
@@ -100,7 +100,7 @@ Replace `master` with version tag for stable releases:
 
 ```bash
 # 0.14.0 release
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/0.14.0/lib/std/log.zig"
+curl -sL "https://codeberg.org/ziglang/zig/raw/tag/0.14.0/lib/std/log.zig"
 
 # Language reference for specific version
 pandoc -f html -t plain "https://ziglang.org/documentation/0.14.0/"
@@ -112,38 +112,38 @@ pandoc -f html -t plain "https://ziglang.org/documentation/0.14.0/"
 
 ```bash
 # Search for function name across std lib
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/<module>.zig" | grep -A5 "pub fn <name>"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/<module>.zig" | grep -A5 "pub fn <name>"
 
 # Example: find allocator.create
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/mem/Allocator.zig" | grep -A10 "pub fn create"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/mem/Allocator.zig" | grep -A10 "pub fn create"
 ```
 
 ### Extract doc comments
 
 ```bash
 # Module-level docs (//!)
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/log.zig" | grep "^//!"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/log.zig" | grep "^//!"
 
 # Function/type docs (///)
-curl -sL "https://raw.githubusercontent.com/ziglang/zig/master/lib/std/mem/Allocator.zig" | grep -B1 "pub fn" | grep "///"
+curl -sL "https://codeberg.org/ziglang/zig/raw/branch/master/lib/std/mem/Allocator.zig" | grep -B1 "pub fn" | grep "///"
 ```
 
 ## Troubleshooting
 
 **Empty content from ziglang.org/documentation/master/std/:**
-- The std lib HTML docs are JavaScript-rendered; use raw GitHub instead
+- The std lib HTML docs are JavaScript-rendered; use raw Codeberg instead
 
 **pandoc fails:**
-- Some pages require JavaScript; fall back to curl + raw GitHub
+- Some pages require JavaScript; fall back to curl + raw Codeberg
 - Check URL is correct (no trailing slash issues)
 
-**Rate limiting on GitHub API:**
-- Use raw.githubusercontent.com URLs directly instead of API
+**Rate limiting on Codeberg API:**
+- Use codeberg.org raw URLs directly instead of API
 - Cache frequently accessed content locally
 
 ## References
 
 - Language Reference: https://ziglang.org/documentation/master/
-- Standard Library Source: https://github.com/ziglang/zig/tree/master/lib/std
+- Standard Library Source: https://codeberg.org/ziglang/zig/src/branch/master/lib/std
 - Zig Guide: https://zig.guide/
-- Release Tags: https://github.com/ziglang/zig/tags
+- Release Tags: https://codeberg.org/ziglang/zig/tags
