@@ -76,24 +76,30 @@ try {
 // --- Config Loading ---
 
 function loadUserConfig(): UserConfig {
-  const configPath = `${ralphsDir}/config.json`;
-  try {
-    if (existsSync(configPath)) {
-      const content = readFileSync(configPath, "utf-8");
-      const parsed = JSON.parse(content) as Partial<UserConfig>;
-      // Merge with defaults
-      return {
-        codex: {
-          ...DEFAULT_CONFIG.codex,
-          ...parsed.codex,
-        },
-      };
-    }
-  } catch (e) {
-    // Log but don't fail - use defaults
+  // Standard location: ~/.claude/codex.json
+  const standardPath = `${homedir()}/.claude/codex.json`;
+  // Legacy fallback: ~/.claude/ralphs/config.json
+  const legacyPath = `${ralphsDir}/config.json`;
+
+  for (const configPath of [standardPath, legacyPath]) {
     try {
-      appendFileSync(`${ralphsDir}/startup.log`, `[${new Date().toISOString()}] Failed to load config: ${e}\n`);
-    } catch { /* ignore */ }
+      if (existsSync(configPath)) {
+        const content = readFileSync(configPath, "utf-8");
+        const parsed = JSON.parse(content) as Partial<UserConfig>;
+        // Merge with defaults
+        return {
+          codex: {
+            ...DEFAULT_CONFIG.codex,
+            ...parsed.codex,
+          },
+        };
+      }
+    } catch (e) {
+      // Log but don't fail - use defaults
+      try {
+        appendFileSync(`${ralphsDir}/startup.log`, `[${new Date().toISOString()}] Failed to load config from ${configPath}: ${e}\n`);
+      } catch { /* ignore */ }
+    }
   }
   return DEFAULT_CONFIG;
 }

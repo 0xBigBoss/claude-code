@@ -78,6 +78,9 @@ main() {
     # CLAUDE.md - user-level instructions (open-source, editable)
     ensure_symlink "$SCRIPT_DIR/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 
+    # codex.json - centralized Codex CLI configuration for all plugins
+    ensure_symlink "$SCRIPT_DIR/../codex/codex.json" "$HOME/.claude/codex.json"
+
     echo ""
     if [[ "$CHECK_ONLY" == true ]]; then
         echo "Check complete. Run without --check to apply changes."
