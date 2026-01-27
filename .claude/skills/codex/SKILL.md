@@ -14,6 +14,10 @@ Hand off a task to Codex CLI for autonomous execution. Codex is a capable coding
 Session ID: ${CLAUDE_SESSION_ID}
 Output directory: `~/.claude/codex/${CLAUDE_SESSION_ID}/`
 
+**Output files:**
+- `progress-{timestamp}.jsonl` - Streaming JSONL events (for monitoring)
+- `summary-{timestamp}.txt` - Final agent message only (for results)
+
 ## Parse Arguments
 
 Arguments: $ARGUMENTS
@@ -140,13 +144,17 @@ Build and run the command:
 
 ```bash
 codex exec --json \
-  -o ~/.claude/codex/${CLAUDE_SESSION_ID}/output-{timestamp}.txt \
+  -o ~/.claude/codex/${CLAUDE_SESSION_ID}/summary-{timestamp}.txt \
   {required_flags} \
   {optional_flags} \
   - <<'CODEX_PROMPT'
 {generated_prompt}
-CODEX_PROMPT
+CODEX_PROMPT > ~/.claude/codex/${CLAUDE_SESSION_ID}/progress-{timestamp}.jsonl
 ```
+
+**Output handling:**
+- `--json` streams progress events to stdout → redirected to `progress-{timestamp}.jsonl`
+- `-o` writes only the final message → `summary-{timestamp}.txt`
 
 **Flag rules:**
 - **If NOT in a git repo:** add `--skip-git-repo-check` (required)
@@ -155,23 +163,66 @@ CODEX_PROMPT
 - **If user requests specific model:** add `-m <model>`
 - **If user requests danger-full-access:** use `--sandbox danger-full-access` instead of `--full-auto`
 
-Run via Bash tool. For long-running tasks, use `run_in_background: true`.
+Run via Bash tool.
+
+### Background vs Foreground
+
+**Always background** tasks that might take >30 seconds:
+- Any task touching multiple files
+- Investigation/debugging tasks
+- Tasks requiring test runs
+- Feature implementations
+
+Use `run_in_background: true` in the Bash tool call.
+
+**After backgrounding:**
+- Inform the user the task is running
+- Do NOT immediately check output
+- Wait for user to ask about status, OR continue with other work
+- When checking, use the token-efficient methods below
+
+**Foreground only** for trivial tasks (<30 seconds expected):
+- Single-line fixes
+- Simple file reads
+- Quick queries
 
 ### Monitoring Execution
 
-The `--json` flag streams JSONL events. Key event types:
-- `agent_message`: Codex's responses
-- `tool_call`: Tools being executed
-- `error`: Errors encountered
+Two files are created:
+- `progress-*.jsonl` - Streaming JSONL (verbose, for progress checking)
+- `summary-*.txt` - Final message only (clean, for results)
 
-If running in foreground, output streams naturally.
-If backgrounded, use `tail -f` on the output file or check `TaskOutput`.
+**Token-efficient monitoring** (CRITICAL):
+
+```bash
+# Check if still running (line count growing = active)
+wc -l < ~/.claude/codex/${CLAUDE_SESSION_ID}/progress-*.jsonl
+
+# Quick progress check - last 3 events only
+tail -n 3 ~/.claude/codex/${CLAUDE_SESSION_ID}/progress-*.jsonl
+
+# Check if summary exists (means Codex finished)
+ls ~/.claude/codex/${CLAUDE_SESSION_ID}/summary-*.txt 2>/dev/null
+```
+
+**Do NOT:**
+- Read the entire progress file
+- Use `tail -f` (streams indefinitely, wastes context)
+- Check more than once per 30 seconds for long tasks
+
+**When checking on background tasks:**
+1. First: check if summary file exists (finished?)
+2. If not finished: `wc -l` on progress file to confirm activity
+3. If needed: `tail -n 3` on progress for current status
 
 ## Return Result
 
 When Codex completes:
 
-1. Read the output file from `~/.claude/codex/${CLAUDE_SESSION_ID}/`
+1. **Read the summary file** (already contains only the final message):
+   ```bash
+   cat ~/.claude/codex/${CLAUDE_SESSION_ID}/summary-*.txt
+   ```
 2. Parse Codex's structured summary
 3. Report concisely to the user (3-6 sentences or ≤5 bullets)
 
