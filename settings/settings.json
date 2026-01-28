@@ -109,7 +109,6 @@
     "clangd-lsp@claude-plugins-official": true,
     "codex-reviewer@0xbigboss-plugins": true,
     "ralph-reviewed@0xbigboss-plugins": true,
-    "codex-handoff@0xbigboss-plugins": true,
     "recall@0xbigboss-recall": true,
     "silo@0xBigBoss-silo": true,
     "send-infra@send-infra-plugins": true
