@@ -2,277 +2,162 @@
 name: codex
 description: Hand off a task to Codex CLI for autonomous execution. Use when a task would benefit from a capable subagent to implement, fix, investigate, or review code. Codex has full codebase access and can make changes.
 argument-hint: <task description> [--model <model>] [--sandbox <mode>]
+disable-model-invocation: false
 allowed-tools: Bash(codex:*), Bash(git:*), Bash(pwd:*), Bash(mkdir:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Read, Grep, Glob
 ---
 
 # Codex Subagent
 
-Hand off a task to Codex CLI for autonomous execution. Codex is a capable coding agent that can implement features, fix bugs, refactor code, investigate issues, and review changes.
-
-## Session Info
-
 Session ID: ${CLAUDE_SESSION_ID}
-Output directory: `~/.claude/codex/${CLAUDE_SESSION_ID}/`
+Output: `~/.claude/codex/${CLAUDE_SESSION_ID}/`
 
-**Output files:**
-- `progress-{timestamp}.jsonl` - Streaming JSONL events (for monitoring)
-- `summary-{timestamp}.txt` - Final agent message only (for results)
+## Arguments
 
-## Parse Arguments
+Task: $ARGUMENTS
 
-Arguments: $ARGUMENTS
+**Optional flags** (only if user explicitly requests):
+- `--model <model>`: `gpt-5.2-codex` (default), `gpt-5.2`, `gpt-5-mini`, `o3`
+- `--sandbox <mode>`: `read-only`, `workspace-write`, `danger-full-access`
 
-Parse the arguments:
-- Everything before flags is the **task description**
-- `--model <model>` or `-m <model>`: Override model (only if explicitly requested)
-- `--sandbox <mode>`: Override sandbox mode (only if explicitly requested)
+Omit flags to use user's config defaults.
 
-**Available models** (only pass if user explicitly requests):
-- `gpt-5.2-codex` - Default for Codex CLI, optimized for agentic coding (user's current config)
-- `gpt-5.2` - Flagship model, best for complex professional tasks
-- `gpt-5-mini` - Fast, cost-efficient (replaces o4-mini)
-- `o3` - Deep reasoning model for complex multi-step problems
+## Context Depth
 
-**Sandbox modes** (only pass if user explicitly requests):
-- `read-only` - No file modifications allowed
-- `workspace-write` - Can modify files in workspace
-- `danger-full-access` - Full system access (use with caution)
-
-**Default behavior:** Omit `--model` and `--sandbox` flags to use the user's `~/.codex/config.toml` preferences.
-
-If no task description provided, ask the user what they want Codex to do.
-
-## Assess Task Complexity
-
-Based on the task description, determine context depth:
-
-**Minimal context** (single file fix, simple query):
-- Task mentions specific file or function
-- Clear, scoped objective
-- Example: "fix the type error in auth.ts", "add logging to handleRequest"
-
-**Medium context** (feature work, multi-file change):
-- Task involves a feature or component
-- May touch multiple files
-- Example: "add input validation to the API", "refactor error handling"
-
-**Full context** (architectural, investigation, unclear scope):
-- Task is exploratory or investigative
-- Scope unclear or potentially large
-- Example: "figure out why tests are flaky", "improve performance"
+**Minimal**: Specific file/function → git state only
+**Medium**: Feature/multi-file → add recent changes
+**Full**: Investigation/unclear → add session summary
 
 ## Gather Context
 
-### Git State (always include)
-
+**Always:**
 ```bash
-pwd
-git rev-parse --show-toplevel 2>/dev/null || echo "Not a git repo"
-git branch --show-current 2>/dev/null || echo "N/A"
-git status --short 2>/dev/null | head -20
+pwd && git rev-parse --show-toplevel 2>/dev/null || echo "Not a git repo"
+git branch --show-current 2>/dev/null && git status --short 2>/dev/null | head -20
 ```
 
-### For Medium/Full Context
-
+**Medium/Full:**
 ```bash
 git diff --stat 2>/dev/null | tail -20
-git log --oneline -5 --since="4 hours ago" 2>/dev/null || echo "No recent commits"
+git log --oneline -5 --since="4 hours ago" 2>/dev/null
 ```
 
-### For Full Context Only
+**Full only:** Session summary (work done, decisions, blockers)
 
-Summarize relevant session context:
-- What was being worked on
-- Key decisions or approaches discussed
-- Files that were read or modified
-- Any blockers or open questions
+## Prompt Structure
 
-## Generate Codex Prompt
-
-Create a prompt using **CTCO structure** (Context → Task → Constraints → Output format) optimized for GPT-5.2.
-
-Structure:
+Use CTCO format (Context → Task → Constraints → Output):
 
 ```
 <context>
 Working directory: {cwd}
 Repository: {repo_name}
 Branch: {branch}
-
-{git_status if relevant}
-{recent_changes if medium/full context}
-{session_summary if full context}
+{git_status}
+{recent_changes if medium/full}
+{session_summary if full}
 </context>
 
 <task>
-{task description from arguments}
+{task from arguments}
 </task>
 
 <constraints>
-- Implement EXACTLY and ONLY what is requested
-- No extra features, refactoring, or "improvements" beyond the task
-- Read relevant files before making changes
-- Run tests/linters if available to validate changes
-- If task is ambiguous, state your interpretation before proceeding
+- Implement EXACTLY what is requested
+- Read files before changing
+- Run tests/linters to validate
+- State interpretation if ambiguous
 </constraints>
 
 <output>
-After completing the task, provide a structured summary (≤5 bullets):
-- **What changed**: Files modified and nature of changes
-- **Where**: Specific locations (file:line when relevant)
-- **Validation**: Tests run, linters passed, manual verification
-- **Risks**: Any potential issues or edge cases to watch
-- **Next steps**: Follow-up work if any (or "None")
+Summary (≤5 bullets):
+- **What changed**: Files and changes
+- **Where**: file:line references
+- **Validation**: Tests/linters run
+- **Risks**: Edge cases to watch
+- **Next steps**: Follow-up or "None"
 </output>
 ```
 
-## Execute Codex
+## Execute
 
-First, ensure output directory exists:
-
+Setup:
 ```bash
 mkdir -p ~/.claude/codex/${CLAUDE_SESSION_ID}
+git rev-parse --show-toplevel 2>/dev/null && IN_GIT=true || IN_GIT=false
 ```
 
-Check if we're in a git repo:
-
-```bash
-git rev-parse --show-toplevel 2>/dev/null && echo "IN_GIT_REPO" || echo "NOT_GIT_REPO"
-```
-
-Build and run the command:
-
+Run:
 ```bash
 codex exec --json \
   -o ~/.claude/codex/${CLAUDE_SESSION_ID}/summary-{timestamp}.txt \
-  {required_flags} \
-  {optional_flags} \
+  {--skip-git-repo-check if not in git} \
+  {--full-auto OR --sandbox <mode>} \
+  {-m <model> if requested} \
   - <<'CODEX_PROMPT'
-{generated_prompt}
+{prompt}
 CODEX_PROMPT > ~/.claude/codex/${CLAUDE_SESSION_ID}/progress-{timestamp}.jsonl
 ```
 
-**Output handling:**
-- `--json` streams progress events to stdout → redirected to `progress-{timestamp}.jsonl`
-- `-o` writes only the final message → `summary-{timestamp}.txt`
-
-**Flag rules:**
-- **If NOT in a git repo:** add `--skip-git-repo-check` (required)
-- **Default:** add `--full-auto` (enables workspace-write sandbox + auto-approval)
-- **If user requests read-only:** use `--sandbox read-only` instead of `--full-auto`
-- **If user requests specific model:** add `-m <model>`
-- **If user requests danger-full-access:** use `--sandbox danger-full-access` instead of `--full-auto`
-
-Run via Bash tool.
+**Flags:**
+- Not in git: add `--skip-git-repo-check`
+- Default: `--full-auto` (workspace-write + auto-approval)
+- User-requested: `--sandbox <mode>` or `-m <model>`
 
 ### Background vs Foreground
 
-**Always background** tasks that might take >30 seconds:
-- Any task touching multiple files
-- Investigation/debugging tasks
-- Tasks requiring test runs
-- Feature implementations
+**Background tasks** (>30 seconds expected):
+- Multi-file changes, investigations, tests, feature work
+- Use `run_in_background: true` → returns `task_id`
 
-Use `run_in_background: true` in the Bash tool call.
+**Foreground tasks** (<30 seconds):
+- Single-line fixes, simple queries
 
-**After backgrounding:**
-- Inform the user the task is running
-- Do NOT immediately check output
-- Wait for user to ask about status, OR continue with other work
-- When checking, use the token-efficient methods below
+### Monitoring Background Tasks
 
-**Foreground only** for trivial tasks (<30 seconds expected):
-- Single-line fixes
-- Simple file reads
-- Quick queries
+**Token-efficient approach:**
+1. Use `TaskOutput(task_id, block=true)` to wait for completion
+2. Ignore TaskOutput's content (stdout redirected to progress file)
+3. Read summary file directly: `cat ~/.claude/codex/${CLAUDE_SESSION_ID}/summary-*.txt`
 
-### Monitoring Execution
+The summary file contains only Codex's final message (token-efficient).
 
-Two files are created:
-- `progress-*.jsonl` - Streaming JSONL (verbose, for progress checking)
-- `summary-*.txt` - Final message only (clean, for results)
+**Progress checks** (if needed before completion):
+- `TaskOutput(task_id, block=false)` - check if still running
+- `tail -n 3 ~/.claude/codex/${CLAUDE_SESSION_ID}/progress-*.jsonl` - last 3 events only
 
-**Token-efficient monitoring** (CRITICAL):
+**Do NOT** read entire progress files or use `tail -f`.
 
+## Report Result
+
+Read summary:
 ```bash
-# Check if still running (line count growing = active)
-wc -l < ~/.claude/codex/${CLAUDE_SESSION_ID}/progress-*.jsonl
-
-# Quick progress check - last 3 events only
-tail -n 3 ~/.claude/codex/${CLAUDE_SESSION_ID}/progress-*.jsonl
-
-# Check if summary exists (means Codex finished)
-ls ~/.claude/codex/${CLAUDE_SESSION_ID}/summary-*.txt 2>/dev/null
+cat ~/.claude/codex/${CLAUDE_SESSION_ID}/summary-*.txt
 ```
 
-**Do NOT:**
-- Read the entire progress file
-- Use `tail -f` (streams indefinitely, wastes context)
-- Check more than once per 30 seconds for long tasks
-
-**When checking on background tasks:**
-1. First: check if summary file exists (finished?)
-2. If not finished: `wc -l` on progress file to confirm activity
-3. If needed: `tail -n 3` on progress for current status
-
-## Return Result
-
-When Codex completes:
-
-1. **Read the summary file** (already contains only the final message):
-   ```bash
-   cat ~/.claude/codex/${CLAUDE_SESSION_ID}/summary-*.txt
-   ```
-2. Parse Codex's structured summary
-3. Report concisely to the user (3-6 sentences or ≤5 bullets)
-
-Format:
-
+Report format (≤5 bullets):
 ```
-## Codex Result
-
 **Status:** {success/error/partial}
-
-**What changed:**
-- {file1}: {change summary}
-- {file2}: {change summary}
-
-**Validation:** {tests/linters run, results}
-
-**Risks/Notes:** {if any, otherwise omit}
-
-**Next steps:** {if any, otherwise "None"}
+**Changed:** {files and changes}
+**Validation:** {tests/linters}
+**Risks:** {if any}
+**Next:** {follow-up or "None"}
 ```
-
-Keep the summary concise. If Codex produced verbose output, distill to essentials.
 
 ## Examples
 
-### Simple fix
-```
+```bash
+# Simple fix
 /codex fix the null pointer in utils/parser.ts line 42
-```
-Minimal context, quick execution.
 
-### Feature implementation
-```
+# Feature work
 /codex add rate limiting to the /api/submit endpoint
-```
-Medium context, may take a few minutes.
 
-### Investigation
-```
+# Investigation (background)
 /codex investigate why the CI build fails on arm64
-```
-Full context, potentially long-running, consider backgrounding.
 
-### With model override (only when explicitly requested)
-```
-/codex --model o3 design a caching strategy for the database queries
-```
+# Model override
+/codex --model o3 design a caching strategy
 
-### Read-only mode (for review/analysis tasks)
+# Read-only
+/codex --sandbox read-only review the auth implementation
 ```
-/codex --sandbox read-only review the authentication implementation
-```
-Skips `--full-auto`, uses read-only sandbox for safe exploration.
