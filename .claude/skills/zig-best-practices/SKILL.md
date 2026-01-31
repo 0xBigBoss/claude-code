@@ -434,6 +434,61 @@ Reference these guides for specialized patterns:
 - **Interfacing with C libraries** (raylib, SDL, curl, system APIs): See [C-INTEROP.md](C-INTEROP.md)
 - **Debugging memory leaks** (GPA, stack traces): See [DEBUGGING.md](DEBUGGING.md)
 
+## Tooling
+
+### zigdoc - Documentation Lookup
+
+CLI tool for browsing Zig std library and project dependency docs.
+
+**Install:**
+```bash
+git clone https://github.com/rockorager/zigdoc
+cd zigdoc
+zig build install -Doptimize=ReleaseFast --prefix $HOME/.local
+```
+
+**Usage:**
+```bash
+zigdoc std.ArrayList       # std lib symbol
+zigdoc std.mem.Allocator   # nested symbol
+zigdoc vaxis.Window        # project dependency (if in build.zig)
+zigdoc @init               # create AGENTS.md with API patterns
+```
+
+### ziglint - Static Analysis
+
+Linter for Zig source code enforcing coding standards.
+
+**Install:**
+```bash
+git clone https://github.com/rockorager/ziglint
+cd ziglint
+zig build install -Doptimize=ReleaseFast --prefix $HOME/.local
+```
+
+**Usage:**
+```bash
+ziglint                    # lint current directory (uses .ziglint.zon if present)
+ziglint src build.zig      # lint specific paths
+ziglint --ignore Z001      # suppress specific rule
+```
+
+**Configuration (`.ziglint.zon`):**
+```zig
+.{
+    .paths = .{ "src", "build.zig" },
+    .rules = .{
+        .Z001 = .{ .enabled = false },
+        .Z024 = .{ .max_length = 80 },
+    },
+}
+```
+
+**Inline suppression:**
+```zig
+fn MyBadName() void {} // ziglint-ignore: Z001
+```
+
 ## References
 
 - Language Reference: https://ziglang.org/documentation/0.15.2/
