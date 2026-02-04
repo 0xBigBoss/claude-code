@@ -34,7 +34,13 @@ ensure_symlink() {
     if [[ -L "$link" ]]; then
         local current
         current="$(readlink "$link")"
-        if [[ "$current" == "$target" ]]; then
+
+        local resolved_target
+        local resolved_link
+        resolved_target="$(python3 -c "import os; print(os.path.realpath('${target}'))" 2>/dev/null || true)"
+        resolved_link="$(python3 -c "import os; print(os.path.realpath('${link}'))" 2>/dev/null || true)"
+
+        if [[ "$current" == "$target" || ( -n "$resolved_target" && -n "$resolved_link" && "$resolved_target" == "$resolved_link" ) ]]; then
             print_ok "$link_name: symlink correct"
             return 0
         else
