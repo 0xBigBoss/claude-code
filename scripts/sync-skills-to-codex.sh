@@ -8,12 +8,41 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 USER_SKILLS_DIR="$REPO_DIR/.claude/skills"
-CODEX_SKILLS_DIR="$HOME/dotfiles/codex/.codex/skills"
 PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
 
 # Options
 DRY_RUN=false
 VERBOSE=false
+
+resolve_codex_skills_dir() {
+    if [[ -n "${DOTFILES_DIR:-}" && -d "$DOTFILES_DIR/codex/.codex/skills" ]]; then
+        echo "$DOTFILES_DIR/codex/.codex/skills"
+        return 0
+    fi
+
+    local repo_root
+    repo_root="$(cd "$REPO_DIR/.." && pwd)"
+    if [[ -d "$repo_root/codex/.codex/skills" ]]; then
+        echo "$repo_root/codex/.codex/skills"
+        return 0
+    fi
+
+    if [[ -d "$HOME/.codex/skills" ]]; then
+        echo "$HOME/.codex/skills"
+        return 0
+    fi
+
+    if [[ -d "$HOME/.codex" ]]; then
+        echo "$HOME/.codex/skills"
+        return 0
+    fi
+
+    echo "Error: Unable to locate Codex skills directory." >&2
+    echo "Set DOTFILES_DIR to your dotfiles repo root or create ~/.codex/skills." >&2
+    return 1
+}
+
+CODEX_SKILLS_DIR="$(resolve_codex_skills_dir)"
 
 usage() {
     cat <<EOF
