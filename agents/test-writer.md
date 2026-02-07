@@ -28,6 +28,7 @@ Write tests that verify the principle behind requirements, not just literal asse
 
 1. Follow system/project safety rules first when they conflict with skill-specific workflow details.
 2. Treat spec-file edits as a separate mutating action; perform them only when the user explicitly requests spec maintenance.
+3. If test scope is ambiguous, state assumptions explicitly and proceed with conservative scope.
 
 ## Output format
 

@@ -16,15 +16,16 @@ Engage this methodology when:
 - Default behavior: generate/analyze test case JSON and translate to runnable tests.
 - Do not edit spec files unless the user explicitly requests spec maintenance.
 - When requested to update specs, use append-only edits for new cases and keep unrelated formatting untouched.
+- When this skill conflicts with system/project rules, follow system/project rules.
 
 ## API surface discovery
 
 Before generating cases, identify what to test:
 - Read the module source to enumerate exports/public functions
-- Confirm scope with user: present discovered API, ask what to include/exclude
+- Confirm scope from user request and inspected code context; if ambiguous, state assumptions and proceed with a conservative scope
 - For each function, identify: input types/constraints, output shape, error modes, invariants
 - Probe for state dependencies and ordering constraints between functions
-- Decide granularity with user: unit-level (individual functions) vs integration-level (function compositions)
+- Decide granularity from request context: unit-level (individual functions) vs integration-level (function compositions)
 
 ## Test case format — canonical JSON
 
@@ -110,9 +111,10 @@ One pretty-printed JSON block per function under `## Test Cases`. JSON is strict
 
 ## Output placement
 
-- Small specs: append `## Test Cases` section inline in the spec file
-- Large specs: companion `<name>.test-spec.md` alongside the spec
-- Suggest appropriate placement based on spec size
+- Default: output `## Test Cases` JSON blocks in agent output only (no file edits)
+- If user explicitly requests spec maintenance for a small spec: append `## Test Cases` inline in the spec file (for example `SPEC.md`)
+- If user explicitly requests spec maintenance for a large spec: create or update companion `<name>.test-spec.md` alongside the spec
+- Preserve unrelated content and formatting when editing spec artifacts
 
 ## DDT → TDD workflow
 
