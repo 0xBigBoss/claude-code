@@ -43,10 +43,13 @@ Load all relevant best-practices skills immediately as your first action when wo
 | Zig: `.zig`, `build.zig`, `build.zig.zon` | zig-best-practices |
 | Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | playwright-best-practices |
 | Tilt: `Tiltfile`, tilt commands | tilt |
+| Tilt bootstrap: `tilt up`, Tiltfile errors, dev env startup | tiltup |
 | Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
 | Canton Network: `.daml`, `daml.yaml`, Canton/Splice repos, LF versions | canton-network-repos |
 | Atlas: `atlas.hcl`, `.hcl` schema files, Atlas CLI commands | atlas-best-practices |
 | Spec files: `*.spec.md`, `SPEC.md`, `spec/*.md`, test design | data-driven-testing |
+| Spec alignment: spec file + implementation in context | specalign |
+| E2E tests: `*.spec.ts` runs, test failures, flaky tests | e2e |
 
 ### Multi-skill combinations
 
@@ -59,6 +62,10 @@ Load all applicable skills together when contexts overlap:
 - **Go + Tilt**: Go services in a Tilt-managed dev environment
 - **data-driven-testing + [language]**: Load DDT skill alongside the project's language skill when designing tests from specs
 - **DDT mutation guardrail**: Use DDT for test design/translation by default; editing spec files is a separate mutating action and requires explicit user direction
+- **tilt + tiltup**: Always load both when starting tilt or fixing Tiltfile errors
+- **specalign + data-driven-testing**: Load both when a spec file and its implementation are in context
+- **e2e + playwright-best-practices**: Load both when running or fixing Playwright e2e tests
+- **e2e + specalign**: Load both when e2e failures may indicate spec drift
 
 ### When to invoke skills
 
