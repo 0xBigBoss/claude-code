@@ -9,6 +9,8 @@ Track and analyze your Claude Code usage across all projects.
    python3 ~/.claude/scripts/setup-usage-tracking.py
    ```
 
+   This writes hook overrides to `~/.claude/settings.local.json` and regenerates `~/.claude/settings.json` via `claude-settings-merge`.
+
 2. **Restart Claude Code** for hooks to take effect
 
 3. **View your usage:**
@@ -63,7 +65,8 @@ Edit `~/.claude/scripts/usage-tracker.py` to:
 ## Troubleshooting
 
 1. **Hooks not working?**
-   - Check `~/.claude/settings.json` exists
+   - Check `~/.claude/settings.base.json` exists
+   - Check `~/.claude/settings.json` was regenerated
    - Restart Claude Code
    - Run with `--debug` flag
 

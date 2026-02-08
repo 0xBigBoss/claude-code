@@ -87,6 +87,14 @@ main() {
     # codex.json - centralized Codex CLI configuration for all plugins
     ensure_symlink "$SCRIPT_DIR/../codex/codex.json" "$HOME/.claude/codex.json"
 
+    # settings base - declarative baseline merged into ~/.claude/settings.json
+    ensure_symlink "$SCRIPT_DIR/settings/settings.json" "$HOME/.claude/settings.base.json"
+
+    # Regenerate runtime settings if merge helper exists.
+    if command -v claude-settings-merge >/dev/null 2>&1; then
+        claude-settings-merge --fix || print_warn "Failed to regenerate ~/.claude/settings.json"
+    fi
+
     echo ""
     if [[ "$CHECK_ONLY" == true ]]; then
         echo "Check complete. Run without --check to apply changes."

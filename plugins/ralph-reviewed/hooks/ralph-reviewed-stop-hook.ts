@@ -34,7 +34,8 @@ const HOOK_BUILD = "v1.8.4";
 const STDIN_TIMEOUT_MS = 2000;
 
 // --- User Config ---
-// User preferences stored in ~/.claude/ralphs/config.json
+// User preferences stored in ~/.claude/codex.json
+// Legacy fallback: ~/.claude/ralphs/config.json
 
 interface CodexConfig {
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";

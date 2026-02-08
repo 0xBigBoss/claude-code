@@ -31,7 +31,8 @@ const MAX_CODEX_TIMEOUT_SECONDS = HOOK_TIMEOUT_SECONDS - BUFFER_SECONDS; // 1680
 const STDIN_TIMEOUT_MS = 2000;
 
 // --- User Config ---
-// User preferences stored in ~/.claude/codex/config.json
+// User preferences stored in ~/.claude/codex.json
+// Legacy fallback: ~/.claude/codex/config.json
 
 interface CodexConfig {
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";

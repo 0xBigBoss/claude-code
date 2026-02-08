@@ -93,7 +93,19 @@
       "~/.claude/handoffs"
     ]
   },
-  "hooks": {},
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.claude/hooks/auto-load-skills.ts"
+          }
+        ]
+      }
+    ]
+  },
   "statusLine": {
     "type": "command",
     "command": "statusline"
