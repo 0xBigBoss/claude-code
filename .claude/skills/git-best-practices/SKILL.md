@@ -12,8 +12,7 @@ When this skill is loaded, follow these directives for all git operations:
 1. **Discover before acting** — run branch discovery to determine the repo's default and production branches before branching, merging, or opening PRs
 2. **Conventional commits** — every commit uses `type(scope): description` format
 3. **Stage explicitly** — add files by name so only intended changes are committed
-4. **Attribute AI work** — include `Co-Authored-By` on AI-assisted commits
-5. **Protect shared history** — use `--force-with-lease` for force pushes; confirm with the user before any force push
+4. **Protect shared history** — use `--force-with-lease` for force pushes; confirm with the user before any force push
 
 ## Agent Git Workflow
 
