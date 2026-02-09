@@ -83,14 +83,6 @@ Add a body when:
 - Multi-part changes benefit from a bullet list
 - External context is needed (links, issue references, root cause)
 
-### Attribution
-
-Include when repository policy requires it and task instructions do not explicitly prohibit it:
-
-```
-Co-Authored-By: Claude <noreply@anthropic.com>
-```
-
 ### Examples
 
 <examples>
