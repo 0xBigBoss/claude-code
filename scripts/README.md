@@ -65,7 +65,7 @@ Edit `~/.claude/scripts/usage-tracker.py` to:
 ## Troubleshooting
 
 1. **Hooks not working?**
-   - Check `~/.claude/settings.base.json` exists
+   - Check `~/dotfiles/claude-code/settings/settings.json` exists
    - Check `~/.claude/settings.json` was regenerated
    - Restart Claude Code
    - Run with `--debug` flag

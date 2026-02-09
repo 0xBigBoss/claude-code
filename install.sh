@@ -73,6 +73,32 @@ ensure_symlink() {
     fi
 }
 
+remove_legacy_settings_base() {
+    local legacy_path="$HOME/.claude/settings.base.json"
+    local legacy_name
+    legacy_name="$(basename "$legacy_path")"
+
+    if [[ ! -e "$legacy_path" && ! -L "$legacy_path" ]]; then
+        return 0
+    fi
+
+    if [[ "$CHECK_ONLY" == true ]]; then
+        print_warn "$legacy_name: deprecated file exists and should be removed"
+        return 1
+    fi
+
+    if [[ -L "$legacy_path" ]]; then
+        rm "$legacy_path"
+        print_ok "$legacy_name: removed deprecated symlink"
+        return 0
+    fi
+
+    local backup="${legacy_path}.backup.$(date +%Y%m%d%H%M%S)"
+    print_warn "$legacy_name: backing up deprecated file to $backup"
+    mv "$legacy_path" "$backup"
+    print_ok "$legacy_name: removed deprecated file (backup created)"
+}
+
 main() {
     echo "Claude Code install.sh"
     echo "Repository: $SCRIPT_DIR"
@@ -87,8 +113,8 @@ main() {
     # codex.json - centralized Codex CLI configuration for all plugins
     ensure_symlink "$SCRIPT_DIR/../codex/codex.json" "$HOME/.claude/codex.json"
 
-    # settings base - declarative baseline merged into ~/.claude/settings.json
-    ensure_symlink "$SCRIPT_DIR/settings/settings.json" "$HOME/.claude/settings.base.json"
+    # Legacy compatibility cleanup: baseline now loads directly from repository path.
+    remove_legacy_settings_base || true
 
     # Regenerate runtime settings if merge helper exists.
     if command -v claude-settings-merge >/dev/null 2>&1; then

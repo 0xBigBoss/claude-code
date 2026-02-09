@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Install symlinks for Claude Code scripts, settings baseline, and agents
+# Install symlinks for Claude Code scripts and agents
 
 REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 
@@ -10,11 +10,6 @@ echo "Installing symlinks from repository to ~/.claude..."
 if [ -e ~/.claude/scripts ] && [ ! -L ~/.claude/scripts ]; then
     echo "Backing up existing ~/.claude/scripts to ~/.claude/scripts.backup"
     mv ~/.claude/scripts ~/.claude/scripts.backup
-fi
-
-if [ -e ~/.claude/settings.base.json ] && [ ! -L ~/.claude/settings.base.json ]; then
-    echo "Backing up existing ~/.claude/settings.base.json to ~/.claude/settings.base.json.backup"
-    mv ~/.claude/settings.base.json ~/.claude/settings.base.json.backup
 fi
 
 if [ -e ~/.claude/agents ] && [ ! -L ~/.claude/agents ]; then
@@ -29,9 +24,6 @@ mkdir -p ~/.claude
 echo "Creating symlink: ~/.claude/scripts -> $REPO_DIR/scripts"
 ln -sfn "$REPO_DIR/scripts" ~/.claude/scripts
 
-echo "Creating symlink: ~/.claude/settings.base.json -> $REPO_DIR/settings/settings.json"
-ln -sfn "$REPO_DIR/settings/settings.json" ~/.claude/settings.base.json
-
 echo "Creating symlink: ~/.claude/agents -> $REPO_DIR/agents"
 ln -sfn "$REPO_DIR/agents" ~/.claude/agents
 
@@ -44,5 +36,4 @@ echo "Done! Symlinks installed successfully."
 echo ""
 echo "To verify the symlinks:"
 echo "  ls -la ~/.claude/scripts"
-echo "  ls -la ~/.claude/settings.base.json"
 echo "  ls -la ~/.claude/agents"
