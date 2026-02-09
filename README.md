@@ -32,10 +32,29 @@ claude-code/
 │       └── zig-docs/
 ├── scripts/                     # Utility scripts
 │   ├── install-symlinks.sh      # Installation helper
-│   └── sync-skills-to-codex.sh  # Sync skills to Codex
+│   ├── sync-codex.sh            # Sync commands/prompts + skills to Codex
+│   └── sync-skills-to-codex.sh  # Backward-compatible wrapper (skills only)
 ├── settings/                    # Settings configurations
 ├── statusline/                  # Statusline configurations
 └── analytics/                   # Usage analytics (submodule)
+```
+
+## Codex Sync
+
+Sync Claude Code assets into Codex:
+
+```bash
+# Sync both skills and commands (default)
+./scripts/sync-codex.sh
+
+# Skills only
+./scripts/sync-codex.sh --skills
+
+# Commands only
+./scripts/sync-codex.sh --commands
+
+# Dry run
+./scripts/sync-codex.sh --dry-run --verbose
 ```
 
 ## Installation
