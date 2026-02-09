@@ -12,18 +12,22 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 USER_SKILLS_DIR="$REPO_DIR/.claude/skills"
 CLAUDE_COMMANDS_DIR="$REPO_DIR/commands"
 PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
+PRESERVE_SKILLS_MANIFEST="$REPO_DIR/.claude/codex-sync-preserve-skills.txt"
 
 # Options
 DRY_RUN=false
 VERBOSE=false
+CHECK_ONLY=false
 DO_SKILLS=true
 DO_COMMANDS=true
 PRUNE_SKILLS=true
 PRUNE_COMMANDS=true
+DRIFT_FOUND=false
 
 # Track synced entries for prune (Bash 3.2 compatible newline-delimited sets)
 SYNCED_SKILLS=""
 SYNCED_PROMPTS=""
+PRESERVED_SKILLS=""
 
 mark_synced_skill() {
     local skill_name="$1"
@@ -47,6 +51,42 @@ mark_synced_prompt() {
 is_synced_prompt() {
     local prompt_name="$1"
     printf '%s' "$SYNCED_PROMPTS" | grep -Fxq -- "$prompt_name"
+}
+
+mark_preserved_skill() {
+    local skill_name="$1"
+    if ! is_preserved_skill "$skill_name"; then
+        PRESERVED_SKILLS="${PRESERVED_SKILLS}${skill_name}"$'\n'
+    fi
+}
+
+is_preserved_skill() {
+    local skill_name="$1"
+    printf '%s' "$PRESERVED_SKILLS" | grep -Fxq -- "$skill_name"
+}
+
+mark_drift() {
+    local message="$1"
+    DRIFT_FOUND=true
+    info "[drift] $message"
+}
+
+load_preserved_skills() {
+    if [[ ! -f "$PRESERVE_SKILLS_MANIFEST" ]]; then
+        log "No preserve-skills manifest found at $PRESERVE_SKILLS_MANIFEST"
+        return 0
+    fi
+
+    local raw_line line
+    while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
+        line="$(printf '%s' "$raw_line" | sed -E 's/[[:space:]]*#.*$//' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+        [[ -n "$line" ]] || continue
+        mark_preserved_skill "$line"
+    done < "$PRESERVE_SKILLS_MANIFEST"
+
+    local preserved_count
+    preserved_count="$(printf '%s' "$PRESERVED_SKILLS" | sed '/^$/d' | wc -l | tr -d ' ')"
+    info "Loaded preserve-skills manifest: $PRESERVE_SKILLS_MANIFEST ($preserved_count entries)"
 }
 
 resolve_codex_dir() {
@@ -83,10 +123,13 @@ Usage: $(basename "$0") [OPTIONS]
 Sync Claude Code assets to Codex.
 
 Options:
+    --check                 Verify drift only (non-mutating; exit 0 clean, 2 drift)
     --skills                Sync skills only
     --commands              Sync commands/prompts only
     --no-prune-skills       Do not remove stale skills from target
     --no-prune-commands     Do not remove stale prompts from target
+    --preserve-skills-file PATH
+                            Manifest of skill names to keep during prune
     -n, --dry-run           Show planned changes without writing
     -v, --verbose           Show detailed output
     -h, --help              Show this help message
@@ -95,11 +138,13 @@ Behavior:
     - If neither --skills nor --commands is given, both are synced.
     - Skills sync order is user skills first, then plugin skills (plugin wins on name collision).
     - Pruning skips hidden entries (e.g. .system).
+    - In --check mode, no files are changed.
 
 Sources:
     Skills:
       - User:   $USER_SKILLS_DIR
       - Plugin: $PLUGINS_JSON
+      - Preserve manifest: $PRESERVE_SKILLS_MANIFEST
     Commands:
       - Claude commands: $CLAUDE_COMMANDS_DIR/*.md
 
@@ -122,6 +167,13 @@ info() {
 remove_path() {
     local path="$1"
 
+    if [[ "$CHECK_ONLY" == "true" ]]; then
+        if [[ -e "$path" || -L "$path" ]]; then
+            mark_drift "stale path exists: $path"
+        fi
+        return 0
+    fi
+
     if [[ "$DRY_RUN" == "true" ]]; then
         info "[dry-run] Would remove: $path"
         return 0
@@ -136,6 +188,20 @@ copy_dir() {
     local dest="$2"
     local name
     name="$(basename "$src")"
+
+    if [[ "$CHECK_ONLY" == "true" ]]; then
+        if [[ ! -d "$dest" ]]; then
+            mark_drift "missing directory: $dest (source: $src)"
+            return 0
+        fi
+
+        if ! diff -qr "$src" "$dest" >/dev/null 2>&1; then
+            mark_drift "directory content differs: $dest (source: $src)"
+        else
+            log "Up-to-date: $name"
+        fi
+        return 0
+    fi
 
     if [[ "$DRY_RUN" == "true" ]]; then
         info "[dry-run] Would copy dir: $name"
@@ -154,6 +220,20 @@ copy_file() {
     local dest="$2"
     local name
     name="$(basename "$src")"
+
+    if [[ "$CHECK_ONLY" == "true" ]]; then
+        if [[ ! -f "$dest" ]]; then
+            mark_drift "missing file: $dest (source: $src)"
+            return 0
+        fi
+
+        if ! cmp -s "$src" "$dest"; then
+            mark_drift "file content differs: $dest (source: $src)"
+        else
+            log "Up-to-date: $name"
+        fi
+        return 0
+    fi
 
     if [[ "$DRY_RUN" == "true" ]]; then
         info "[dry-run] Would copy file: $name"
@@ -289,6 +369,11 @@ prune_stale_skills() {
 
         [[ "$skill_name" == .* ]] && continue
 
+        if is_preserved_skill "$skill_name"; then
+            log "Preserved by manifest: $skill_name"
+            continue
+        fi
+
         if ! is_synced_skill "$skill_name"; then
             remove_path "$skill_dir"
             count=$((count + 1))
@@ -368,6 +453,10 @@ main() {
                 DO_COMMANDS=true
                 shift
                 ;;
+            --check)
+                CHECK_ONLY=true
+                shift
+                ;;
             --no-prune-skills)
                 PRUNE_SKILLS=false
                 shift
@@ -383,6 +472,14 @@ main() {
             --prune-commands)
                 PRUNE_COMMANDS=true
                 shift
+                ;;
+            --preserve-skills-file)
+                if [[ $# -lt 2 ]]; then
+                    echo "Error: --preserve-skills-file requires a path" >&2
+                    exit 1
+                fi
+                PRESERVE_SKILLS_MANIFEST="$2"
+                shift 2
                 ;;
             -n|--dry-run)
                 DRY_RUN=true
@@ -404,7 +501,7 @@ main() {
         esac
     done
 
-    if [[ "$DRY_RUN" == "false" ]]; then
+    if [[ "$CHECK_ONLY" == "false" && "$DRY_RUN" == "false" ]]; then
         [[ "$DO_SKILLS" == "false" ]] || mkdir -p "$CODEX_SKILLS_DIR"
         [[ "$DO_COMMANDS" == "false" ]] || mkdir -p "$CODEX_PROMPTS_DIR"
     fi
@@ -413,12 +510,18 @@ main() {
     info "  Codex dir: $CODEX_DIR"
     info "  Skills:    $DO_SKILLS (prune=$PRUNE_SKILLS)"
     info "  Commands:  $DO_COMMANDS (prune=$PRUNE_COMMANDS)"
-    if [[ "$DRY_RUN" == "true" ]]; then
+    if [[ "$CHECK_ONLY" == "true" ]]; then
+        info "  Mode:      check"
+    elif [[ "$DRY_RUN" == "true" ]]; then
         info "  Mode:      dry-run"
     fi
     echo
 
     if [[ "$DO_SKILLS" == "true" ]]; then
+        if [[ "$PRUNE_SKILLS" == "true" ]]; then
+            load_preserved_skills
+            echo
+        fi
         sync_user_skills
         echo
         sync_plugin_skills
@@ -432,6 +535,14 @@ main() {
         echo
         prune_stale_prompts
         echo
+    fi
+
+    if [[ "$CHECK_ONLY" == "true" ]]; then
+        if [[ "$DRIFT_FOUND" == "true" ]]; then
+            info "Drift detected."
+            exit 2
+        fi
+        info "No drift detected."
     fi
 
     info "Done!"

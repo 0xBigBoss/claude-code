@@ -18,7 +18,7 @@ claude-code/
 │   ├── refactorer.md            # Clean refactoring with complete migrations
 │   └── test-writer.md           # Write tests that verify correctness
 ├── .claude/
-│   └── skills/                  # Language and tool best practices
+│   ├── skills/                  # Language and tool best practices
 │       ├── python-best-practices/
 │       ├── typescript-best-practices/
 │       ├── react-best-practices/
@@ -30,6 +30,7 @@ claude-code/
 │       ├── web-fetch/
 │       ├── axe-ios-simulator/
 │       └── zig-docs/
+│   └── codex-sync-preserve-skills.txt  # Optional preserve list for prune
 ├── scripts/                     # Utility scripts
 │   ├── install-symlinks.sh      # Installation helper
 │   ├── sync-codex.sh            # Sync commands/prompts + skills to Codex
@@ -55,6 +56,12 @@ Sync Claude Code assets into Codex:
 
 # Dry run
 ./scripts/sync-codex.sh --dry-run --verbose
+
+# Check drift only (non-mutating, exit 2 on drift)
+./scripts/sync-codex.sh --check
+
+# Preserve selected unmanaged skills during prune
+./scripts/sync-codex.sh --skills --preserve-skills-file ./.claude/codex-sync-preserve-skills.txt
 ```
 
 ## Installation

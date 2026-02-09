@@ -1,0 +1,4 @@
+# One skill name per line.
+# Entries here are preserved in codex/.codex/skills during prune.
+# Example:
+# dev-browser
