@@ -62,7 +62,12 @@ tilt down                           # Stop and clean up
 
 ## Running tilt up
 
-Run in tmux to survive session reloads:
+**tmux session rules** (mandatory — see `tmux` skill for full patterns):
+
+- **MUST** check `tmux has-session` before `tmux new-session` — never create duplicate sessions
+- **MUST** derive session name from git root — never hardcode
+- **MUST** add a window to an existing session — never create a parallel session
+- **MUST** use `send-keys` — never pass inline commands to `new-session`
 
 ```bash
 SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
@@ -73,6 +78,8 @@ if ! tmux has-session -t "$SESSION" 2>/dev/null; then
 elif ! tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -q "^tilt$"; then
   tmux new-window -t "$SESSION" -n tilt
   tmux send-keys -t "$SESSION:tilt" 'tilt up' Enter
+else
+  echo "Tilt window already exists in session: $SESSION"
 fi
 ```
 

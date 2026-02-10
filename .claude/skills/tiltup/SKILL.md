@@ -54,7 +54,7 @@ Restart only for: Tilt version upgrades, port/host config changes, crashes, clus
 
 ### Step 2: Start Tilt in tmux
 
-Follow the `tmux-processes` skill patterns:
+Follow the `tmux` skill patterns:
 ```bash
 SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
 

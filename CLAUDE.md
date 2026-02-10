@@ -44,6 +44,7 @@ Load all relevant best-practices skills immediately as your first action when wo
 | Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | playwright-best-practices |
 | Tilt: `Tiltfile`, tilt commands | tilt |
 | Tilt bootstrap: `tilt up`, Tiltfile errors, dev env startup | tiltup |
+| tmux: long-lived processes, dev servers, `tilt up`, watchers | tmux |
 | Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
 | Canton Network: `.daml`, `daml.yaml`, Canton/Splice repos, LF versions | canton-network-repos |
 | Atlas: `atlas.hcl`, `.hcl` schema files, Atlas CLI commands | atlas-best-practices |
@@ -63,6 +64,7 @@ Load all applicable skills together when contexts overlap:
 - **Go + Tilt**: Go services in a Tilt-managed dev environment
 - **data-driven-testing + [language]**: Load DDT skill alongside the project's language skill when designing tests from specs
 - **DDT mutation guardrail**: Use DDT for test design/translation by default; editing spec files is a separate mutating action and requires explicit user direction
+- **tilt + tmux**: Always load both when running `tilt up` or any long-lived process in tmux
 - **tilt + tiltup**: Always load both when starting tilt or fixing Tiltfile errors
 - **specalign + data-driven-testing**: Load both when a spec file and its implementation are in context
 - **e2e + playwright-best-practices**: Load both when running or fixing Playwright e2e tests

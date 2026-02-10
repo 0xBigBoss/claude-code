@@ -1,9 +1,21 @@
 ---
-name: tmux-processes
+name: tmux
 description: Patterns for running long-lived processes in tmux. Use when starting dev servers, watchers, tilt, or any process expected to outlive the conversation.
 ---
 
 # tmux Process Management
+
+## Session Reuse Rules
+
+These are **hard requirements**, not suggestions:
+
+- **MUST** check `tmux has-session` before ever calling `tmux new-session`
+- **MUST** derive session name from `git rev-parse --show-toplevel`, never hardcode
+- **MUST** add windows to an existing project session, never create a parallel session
+- **MUST** use `send-keys` to run commands, never pass inline commands to `new-session`
+- **NEVER** create a new session if one already exists for the current project
+
+One project = one tmux session. Multiple processes = multiple windows within that session.
 
 ## Interactive Shell Requirement
 
@@ -13,8 +25,10 @@ description: Patterns for running long-lived processes in tmux. Use when startin
 # WRONG - inline command bypasses shell init, breaks PATH/direnv
 tmux new-session -d -s "$SESSION" -n main 'tilt up'
 
-# CORRECT - create session, then send command to interactive shell
-tmux new-session -d -s "$SESSION" -n main
+# CORRECT - check for session, then use send-keys in interactive shell
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux new-session -d -s "$SESSION" -n main
+fi
 tmux send-keys -t "$SESSION:main" 'tilt up' Enter
 ```
 
@@ -37,18 +51,6 @@ For multiple processes in one project, use windows not separate sessions:
 ```bash
 SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
 
-# Create session with named window, then send command
-tmux new-session -d -s "$SESSION" -n main
-tmux send-keys -t "$SESSION:main" '<command>' Enter
-```
-
-### Idempotent Start
-
-Check if already running before starting:
-
-```bash
-SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
-
 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
   tmux new-session -d -s "$SESSION" -n main
   tmux send-keys -t "$SESSION:main" '<command>' Enter
@@ -57,7 +59,7 @@ else
 fi
 ```
 
-### Adding Windows to Existing Session
+### Adding a Window to Existing Session
 
 ```bash
 SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
@@ -76,15 +78,19 @@ fi
 ```bash
 SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
 
-# Create session with first process
-tmux new-session -d -s "$SESSION" -n server
-tmux send-keys -t "$SESSION:server" 'npm run dev' Enter
+# Create session if needed, then add windows
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux new-session -d -s "$SESSION" -n server
+  tmux send-keys -t "$SESSION:server" 'npm run dev' Enter
+fi
 
-# Add more windows
-tmux new-window -t "$SESSION" -n tests
+# Add more windows (idempotent)
+for win in tests logs; do
+  if ! tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -q "^${win}$"; then
+    tmux new-window -t "$SESSION" -n "$win"
+  fi
+done
 tmux send-keys -t "$SESSION:tests" 'npm run test:watch' Enter
-
-tmux new-window -t "$SESSION" -n logs
 tmux send-keys -t "$SESSION:logs" 'tail -f logs/app.log' Enter
 ```
 
