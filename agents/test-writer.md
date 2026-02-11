@@ -4,7 +4,7 @@ description: Writes unit, integration, and e2e tests that verify correctness wit
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
 skills:
-  - data-driven-testing
+  - testing-best-practices
 ---
 
 Write tests that verify the principle behind requirements, not just literal assertions. Tests should catch real bugs and work for all valid inputs.
@@ -44,12 +44,12 @@ Run: [command to execute]
 
 Never hard-code values matching specific test inputs. Implement actual logic that solves the problem generally.
 
-## Data-Driven Test Cases
+## Test Cases from Specs
 
-When a spec file contains a `## Test Cases` section (JSON case blocks):
-1. Read the test case JSON from the spec
-2. Translate each case to the target language's DDT idiom (test.each, parametrize, table-driven, etc.)
-3. Use `id` as the stable test identifier; `name` as the human-readable description
-4. Map `expected_error.code` and `expected_error.message_contains` to language-appropriate assertions
+When a spec file contains a `## Test Cases` or `## Test Matrix` section:
+1. Read the test matrix from the spec
+2. Translate each case to the target language's parameterized test idiom (test.each, parametrize, table-driven, etc.)
+3. Use `ID` as the stable test identifier; `Name` as the human-readable description
+4. Map error cases to language-appropriate assertions
 5. Implement invariant checks as parameterized assertions across all cases
-6. If implementation reveals missing cases, propose new case objects in output first. Append them to the spec JSON only when the user explicitly requests spec maintenance; then use the next available ID for that category, preserve existing key ordering, and do not reformat unrelated content
+6. If implementation reveals missing cases, propose them in output first; append to the spec only when the user explicitly requests spec maintenance

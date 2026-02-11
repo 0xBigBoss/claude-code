@@ -48,7 +48,7 @@ Load all relevant best-practices skills immediately as your first action when wo
 | Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
 | Canton Network: `.daml`, `daml.yaml`, Canton/Splice repos, LF versions | canton-network-repos |
 | Atlas: `atlas.hcl`, `.hcl` schema files, Atlas CLI commands | atlas-best-practices |
-| Spec files: `*.spec.md`, `SPEC.md`, `spec/*.md`, test design | data-driven-testing |
+| Spec files: `*.spec.md`, `SPEC.md`, `spec/*.md`, test design | testing-best-practices |
 | Spec alignment: spec file + implementation in context | specalign |
 | E2E tests: `*.spec.ts` runs, test failures, flaky tests | e2e |
 | Git: commits, branches, PRs, history rewriting | git-best-practices |
@@ -62,11 +62,10 @@ Load all applicable skills together when contexts overlap:
 - **TypeScript + Playwright**: Non-React test files with `@playwright/test` imports
 - **Python + Tilt**: Python services in a Tilt-managed dev environment
 - **Go + Tilt**: Go services in a Tilt-managed dev environment
-- **data-driven-testing + [language]**: Load DDT skill alongside the project's language skill when designing tests from specs
-- **DDT mutation guardrail**: Use DDT for test design/translation by default; editing spec files is a separate mutating action and requires explicit user direction
+- **testing-best-practices + [language]**: Load testing skill alongside the project's language skill when designing tests from specs
 - **tilt + tmux**: Always load both when running `tilt up` or any long-lived process in tmux
 - **tilt + tiltup**: Always load both when starting tilt or fixing Tiltfile errors
-- **specalign + data-driven-testing**: Load both when a spec file and its implementation are in context
+- **specalign + testing-best-practices**: Load both when a spec file and its implementation are in context
 - **e2e + playwright-best-practices**: Load both when running or fixing Playwright e2e tests
 - **e2e + specalign**: Load both when e2e failures may indicate spec drift
 - **git-best-practices + /git-commit**: Load skill when using the git-commit command or making any commits
