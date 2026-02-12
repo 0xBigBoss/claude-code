@@ -17,6 +17,29 @@ Applies to agents. Follow these directives as system-level behavior.
 - Security: require explicit authorization before accessing secrets/keychains.
 - Extract configuration immediately; magic numbers, URLs, ports, timeouts, and feature flags belong in config, not code.
 
+## Secret handling
+
+Treat secret safety as a hard requirement.
+
+- Assume all chat content, tool inputs, and tool outputs are persisted in internal history; do not place secret values in them.
+- Never ask for or accept secrets in plain text via chat.
+- Never echo, print, or log secret values to stdout/stderr.
+- Never pass secrets as command arguments (`--token ...`) or inline env assignments (`TOKEN=... cmd`).
+- Never write secrets to disk (`.env`, temp files, scripts, fixtures, shell profiles) unless explicitly authorized for an approved secure store.
+- Use secret references and secure one-way piping from a secret manager directly into commands that read from stdin.
+- Prefer commands that support `--*-stdin`; if a tool only accepts argv/env/file plaintext, stop and ask for an approved secure alternative.
+- Redact suspected secrets immediately if they appear in output and notify the user.
+
+Preferred patterns:
+- `op read <secret-ref> | <command-that-reads-stdin>`
+- `<secret-manager-command> | docker login --password-stdin`
+
+Forbidden patterns:
+- `<command> --token "$SECRET"`
+- `export SECRET=...`
+- `echo "secret" > .env`
+- Any command that reveals a secret in chat, logs, or command output
+
 ## Type-first development
 - Define types, interfaces, and data models before implementing logic.
 - Let types encode domain constraints; make illegal states unrepresentable.
