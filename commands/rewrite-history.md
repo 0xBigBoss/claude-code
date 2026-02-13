@@ -36,14 +36,17 @@ Study all changes between the current branch and the default branch to form a co
 </analyze_diff>
 
 <sync_with_default_branch>
-Sync with the latest `origin/{default_branch}` and resolve conflicts as a separate step (do this *before* rewriting history):
+Sync with the latest `origin/{default_branch}` as a separate step (do this *before* rewriting history):
 1. Ensure working tree clean (`git status`) and fetch latest (`git fetch origin`).
 2. Integrate `origin/{default_branch}` into your branch so the final, intended state already includes the latest default branch changes:
    - Prefer a non-rewriting merge for this pre-step:
      - `git merge --no-ff origin/{default_branch}`
    - If you explicitly prefer a linear history for this pre-step, you may rebase instead:
      - `git rebase origin/{default_branch}`
-3. If conflicts occur, resolve them now, run whatever verification is appropriate for the repo, and ensure the branch builds/tests in its final intended state.
+3. If conflicts occur:
+   - Do not resolve conflicts as part of this rewrite-history workflow.
+   - Abort the operation (`git merge --abort` or `git rebase --abort`) and stop.
+   - Ask me to run the separate git-rebase conflict-resolution skill/workflow before continuing.
 
 Note: The goal is to avoid mixing "conflict resolution vs latest default branch" into the later history rewrite step.
 </sync_with_default_branch>
