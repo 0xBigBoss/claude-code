@@ -19,6 +19,7 @@ Store this value and use it wherever `{default_branch}` appears in subsequent st
 - Create a local backup ref before rewriting (prefer an annotated tag). Do not push backup refs unless I explicitly ask.
 - Before any history-rewriting command (`git reset`, `git rebase -i`, `git push --force*`), print the exact command(s) you will run and wait for my confirmation.
 - After rewriting, update the remote branch using `git push --force-with-lease origin HEAD:{branch_name}`. Do not push to any other branch.
+- If syncing with `origin/{default_branch}` results in conflicts, abort and stop. Do not attempt to resolve conflicts as part of this rewrite-history workflow.
 
 <validate_and_backup>
 Before any changes, validate the current state:
@@ -46,7 +47,7 @@ Sync with the latest `origin/{default_branch}` as a separate step (do this *befo
 3. If conflicts occur:
    - Do not resolve conflicts as part of this rewrite-history workflow.
    - Abort the operation (`git merge --abort` or `git rebase --abort`) and stop.
-   - Ask me to run the separate git-rebase conflict-resolution skill/workflow before continuing.
+   - Ask me to run the separate `git-rebase-sync` skill/workflow before continuing.
 
 Note: The goal is to avoid mixing "conflict resolution vs latest default branch" into the later history rewrite step.
 </sync_with_default_branch>
