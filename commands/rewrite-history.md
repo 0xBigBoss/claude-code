@@ -21,15 +21,11 @@ Store this value and use it wherever `{default_branch}` appears in subsequent st
 - After rewriting, update the remote branch using `git push --force-with-lease origin HEAD:{branch_name}`. Do not push to any other branch.
 
 <validate_and_backup>
-Before any changes, validate and backup the current state:
+Before any changes, validate the current state:
 - Run `git status` to confirm no uncommitted changes or merge conflicts exist
 - Run `git fetch origin` to get the latest remote state
 - If issues exist, resolve them before proceeding
-- Create a local backup ref (annotated tag preferred) to preserve the original commits:
-  - `git tag -a {branch_name}-rewrite-backup-$(date +%Y%m%d-%H%M%S) -m "pre-rewrite backup" HEAD`
-- Record:
-  - The backup ref name you created (you will use it as `{backup_ref}` below)
-  - The current HEAD sha for verification later
+- Record the current HEAD sha for verification later
 </validate_and_backup>
 
 <analyze_diff>
@@ -38,6 +34,26 @@ Study all changes between the current branch and the default branch to form a co
 - The logical groupings of related changes
 - The dependencies between different parts of the implementation
 </analyze_diff>
+
+<sync_with_default_branch>
+Sync with the latest `origin/{default_branch}` and resolve conflicts as a separate step (do this *before* rewriting history):
+1. Ensure working tree clean (`git status`) and fetch latest (`git fetch origin`).
+2. Integrate `origin/{default_branch}` into your branch so the final, intended state already includes the latest default branch changes:
+   - Prefer a non-rewriting merge for this pre-step:
+     - `git merge --no-ff origin/{default_branch}`
+   - If you explicitly prefer a linear history for this pre-step, you may rebase instead:
+     - `git rebase origin/{default_branch}`
+3. If conflicts occur, resolve them now, run whatever verification is appropriate for the repo, and ensure the branch builds/tests in its final intended state.
+
+Note: The goal is to avoid mixing "conflict resolution vs latest default branch" into the later history rewrite step.
+</sync_with_default_branch>
+
+<create_backup_ref>
+Create a local backup ref (annotated tag preferred) *after* the sync step above, so the backup represents the final intended tree state:
+- `git tag -a {branch_name}-rewrite-backup-$(date +%Y%m%d-%H%M%S) -m "pre-rewrite backup" HEAD`
+
+Record the backup ref name you created. You will use it as `{backup_ref}` below.
+</create_backup_ref>
 
 <reset_and_recommit_in_place>
 Rewrite in-place on the current branch (`{branch_name}`), without switching branches:
