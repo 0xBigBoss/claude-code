@@ -1,3 +1,10 @@
+---
+name: git-rebase-sync
+description: Sync a feature branch onto the latest origin base branch via git rebase, with safety rails, deliberate conflict resolution, and safe force-with-lease pushing.
+metadata:
+  short-description: Rebase branch sync
+---
+
 # git-rebase-sync
 
 Use this skill when you need to sync a feature branch onto the latest `origin/{base_branch}` via **git rebase**, including **conflict resolution** with explicit clarification questions when intent is ambiguous.
@@ -85,4 +92,3 @@ Helpful commands during conflicts:
 ## Recovery
 - If something goes wrong, use `{backup_ref}` to restore the pre-rebase state.
 - Do not run destructive commands (e.g., `git reset --hard`) unless I explicitly confirm after you show the exact command.
-
