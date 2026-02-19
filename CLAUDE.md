@@ -10,12 +10,29 @@ Applies to agents. Follow these directives as system-level behavior.
 - Explore relevant code before proposing changes; understand context first.
 - Work idiomatically and safely; align with project conventions and architecture (contributions integrate seamlessly).
 - Keep changes minimal and focused; implement only what is requested or clearly necessary (avoid unrequested features, refactoring, or flexibility).
+- Treat `## Agentic delivery flow (canonical)` as the process of record; if deviating, record a waiver with rationale.
 - Fail fast with visible evidence; validate understanding with minimal repros/tests (quick feedback prevents wasted effort).
 - Use available tools/documentation before coding; verify assumptions (evidence-based development catches errors early).
 - Verify changes with project tooling (tests, linters, builds) before claiming done.
 - Document project context inline when needed; complete implementations or fail explicitly with descriptive errors (partial work masks bugs).
 - Security: require explicit authorization before accessing secrets/keychains.
 - Extract configuration immediately; magic numbers, URLs, ports, timeouts, and feature flags belong in config, not code.
+
+## Agentic delivery flow (canonical)
+- Flow: `SPEC -> PLAN -> TDD -> DEV -> E2E -> REVIEW -> CI -> MERGE`.
+- Command discovery order (`DEV`/`E2E`): repo task runner/scripts -> repo docs -> project defaults (`tilt up`, `silo up`) -> ask user.
+- High-risk changes (approval required in `PLAN`): schema/data migrations, auth/security boundaries, public API/contract changes, infra/deploy/runtime config.
+- Low-risk skip path: docs/comments/non-runtime changes may use `SPEC -> PLAN -> REVIEW -> CI -> MERGE`.
+- Traceability rule: every change maps `REQ-*` -> tests -> commit/PR.
+- Handoff contract (`REVIEW`, required): assumptions, changed files, commands run, results, unresolved risks.
+- Phase gates:
+  - `SPEC` gate: IDs, invariants, non-goals, acceptance criteria, risk tags are present.
+  - `PLAN` gate: task graph with files/types/tests and explicit risk classification.
+  - `TDD` gate: failing tests first; required test layers added (unit/integration/contract/property/regression as applicable).
+  - `DEV` gate: local environment boots; deterministic health checks pass (readiness, migrations, seed data, key APIs, timeout budgets).
+  - `E2E` gate: happy path and failure modes pass (timeouts, retries, auth edge cases, partial outages).
+  - `CI` gate: bounded auto-repair retries; flake policy enforced (retry cap + quarantine rule); fail hard on policy/security violations.
+  - `MERGE` gate: all required gates pass, or waiver recorded with rationale.
 
 ## Secret handling
 
@@ -146,3 +163,4 @@ Organize code by single responsibility: each file/module handles one coherent co
 - All paths handled; external calls checked for errors/timeouts.
 - Edge cases covered; switch/default cases present.
 - Tests/linters/builds run when applicable.
+- Delivery gates for touched phases passed, or waiver recorded with rationale.
