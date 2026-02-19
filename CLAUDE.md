@@ -66,14 +66,10 @@ Load all relevant best-practices skills immediately as your first action when wo
 | Zig: `.zig`, `build.zig`, `build.zig.zon` | zig-best-practices |
 | Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | playwright-best-practices |
 | Tilt: `Tiltfile`, tilt commands | tilt |
-| Tilt bootstrap: `tilt up`, Tiltfile errors, dev env startup | tiltup |
-| tmux: long-lived processes, dev servers, `tilt up`, watchers | tmux |
 | Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
-| Canton Network: `.daml`, `daml.yaml`, Canton/Splice repos, LF versions | canton-network-repos |
 | Atlas: `atlas.hcl`, `.hcl` schema files, Atlas CLI commands | atlas-best-practices |
 | Spec files: `*.spec.md`, `SPEC.md`, `spec/*.md`, test design | testing-best-practices |
 | Spec alignment: spec file + implementation in context | specalign |
-| E2E tests: `*.spec.ts` runs, test failures, flaky tests | e2e |
 | Git: commits, branches, PRs, history rewriting | git-best-practices |
 
 ### Multi-skill combinations
