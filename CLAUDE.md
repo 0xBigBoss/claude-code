@@ -104,7 +104,7 @@ Load all applicable skills together when contexts overlap:
 - **specalign + testing-best-practices**: Load both when a spec file and its implementation are in context
 - **e2e + playwright-best-practices**: Load both when running or fixing Playwright e2e tests
 - **e2e + specalign**: Load both when e2e failures may indicate spec drift
-- **git-best-practices + /git-commit**: Load skill when using the git-commit command or making any commits
+- **git-best-practices + /commit**: Load skill when using the commit command or making any commits
 - **git-best-practices + /rewrite-history**: Load skill when rewriting branch history before PR
 
 ### When to invoke skills
