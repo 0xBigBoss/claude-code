@@ -104,6 +104,84 @@ CREATE TABLE "users" (
 );
 ```
 
+## Roles and Grants
+
+`migrate diff` tracks structural DDL (tables, views, indexes, constraints) but **does not track** GRANT, REVOKE, or OWNER changes. These require hand-written migrations.
+
+### What Atlas manages vs what it doesn't
+
+| Object | `migrate diff` tracks? | Approach |
+|--------|----------------------|----------|
+| Tables, views, materialized views | Yes | Declarative schema files |
+| Indexes, constraints, triggers | Yes | Declarative schema files |
+| Functions, types | Yes | Declarative schema files |
+| GRANT / REVOKE | **No** | Hand-written migrations |
+| CREATE ROLE / ALTER ROLE | **No** | Hand-written migrations |
+| ALTER ... OWNER TO | **No** | Hand-written migrations |
+
+### Schema files as validated documentation
+
+GRANT statements in schema files are executed on the dev database during `migrate diff` but produce no migration output. This is still useful: Atlas validates syntax and catches errors (e.g., referencing a nonexistent role or table). Treat GRANTs in schema files as documented intent, with hand-written migrations as the enforcement mechanism.
+
+```sql
+-- schema/app/tables.pg.sql
+CREATE TABLE "mv_refresh_tracker" (
+  "view_name" text NOT NULL PRIMARY KEY,
+  "last_refresh_time" timestamp NOT NULL DEFAULT now()
+);
+
+-- Atlas validates this but won't generate a migration for it.
+-- The actual grant lives in a hand-written migration.
+GRANT SELECT, INSERT, UPDATE ON "mv_refresh_tracker" TO app_role;
+```
+
+### Dev database baseline must include application roles
+
+For Atlas to validate GRANT statements in schema files, the referenced roles must exist in the dev database. Add a roles file to the dev database baseline:
+
+```sql
+-- schema/app/roles.pg.sql
+CREATE ROLE app_role NOLOGIN;
+CREATE ROLE api_anon NOLOGIN;
+CREATE ROLE analytics NOLOGIN;
+```
+
+```hcl
+// atlas.hcl
+docker "postgres" "dev" {
+  image = "postgres:15"
+  baseline = <<-SQL
+    ${file("schema/baseline/tables.pg.sql")}
+    ${file("schema/app/roles.pg.sql")}
+  SQL
+}
+```
+
+Without this, Atlas fails with `role "app_role" does not exist` when processing GRANT statements.
+
+### Hand-written grant migrations
+
+Write migrations for GRANT/REVOKE changes. Keep them minimal and idempotent:
+
+```sql
+-- migrations/20240101120000_app_role_grants.sql
+-- Grant app_role write access to refresh tracking table.
+-- refresh_mv_tracked() upserts into mv_refresh_tracker and needs INSERT/UPDATE.
+GRANT INSERT, UPDATE ON "mv_refresh_tracker" TO app_role;
+```
+
+After adding, update the checksum file:
+```bash
+atlas migrate hash --env local
+atlas migrate validate --env local
+```
+
+### Common grant pitfalls
+
+- **Blanket grants are point-in-time:** `GRANT SELECT ON ALL TABLES IN SCHEMA public TO role` only affects tables that exist when the statement runs. Tables created later by other migrations or tools (PQS, dbt) are not covered. Use `ALTER DEFAULT PRIVILEGES` for future objects, and explicit grants for specific write access.
+- **Function security context:** Functions without `SECURITY DEFINER` run as the caller. If a function writes to a table, the calling role needs write grants on that table directly — the function owner's permissions don't help.
+- **Ownership transfers:** `ALTER TABLE ... OWNER TO role` grants the role full control but doesn't appear in `migrate diff`. Track ownership changes in migrations alongside grants.
+
 ## Project Configuration
 
 Create `atlas.hcl` for environment configuration:
@@ -343,3 +421,8 @@ Supported: GORM, Sequelize, TypeORM, Django, SQLAlchemy, Prisma, and more.
 - Push migrations to Atlas Registry for deployment; avoid copying files manually.
 - Use `-- atlas:txmode none` for PostgreSQL concurrent index operations.
 - Configure naming conventions in lint rules; consistency prevents errors.
+- GRANT/REVOKE and role changes require hand-written migrations; `migrate diff` does not track them.
+- Include application roles in the dev database baseline so Atlas can validate GRANT syntax in schema files.
+- Document intended grants in schema files even though they won't generate migrations; Atlas validates them against the dev database.
+- When adding functions that write to tables, verify the calling role has write grants — not just the function owner. Functions without `SECURITY DEFINER` run as the caller.
+- After hand-writing a migration, always run `atlas migrate hash` then `atlas migrate validate`.
