@@ -1,6 +1,6 @@
 ---
 name: atlas-best-practices
-description: Patterns for Atlas database schema management covering HCL/SQL schema definitions, versioned and declarative migrations, linting analyzers, testing, and project configuration. Use when working with atlas.hcl, .hcl schema files, Atlas CLI commands, or database migrations.
+description: Patterns for Atlas database schema management covering HCL/SQL schema definitions, versioned and declarative migrations, linting analyzers, testing, project configuration, declarative roles/permissions (v1.1+), data management, and schema exporters. Use when working with atlas.hcl, .hcl schema files, Atlas CLI commands, or database migrations.
 ---
 
 # Atlas Best Practices
@@ -104,83 +104,190 @@ CREATE TABLE "users" (
 );
 ```
 
-## Roles and Grants
+## Roles, Users, and Permissions (v1.1+ Pro)
 
-`migrate diff` tracks structural DDL (tables, views, indexes, constraints) but **does not track** GRANT, REVOKE, or OWNER changes. These require hand-written migrations.
-
-### What Atlas manages vs what it doesn't
-
-| Object | `migrate diff` tracks? | Approach |
-|--------|----------------------|----------|
-| Tables, views, materialized views | Yes | Declarative schema files |
-| Indexes, constraints, triggers | Yes | Declarative schema files |
-| Functions, types | Yes | Declarative schema files |
-| GRANT / REVOKE | **No** | Hand-written migrations |
-| CREATE ROLE / ALTER ROLE | **No** | Hand-written migrations |
-| ALTER ... OWNER TO | **No** | Hand-written migrations |
-
-### Schema files as validated documentation
-
-GRANT statements in schema files are executed on the dev database during `migrate diff` but produce no migration output. This is still useful: Atlas validates syntax and catches errors (e.g., referencing a nonexistent role or table). Treat GRANTs in schema files as documented intent, with hand-written migrations as the enforcement mechanism.
-
-```sql
--- schema/app/tables.pg.sql
-CREATE TABLE "mv_refresh_tracker" (
-  "view_name" text NOT NULL PRIMARY KEY,
-  "last_refresh_time" timestamp NOT NULL DEFAULT now()
-);
-
--- Atlas validates this but won't generate a migration for it.
--- The actual grant lives in a hand-written migration.
-GRANT SELECT, INSERT, UPDATE ON "mv_refresh_tracker" TO app_role;
-```
-
-### Dev database baseline must include application roles
-
-For Atlas to validate GRANT statements in schema files, the referenced roles must exist in the dev database. Add a roles file to the dev database baseline:
-
-```sql
--- schema/app/roles.pg.sql
-CREATE ROLE app_role NOLOGIN;
-CREATE ROLE api_anon NOLOGIN;
-CREATE ROLE analytics NOLOGIN;
-```
+Atlas v1.1 manages roles, users, and permissions declaratively. Define them in HCL alongside tables and indexes.
 
 ```hcl
-// atlas.hcl
-docker "postgres" "dev" {
-  image = "postgres:15"
-  baseline = <<-SQL
-    ${file("schema/baseline/tables.pg.sql")}
-    ${file("schema/app/roles.pg.sql")}
-  SQL
+role "app_readonly" {
+  comment = "Read-only access for application"
+}
+
+role "app_admin" {
+  superuser   = false
+  create_db   = false
+  create_role = false
+  login       = true
+  member_of   = [role.app_readonly]
+}
+
+user "app_user" {
+  password  = var.app_password
+  member_of = [role.app_admin]
+}
+
+permission {
+  for_each   = [table.users, table.orders, table.products]
+  for        = each.value
+  to         = role.app_readonly
+  privileges = [SELECT]
+}
+
+permission {
+  for        = schema.public
+  to         = role.app_admin
+  privileges = [ALL]
+  grantable  = true
 }
 ```
 
-Without this, Atlas fails with `role "app_role" does not exist` when processing GRANT statements.
+Enable in `atlas.hcl`:
+```hcl
+env "prod" {
+  schema {
+    src = "file://schema.hcl"
+    mode {
+      roles       = true
+      permissions = true
+    }
+  }
+}
+```
 
-### Hand-written grant migrations
+Passwords are masked as `<sensitive>` in logs and inspection output.
 
-Write migrations for GRANT/REVOKE changes. Keep them minimal and idempotent:
+Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, ClickHouse, Spanner, Databricks.
+
+### Pre-v1.1 / non-Pro fallback
+
+Without Pro, `migrate diff` does not track GRANT, REVOKE, or role changes. Use hand-written migrations:
 
 ```sql
 -- migrations/20240101120000_app_role_grants.sql
--- Grant app_role write access to refresh tracking table.
--- refresh_mv_tracked() upserts into mv_refresh_tracker and needs INSERT/UPDATE.
-GRANT INSERT, UPDATE ON "mv_refresh_tracker" TO app_role;
+GRANT SELECT ON "users" TO app_readonly;
 ```
 
-After adding, update the checksum file:
+After adding, update checksums:
 ```bash
 atlas migrate hash --env local
 atlas migrate validate --env local
 ```
 
-### Common grant pitfalls
+## Declarative Data Management (v1.1+)
 
-- **Blanket grants are point-in-time:** `GRANT SELECT ON ALL TABLES IN SCHEMA public TO role` only affects tables that exist when the statement runs. Tables created later by other migrations or tools (PQS, dbt) are not covered. Use `ALTER DEFAULT PRIVILEGES` for future objects, and explicit grants for specific write access.
-- **Function security context:** Functions without `SECURITY DEFINER` run as the caller. If a function writes to a table, the calling role needs write grants on that table directly — the function owner's permissions don't help.
-- **Ownership transfers:** `ALTER TABLE ... OWNER TO role` grants the role full control but doesn't appear in `migrate diff`. Track ownership changes in migrations alongside grants.
+Define lookup tables and seed data as code. Atlas syncs rows based on the configured mode.
+
+```hcl
+data {
+  table = table.countries
+  rows = [
+    { id = 1, code = "US", name = "United States" },
+    { id = 2, code = "IL", name = "Israel" },
+    { id = 3, code = "DE", name = "Germany" },
+  ]
+}
+```
+
+Configure sync mode in `atlas.hcl`:
+```hcl
+env "prod" {
+  data {
+    mode    = UPSERT
+    include = ["countries"]
+  }
+}
+```
+
+Sync modes:
+- **INSERT** - add new rows only, never touch existing data.
+- **UPSERT** - insert new rows, update existing by primary key.
+- **SYNC** - full sync: insert, update, and delete to match desired state.
+
+## Schema Exporters (v1.1+)
+
+Export schemas to files or external services on `atlas schema inspect` or `atlas schema diff`:
+
+```hcl
+exporter "sql" "schema" {
+  path     = "schema/sql"
+  split_by = object
+  naming   = same
+}
+
+exporter "hcl" "schema" {
+  path     = "schema/hcl"
+  split_by = object
+  ext      = ".pg.hcl"
+}
+
+exporter "http" "webhook" {
+  url           = "https://api.example.com/schemas"
+  method        = "POST"
+  body_template = "{{ sql . }}"
+}
+
+exporter "multi" "all" {
+  exporters = [exporter.sql.schema, exporter.hcl.schema, exporter.http.webhook]
+  on_error  = CONTINUE
+}
+
+env "prod" {
+  url = getenv("DB_URL")
+  export {
+    schema {
+      inspect = exporter.multi.all
+    }
+  }
+}
+```
+
+Run with:
+```bash
+atlas schema inspect --env prod --export
+```
+
+## PostgreSQL: CAST Definitions and Replica Identity (v1.1+)
+
+### Custom CASTs
+
+```hcl
+cast {
+  source = varchar
+  target = composite.my_type
+  with   = INOUT
+}
+
+cast {
+  source = int4
+  target = composite.my_type
+  with   = function.int4_to_my_type
+  as     = ASSIGNMENT
+}
+```
+
+`with`: `INOUT` (type I/O functions) or a function reference. `as`: `IMPLICIT`, `ASSIGNMENT`, or explicit-only (default).
+
+### Replica Identity
+
+Configure logical replication row identification:
+
+```hcl
+table "users" {
+  schema = schema.public
+  replica_identity = FULL
+}
+
+table "accounts" {
+  schema = schema.public
+  index "idx_account_id" {
+    unique  = true
+    columns = [column.account_id]
+  }
+  replica_identity = index.idx_account_id
+}
+```
+
+Options: primary key (default), unique index reference, or `FULL`.
 
 ## Project Configuration
 
@@ -421,8 +528,8 @@ Supported: GORM, Sequelize, TypeORM, Django, SQLAlchemy, Prisma, and more.
 - Push migrations to Atlas Registry for deployment; avoid copying files manually.
 - Use `-- atlas:txmode none` for PostgreSQL concurrent index operations.
 - Configure naming conventions in lint rules; consistency prevents errors.
-- GRANT/REVOKE and role changes require hand-written migrations; `migrate diff` does not track them.
-- Include application roles in the dev database baseline so Atlas can validate GRANT syntax in schema files.
-- Document intended grants in schema files even though they won't generate migrations; Atlas validates them against the dev database.
-- When adding functions that write to tables, verify the calling role has write grants — not just the function owner. Functions without `SECURITY DEFINER` run as the caller.
-- After hand-writing a migration, always run `atlas migrate hash` then `atlas migrate validate`.
+- Use declarative `role`, `user`, and `permission` blocks for security management (v1.1+ Pro); enable with `mode { roles = true; permissions = true }`.
+- Without Pro, GRANT/REVOKE and role changes require hand-written migrations followed by `atlas migrate hash` and `atlas migrate validate`.
+- Use `data` blocks with INSERT/UPSERT/SYNC modes for lookup tables and seed data; avoid hand-managing reference data in migrations.
+- Use schema exporters to keep SQL/HCL file exports and external webhooks in sync with actual schema state.
+- Manage PostgreSQL custom CASTs and replica identity declaratively in HCL; avoid manual DDL for these.
