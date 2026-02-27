@@ -78,6 +78,7 @@ Load all relevant best-practices skills immediately as your first action when wo
 |---------|-------|
 | Python: `.py`, `pyproject.toml`, `requirements.txt` | python-best-practices |
 | TypeScript: `.ts`, `.tsx`, `tsconfig.json` | typescript-best-practices |
+| Electrobun: `electrobun.config.ts`, `electrobun/bun`, `electrobun/view`, Electrobun CLI commands | electrobun-best-practices |
 | React: `.tsx`, `.jsx`, `@react` imports | react-best-practices |
 | Go: `.go`, `go.mod` | go-best-practices |
 | Zig: `.zig`, `build.zig`, `build.zig.zon` | zig-best-practices |
@@ -93,6 +94,7 @@ Load all relevant best-practices skills immediately as your first action when wo
 
 Load all applicable skills together when contexts overlap:
 - **TypeScript + React**: All React components (`.tsx`, `.jsx`) - always load both skills together
+- **TypeScript + Electrobun**: Electrobun desktop apps (`electrobun.config.ts`, `electrobun/bun`, `electrobun/view`) - always load both skills together
 - **TypeScript + React + Playwright**: React component E2E tests with `@playwright/test`
 - **TypeScript + React + Tamagui**: React Native/web components with `@tamagui` imports
 - **TypeScript + Playwright**: Non-React test files with `@playwright/test` imports
