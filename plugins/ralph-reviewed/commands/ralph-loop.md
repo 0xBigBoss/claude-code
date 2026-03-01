@@ -18,7 +18,7 @@ Parse the following from arguments:
 - **--max-reviews**: Number (optional, defaults to --max-iterations if not specified)
 - **--completion-promise**: String (default: "COMPLETE")
 - **--no-review**: Boolean flag (default: false)
-- **--debug**: Boolean flag (default: false) - writes debug logs to /tmp/ralph-reviewed-{session_id}.log
+- **--debug**: Boolean flag (default: false) - writes debug logs to ~/.claude/ralphs/{session_id}/debug.log
 
 ## Setup
 
@@ -71,7 +71,7 @@ Configuration:
 - Max review cycles: {MAX_REVIEWS}
 - Completion promise: {COMPLETION_PROMISE}
 - Review enabled: {yes/no}
-- Debug: {yes/no} (logs to /tmp/ralph-reviewed-{session_id}.log)
+- Debug: {yes/no} (logs to ~/.claude/ralphs/{session_id}/debug.log)
 
 The stop hook will now intercept exit attempts. When you believe the task is complete, output:
 
