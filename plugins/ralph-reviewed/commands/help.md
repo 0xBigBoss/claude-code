@@ -46,37 +46,6 @@ Cancel the active loop immediately.
 
 Show this help message.
 
-## Best Practices
-
-1. **Clear success criteria** - Be explicit about what "done" means
-2. **Include verification** - Reference tests, builds, or linters
-3. **Set reasonable limits** - Use `--max-iterations` to prevent infinite loops
-4. **Completion promise** - Include the promise phrase in your task description
-
-## Example Task Structure
-
-```
-Build a user registration feature.
-
-Requirements:
-- POST /register endpoint accepting email and password
-- Password hashing with bcrypt
-- Email validation
-- Return JWT on success
-- Tests for all endpoints
-
-When all tests pass and the build succeeds, output <promise>COMPLETE</promise>
-```
-
-## Review Gate
-
-When Claude outputs the completion promise, Codex CLI reviews:
-- The original task
-- A summary of work done
-- The git diff of changes
-
-If Codex approves, the loop ends. If rejected, Claude receives specific feedback and continues working.
-
 ## Troubleshooting
 
 **Loop won't stop:**
