@@ -6,7 +6,7 @@ description: Generate Ralph-loop-ready handoff prompt
 
 # Generate Ralph Loop Handoff Prompt
 
-Generate a prompt for handing off work to a Ralph Reviewed loop (`/ralph-reviewed:ralph-loop`). The receiving session runs in an iterative self-improvement loop with Codex review gates until a completion promise is output and approved. The prompt must be self-contained, include clear success criteria, and support automatic verification.
+Generate a prompt for handing off work to a Ralph Reviewed loop (`/ralph-reviewed:ralph-loop`). The receiving session runs in an iterative self-improvement loop with Codex review gates. The prompt must be self-contained, include clear success criteria, and support automatic verification.
 
 ## Parse Arguments
 
@@ -52,128 +52,106 @@ HANDOFF_ARGS (the completion criteria portion of $ARGUMENTS, excluding any `--` 
 
 Write a Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>.md` where `<repo>` is the repository name and `<shortname>` is derived from the branch name (e.g., `ralph-myapp-sen-69.md`).
 
-The context file contains the detailed task description for use with `/ralph-reviewed:ralph-loop`.
+### Core Principle
 
-### Ralph Loop Prompt Requirements
+**A ralph handoff is just a handoff with verification commands.** Apply the same principles as `/handoff`: describe what to type, be concrete, link don't summarize, keep it short. The ralph-loop runner handles iteration state, TODO.md tracking, BLOCKED escapes, and completion promises — don't duplicate that machinery in the handoff.
 
-The output prompt must include:
-1. **Clear completion criteria** - What must be true for the task to be "done"
-2. **Verification commands** - Tests, builds, linters that prove success/failure
-3. **Iteration awareness** - Make Claude know it's in a loop and should review previous work
-4. **Completion promise** - A unique marker Claude outputs when done (e.g., `<promise>COMPLETE</promise>`)
-5. **Escape conditions** - What to do if stuck after many iterations
-6. **State tracking** - Instruction to use TODO.md for cross-iteration memory
+### What belongs in the ralph handoff (task-specific)
+
+- What to build/fix/implement — concrete steps with file paths and function names
+- How to verify it's done — exact shell commands
+- Task-specific gotchas and fallback strategies
+- Constraints and scope boundaries
+
+### What does NOT belong (handled by ralph-loop runner)
+
+- TODO.md format or iteration workflow instructions
+- Generic "if stuck, document the blocker" guidance
+- Completion promise syntax (`<promise>COMPLETE</promise>`)
+- State tracking file management
+- Generic BLOCKED escape conditions
 
 ### Prompting Guidelines
 
-Apply these when writing the prompt:
-- **Be explicit about success criteria** - "Tests pass" not "Tests should work"
-- **Use action-oriented language** - "Run `npm test` and fix any failures" not "Make sure tests work"
-- **Include verification loop** - "Run verification, if failures exist fix them, repeat"
-- **Frame positively** - Say what to do, not what to avoid
-- **Use XML tags** for clear section delimitation
+- **Be concrete over comprehensive** — file paths, function names, shell commands, specific values
+- **Link, don't summarize** — "See `SPEC.md` for requirements" beats paraphrasing the spec
+- **Include constraints** — "Only modify files under `src/`" and "Do NOT modify `packages/core/`"
+- **Merge criteria and verification** — don't list success criteria separately from verification commands. One section: "Done when these commands all pass."
+- **Front-load the task** — the agent should know what to do after reading the first 10 lines
+- **Keep it proportional** — single-phase tasks: 60-100 lines. Multi-phase (3+): up to 200. Over 200 means you're probably summarizing things the agent can read themselves.
 
 ### Output Structure
 
-Use this XML-tagged structure optimized for Ralph loops:
+Use plain markdown (not XML tags):
 
-```
-<task>
-[1-2 sentence summary of what to accomplish]
-</task>
-
-<context>
-[2-4 sentences: what was being worked on, why, approach taken, key decisions made]
-</context>
-
-<key_files>
-[Files involved with brief descriptions of changes/relevance]
-</key_files>
-
-<spec>
-[OPTIONAL - Include ONLY if a spec, requirements doc, or acceptance criteria exists for this work.
-Reference the spec file path and summarize key requirements. Examples:
-- "See SPEC.md for full requirements. Key criteria: ..."
-- "From issue #123: must support X, Y, Z"
-- "Acceptance criteria from ticket: ..."
-Omit this section entirely if no spec exists.]
-</spec>
-
-<iteration_state>
-## State Tracking
-
-Maintain a `TODO.md` file in the working directory as your working memory across iterations.
-
-### TODO.md Format
 ```markdown
-# TODO - [Brief Task Summary]
+# [1-line task summary]
 
-## Completed
-- [x] What was done (iteration N)
-- [x] Another completed item (iteration N)
+[2-4 sentences: what exists, why, key decisions already made]
 
-## In Progress
-- [ ] Currently working on
+## What to do
 
-## Pending
-- [ ] Next task
-- [ ] Future task
+### 1. [First concrete task]
+[Details: file paths, function names, expected behavior, code snippets if helpful]
 
-## Blocked
-- [ ] Issue preventing progress (if any)
+### 2. [Second concrete task]
+[Details]
 
-## Notes
-- Key decisions or observations
+### 3. [Continue as needed]
+
+## Key files
+
+- `path/to/file.ts` — what it does / why it matters
+
+## Spec
+
+[OPTIONAL — link to spec file, don't repeat its contents]
+
+## Done when
+
+All of these pass:
+```bash
+command-to-build
+command-to-test
+command-to-check-scope
+```
+[Plus any non-command criteria like "E2E tests exist for each waitFor state"]
+
+## Gotchas
+
+[OPTIONAL — things that will trip you up:
+- "Build requires `DEVELOPER_DIR=...` prefix"
+- "Pre-existing changes in git stash — pop after committing"
+Keep to 2-5 bullets. Omit if nothing non-obvious.]
+
+## Constraints
+
+[OPTIONAL — hard boundaries:
+- "Only modify files under `apps/gui-swift/`"
+- "Do not modify `packages/core/`"
+Omit if no special constraints.]
+
+## Fallbacks
+
+[OPTIONAL — task-specific escape hatches for if a phase is genuinely blocked:
+- "Phase 6: If native screenshot module won't compile, keep JS-based capture"
+- "If sandbox blocks module cache writes, pass `-Xcc -fmodules-cache-path=/tmp/mc`"
+Only include if there are known risk areas. Omit for straightforward tasks.]
 ```
 
-### Each Iteration Workflow
-1. Read `TODO.md` for progress from previous iterations
-2. Do work
-3. Update `TODO.md` (mark completed, add new items discovered)
-4. Commit code changes
-5. When done, output completion promise
+### Anti-Patterns to Avoid
 
-### Note
-`TODO.md` is working memory for the agent across iterations. It does not need to be committed to VCS. Never edit `.claude/ralph-loop.local.md` - it is managed by a Claude Code hook.
-</iteration_state>
-
-<success_criteria>
-[Explicit, verifiable conditions that must ALL be true when complete. Examples:
-- All tests in `src/__tests__/` pass
-- `npm run build` succeeds with no errors
-- Type checking passes (`npm run typecheck`)
-- Linter passes (`npm run lint`)]
-</success_criteria>
-
-<verification_loop>
-Run these commands to verify progress. If any fail, fix the issues and re-verify:
-
-1. [First verification command and what to do if it fails]
-2. [Second verification command and what to do if it fails]
-3. [Continue until all pass]
-4. Update TODO.md with current status
-5. Commit code changes
-
-When ALL verifications pass, output: <promise>COMPLETE</promise>
-</verification_loop>
-
-<if_stuck>
-After 15+ iterations without progress:
-- Update TODO.md "Blocked" section with:
-  - What's preventing progress
-  - Approaches attempted
-  - Suggested alternative paths
-- Output: <promise>BLOCKED</promise>
-</if_stuck>
-```
+- **Duplicating ralph-loop runner instructions** — TODO.md format, iteration workflow, BLOCKED syntax, completion promise format. The runner handles all of this.
+- **Separate success criteria and verification sections** — merge them into "Done when"
+- **Generic "if stuck" instructions** — only include task-specific fallback strategies
+- **Prose architecture summaries** — link to README or SPEC
+- **Over 200 lines** — if it's this long, split into smaller tasks or link to existing docs
 
 ### Output Method
 
 1. Ensure directory exists: `mkdir -p ~/.claude/handoffs`
 
-2. Write the Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>.md` where:
-   - `<repo>` is the repository basename
-   - `<shortname>` is derived from the branch name (e.g., `ralph-myapp-sen-69.md`)
+2. Write the Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>.md`
 
 3. Confirm with the path: "Ralph-loop context saved to `~/.claude/handoffs/<filename>`"
 
@@ -184,7 +162,3 @@ When using this context file with `/ralph-reviewed:ralph-loop`, the command form
 ```
 /ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations." --completion-promise "COMPLETE" <LOOP_FLAGS>
 ```
-
-Replace:
-- `<filename>` with the actual filename (e.g., `ralph-myrepo-feature-x.md`)
-- `<LOOP_FLAGS>` with the parsed flags from $ARGUMENTS, or defaults (`--max-iterations 30`) if none provided

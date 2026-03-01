@@ -40,7 +40,7 @@ This will:
 **CRITICAL: After the handoff context is saved, you MUST continue with this step. The Ralph loop is NOT active until you invoke ralph-loop. Do not stop after the handoff.**
 
 Invoke `/ralph-reviewed:ralph-loop` with:
-- The task prompt: `Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations.`
+- The task prompt: `Read ~/.claude/handoffs/<filename> and complete the task described there. Work through each step, verify with the "Done when" commands. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations.`
 - The parsed LOOP_FLAGS (or defaults: `--max-iterations 15 --max-reviews 10 --completion-promise "COMPLETE"`)
 
 ---
