@@ -15,10 +15,11 @@ First, determine the repository's default branch:
 Store this value and use it wherever `{default_branch}` appears in subsequent steps.
 
 ## Hard Rules
-- Do not create or switch to a different feature branch. Rewrite history in-place on the current branch name (`{branch_name}`).
+- Rewrite history in-place on the current branch name (`{branch_name}`).
+- You may create additional branches for independent changes (see Triage Changes and Create Independent Branches below).
 - Create a local backup ref before rewriting (prefer an annotated tag). Do not push backup refs unless I explicitly ask.
 - Before any history-rewriting command (`git reset`, `git rebase`, `git push --force*`), print the exact command(s) you will run and wait for my confirmation.
-- After rewriting, update the remote branch using `git push --force-with-lease origin HEAD:{branch_name}`. Do not push to any other branch.
+- After rewriting, update the remote branch using `git push --force-with-lease origin HEAD:{branch_name}`. Do not push independent branches without my confirmation.
 - If syncing with `origin/{default_branch}` results in conflicts, abort and stop. Do not attempt to resolve conflicts as part of this rewrite-history workflow.
 
 ## Validate and Backup
@@ -59,6 +60,22 @@ Create a local backup ref (annotated tag preferred) *after* the sync step above,
 
 Record the backup ref name you created. You will use it as `{backup_ref}` below.
 
+## Triage Changes
+
+After syncing, categorize every change (against the now-current `origin/{default_branch}`) into one of two buckets:
+
+1. **Core feature** — directly implements the branch's purpose (the feature, fix, or enhancement).
+2. **Independent** — unrelated improvements that could merge separately (dev tooling, localnet config, linter fixes, dependency bumps, chore cleanup, unrelated refactors).
+
+Present the triage as a table:
+
+| Files | Category | Branch (if independent) |
+|-------|----------|-------------------------|
+
+For independent changes, propose a namespaced branch: `{branch_name}/split/<short-description>` (e.g. `feat/auth/split/chore-localnet-config`). This avoids collisions in multi-contributor repos.
+
+If no independent changes are identified, note that and skip ahead to Reset and Recommit In-Place.
+
 ## Reset and Recommit In-Place
 
 Rewrite in-place on the current branch (`{branch_name}`), without switching branches:
@@ -73,7 +90,16 @@ Before running step (4), print the exact `git reset ...` command you intend to r
 
 ## Plan Commit Storyline
 
-Break the implementation into a sequence of self-contained steps. Each step should reflect a logical stage of development, as if writing a tutorial that teaches the reader how to build this feature. Document your planned commit sequence before implementing.
+Present the full commit plan for my approval. This is the single confirmation gate — include the triage classification inline so I can review both the split and the narrative in one pass.
+
+**Ordering rule**: Independent (non-feature) commits go first (bottom of history), core feature commits follow on top. This ensures independent commits can be cherry-picked onto separate branches cleanly.
+
+For each planned commit, show:
+- Commit message (conventional commit format)
+- Category: `independent` or `core`
+- Files touched
+
+Within each bucket, order commits as a logical narrative — each step should reflect a stage of development, as if writing a tutorial. Wait for my approval before committing. I may reclassify items or reorder.
 
 ## Reimplement Work
 
@@ -93,11 +119,31 @@ Before opening a PR, confirm the final state matches the backup:
 - Run `git diff {backup_ref}` and verify it produces no output
 - If differences exist, reconcile them before proceeding
 
+## Create Independent Branches
+
+If the triage identified independent changes, create a branch for each independent group without leaving `{branch_name}`:
+
+1. For each independent group, create a branch off `origin/{default_branch}`:
+   - `git branch {independent_branch_name} origin/{default_branch}`
+2. Cherry-pick the corresponding commits onto each independent branch without switching:
+   - `git cherry-pick --no-commit <commit-sha> && git -C . stash && git checkout {independent_branch_name} && git stash pop && git commit -C <commit-sha> && git checkout {branch_name}`
+   - Or, more reliably: `git worktree add /tmp/{independent_branch_name} {independent_branch_name} && git -C /tmp/{independent_branch_name} cherry-pick <commit-sha>... && git worktree remove /tmp/{independent_branch_name}`
+3. List the created branches and their commits for my review. Do not push them until I confirm.
+
+Note: The feature branch (`{branch_name}`) still contains all commits (independent + core). The independent branches are convenience copies for early merging. After independent PRs land in `{default_branch}`, the feature branch should be rebased to drop the now-redundant commits (use the `git-rebase-sync` skill for that).
+
 ## Push Rewritten Branch
 
 After verification, force-update the remote branch on the same name:
 - Print the exact `git push ...` command you intend to run and wait for my confirmation.
 - Use: `git push --force-with-lease origin HEAD:{branch_name}`
+
+## Push Independent Branches
+
+If independent branches were created, list them with their commits and ask for confirmation before pushing. For each confirmed branch:
+- `git push -u origin {independent_branch_name}`
+- Create a PR from `{independent_branch_name}` to `{default_branch}` following the instructions in `pr.md`.
+- Mark these PRs as ready to merge independently of the feature branch.
 
 ## PR Handling
 
@@ -105,6 +151,7 @@ After verification, force-update the remote branch on the same name:
 - If no PR exists, create one from `{branch_name}` to `{default_branch}`.
 - Write the PR following the instructions in `pr.md` (or the repo's PR template if `pr.md` does not exist).
 - Include a link to `{backup_ref}` (the tag) in the PR description for reference.
+- If independent branches were split out, list them in the PR description with links to their PRs and a note that they can be merged first to reduce the feature diff.
 - Omit any AI-generated footers or co-author attributions from commits and PR.
 
 ## Success Criteria
@@ -112,5 +159,8 @@ After verification, force-update the remote branch on the same name:
 The task is complete when:
 1. The branch's final state is byte-for-byte identical to `{backup_ref}`
 2. Each commit uses conventional commit format and introduces one logical change
-3. The remote branch `{branch_name}` is updated via `--force-with-lease` (same branch name only)
-4. If a PR already existed, it was updated; otherwise a PR was created, with proper documentation and a link to `{backup_ref}`
+3. Independent commits are ordered first (bottom of history), core feature commits on top
+4. Independent branches exist with cherry-picked copies of the independent commits (if any were triaged)
+5. The remote branch `{branch_name}` is updated via `--force-with-lease` (same branch name only)
+6. Independent branches are pushed and have PRs (with my confirmation)
+7. If a PR already existed for the feature, it was updated; otherwise a PR was created, with proper documentation, a link to `{backup_ref}`, and references to independent PRs
