@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Write(~/.claude/handoffs/**), Read(~/.claude/handoffs/**)
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(~/.claude/handoffs/**), Read(~/.claude/handoffs/**)
 argument-hint: [completion criteria] [--max-iterations N] [--max-reviews N] [--no-review] [--debug]
 description: Generate Ralph-loop-ready handoff prompt
 ---
@@ -50,7 +50,12 @@ HANDOFF_ARGS (the completion criteria portion of $ARGUMENTS, excluding any `--` 
 
 ## Task
 
-Write a Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>.md` where `<repo>` is the repository name and `<shortname>` is derived from the branch name (e.g., `ralph-myapp-sen-69.md`).
+Write a Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>-<timestamp>.md` where:
+- `<repo>` is the repository name
+- `<shortname>` is derived from the branch name
+- `<timestamp>` is the current date/time as `YYYYMMDD-HHMM`
+
+Example: `ralph-myapp-sen-69-20260303-1430.md`
 
 ### Core Principle
 
@@ -151,9 +156,13 @@ Only include if there are known risk areas. Omit for straightforward tasks.]
 
 1. Ensure directory exists: `mkdir -p ~/.claude/handoffs`
 
-2. Write the Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>.md`
+2. Write the Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>-<timestamp>.md`
 
 3. Confirm with the path: "Ralph-loop context saved to `~/.claude/handoffs/<filename>`"
+
+### Timestamp Generation
+
+Generate the timestamp using: `date +%Y%m%d-%H%M`
 
 ### Wrapper Command Format
 

@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Write(~/.claude/handoffs/**), Read(~/.claude/handoffs/**)
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(~/.claude/handoffs/**), Read(~/.claude/handoffs/**)
 argument-hint: [optional focus area or additional notes]
 description: Generate concise handoff summary with context
 ---
@@ -37,11 +37,12 @@ $ARGUMENTS
 
 ## Task
 
-Write a handoff prompt to `~/.claude/handoffs/handoff-<repo>-<shortname>.md` where:
+Write a handoff prompt to `~/.claude/handoffs/handoff-<repo>-<shortname>-<timestamp>.md` where:
 - `<repo>` is the repository name (or directory basename if not a git repo)
 - `<shortname>` is derived from the branch name, or use `main` if not in a git repo
+- `<timestamp>` is the current date/time as `YYYYMMDD-HHMM` (e.g., `20260303-1430`)
 
-Examples: `handoff-myapp-sen-69.md`, `handoff-api-fix-auth.md`, `handoff-scripts-main.md`
+Examples: `handoff-myapp-sen-69-20260303-1430.md`, `handoff-api-fix-auth-20260303-0915.md`
 
 The prompt must be standalone and actionable for an agent with zero prior context.
 
@@ -129,6 +130,8 @@ Omit if no special constraints beyond normal development.]
 
 1. Ensure directory exists: `mkdir -p ~/.claude/handoffs`
 
-2. Write the handoff prompt to `~/.claude/handoffs/handoff-<repo>-<shortname>.md`
+2. Write the handoff prompt to `~/.claude/handoffs/handoff-<repo>-<shortname>-<timestamp>.md`
 
-3. Confirm with the path: "Handoff saved to `~/.claude/handoffs/<filename>`"
+3. Generate the timestamp using: `date +%Y%m%d-%H%M`
+
+4. Confirm with the path: "Handoff saved to `~/.claude/handoffs/<filename>`"

@@ -28,10 +28,10 @@ Invoke the `/ralphoff` skill with HANDOFF_ARGS.
 
 This will:
 - Analyze the current session context
-- Write a context file to `~/.claude/handoffs/ralph-<repo>-<shortname>.md`
+- Write a context file to `~/.claude/handoffs/ralph-<repo>-<shortname>-<timestamp>.md`
 - Prepare the task description with success criteria and verification loops
 
-**Important**: Note the exact filename created (e.g., `ralph-myrepo-feature-x.md`).
+**Important**: Note the exact filename created (e.g., `ralph-myrepo-feature-x-20260303-1430.md`).
 
 ---
 
