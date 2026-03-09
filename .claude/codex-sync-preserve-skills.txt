@@ -2,3 +2,4 @@
 # Entries here are preserved in codex/.codex/skills during prune.
 # Example:
 # dev-browser
+simplify
