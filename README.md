@@ -34,6 +34,8 @@ claude-code/
 ├── scripts/                     # Utility scripts
 │   ├── install-symlinks.sh      # Installation helper
 │   └── sync-codex.sh            # Sync/check Claude commands + skills into Codex
+├── codex-overrides/
+│   └── skills/                  # Codex-only skill overrides applied after upstream sync
 ├── settings/                    # Settings configurations
 ├── statusline/                  # Statusline configurations
 └── analytics/                   # Usage analytics (submodule)
@@ -121,6 +123,12 @@ claude-code/scripts/sync-codex.sh --check
 # Apply sync and prune stale managed entries (commands + skills)
 claude-code/scripts/sync-codex.sh
 ```
+
+Codex skill sync is curated:
+
+- Upstream Claude user skills sync first
+- Plugin skills sync next, with selective drops from `claude-code/scripts/sync-codex.skill-policy.tsv`
+- Codex-only overrides in `claude-code/codex-overrides/skills/` sync last and win on name collision
 
 ## Core Principles
 

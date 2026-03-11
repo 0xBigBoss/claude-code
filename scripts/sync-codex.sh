@@ -10,9 +10,11 @@ shopt -s nullglob
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 USER_SKILLS_DIR="$REPO_DIR/.claude/skills"
+CODEX_OVERRIDE_SKILLS_DIR="$REPO_DIR/codex-overrides/skills"
 CLAUDE_COMMANDS_DIR="$REPO_DIR/commands"
 PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
 PRESERVE_SKILLS_MANIFEST="$REPO_DIR/.claude/codex-sync-preserve-skills.txt"
+SKILL_POLICY_FILE="$SCRIPT_DIR/sync-codex.skill-policy.tsv"
 
 # Options
 DRY_RUN=false
@@ -116,6 +118,32 @@ CODEX_DIR="$(resolve_codex_dir)"
 CODEX_SKILLS_DIR="$CODEX_DIR/skills"
 CODEX_PROMPTS_DIR="$CODEX_DIR/prompts"
 
+plugin_skill_mode() {
+    local plugin_key="$1"
+    local skill_name="$2"
+    local plugin_name="${plugin_key%@*}"
+
+    [[ -f "$SKILL_POLICY_FILE" ]] || return 0
+
+    awk -F'\t' -v plugin="$plugin_key" -v plugin_name="$plugin_name" -v skill="$skill_name" '
+        /^[[:space:]]*#/ { next }
+        NF < 3 { next }
+        ($1 == plugin || $1 == plugin_name) && $2 == skill {
+            print $3
+            exit
+        }
+    ' "$SKILL_POLICY_FILE"
+}
+
+should_drop_plugin_skill() {
+    local plugin_key="$1"
+    local skill_name="$2"
+    local mode
+
+    mode="$(plugin_skill_mode "$plugin_key" "$skill_name")"
+    [[ "$mode" == "drop" ]]
+}
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
@@ -136,7 +164,8 @@ Options:
 
 Behavior:
     - If neither --skills nor --commands is given, both are synced.
-    - Skills sync order is user skills first, then plugin skills (plugin wins on name collision).
+    - Skills sync order is user skills, then plugin skills, then Codex overrides (override wins on name collision).
+    - Plugin skill policy can drop specific upstream skills from Codex sync.
     - Pruning skips hidden entries (e.g. .system).
     - In --check mode, no files are changed.
 
@@ -144,6 +173,8 @@ Sources:
     Skills:
       - User:   $USER_SKILLS_DIR
       - Plugin: $PLUGINS_JSON
+      - Policy: $SKILL_POLICY_FILE
+      - Override: $CODEX_OVERRIDE_SKILLS_DIR
       - Preserve manifest: $PRESERVE_SKILLS_MANIFEST
     Commands:
       - Claude commands: $CLAUDE_COMMANDS_DIR/*.md
@@ -292,6 +323,7 @@ sync_plugin_skills() {
     fi
 
     local count=0
+    local dropped=0
     local plugin_key install_path skill_dir skill_name
     local skill_candidates
     skill_candidates="$(mktemp "${TMPDIR:-/tmp}/sync-codex-plugin-skills.XXXXXX")"
@@ -316,6 +348,12 @@ sync_plugin_skills() {
 
                 [[ "$skill_name" == .* ]] && continue
 
+                if should_drop_plugin_skill "$plugin_key" "$skill_name"; then
+                    log "  Dropping $skill_name via policy ($plugin_key)"
+                    dropped=$((dropped + 1))
+                    continue
+                fi
+
                 if is_skill_dir "$skill_dir"; then
                     printf '%s\t%s\n' "$skill_name" "$skill_dir" >> "$skill_candidates"
                 else
@@ -338,6 +376,12 @@ sync_plugin_skills() {
                 [[ "$skill_name" == "scripts" ]] && continue
                 [[ "$skill_name" == "plugins" ]] && continue
                 [[ "$skill_name" == .* ]] && continue
+
+                if should_drop_plugin_skill "$plugin_key" "$skill_name"; then
+                    log "  Dropping $skill_name via policy ($plugin_key)"
+                    dropped=$((dropped + 1))
+                    continue
+                fi
 
                 if is_skill_dir "$skill_dir"; then
                     printf '%s\t%s\n' "$skill_name" "$skill_dir" >> "$skill_candidates"
@@ -380,6 +424,38 @@ PY
     rm -f "$skill_candidates"
 
     info "Plugin skills synced: $count"
+    if [[ "$dropped" -gt 0 ]]; then
+        info "Plugin skills dropped by policy: $dropped"
+    fi
+}
+
+sync_codex_override_skills() {
+    info "=== Syncing Codex override skills ==="
+
+    if [[ ! -d "$CODEX_OVERRIDE_SKILLS_DIR" ]]; then
+        info "No Codex override skills directory found at $CODEX_OVERRIDE_SKILLS_DIR"
+        return 0
+    fi
+
+    local count=0
+    local skill_dir skill_name
+    for skill_dir in "$CODEX_OVERRIDE_SKILLS_DIR"/*/; do
+        [[ -d "$skill_dir" ]] || continue
+        skill_name="$(basename "$skill_dir")"
+
+        [[ "$skill_name" == .* ]] && continue
+
+        if ! is_skill_dir "$skill_dir"; then
+            log "Skipping Codex override $skill_name (no SKILL.md)"
+            continue
+        fi
+
+        copy_dir "$skill_dir" "$CODEX_SKILLS_DIR/$skill_name"
+        mark_synced_skill "$skill_name"
+        count=$((count + 1))
+    done
+
+    info "Codex override skills synced: $count"
 }
 
 prune_stale_skills() {
@@ -556,6 +632,8 @@ main() {
         sync_user_skills
         echo
         sync_plugin_skills
+        echo
+        sync_codex_override_skills
         echo
         prune_stale_skills
         echo

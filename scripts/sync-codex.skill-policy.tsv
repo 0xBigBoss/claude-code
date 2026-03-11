@@ -1,0 +1,11 @@
+# plugin	skill	mode	note
+superpowers	using-superpowers	drop	Claude harness bootstrap; not valid in Codex
+superpowers	brainstorming	drop	Too Claude-specific and too rigid for Codex defaults
+superpowers	writing-plans	drop	Needs Codex-native rewrite before syncing
+superpowers	executing-plans	drop	Needs Codex-native rewrite before syncing
+superpowers	dispatching-parallel-agents	drop	Needs Codex-native rewrite around spawn_agent guidance
+superpowers	subagent-driven-development	drop	Assumes Claude Task/TodoWrite reviewer workflow
+superpowers	requesting-code-review	drop	Depends on Claude-specific code-reviewer task typing
+superpowers	receiving-code-review	drop	Part of the same review workflow family; hold for Codex rewrite
+superpowers	writing-skills	drop	Heavily Claude-centric and requires Codex rewrite
+
