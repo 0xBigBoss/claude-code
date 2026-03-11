@@ -293,6 +293,8 @@ sync_plugin_skills() {
 
     local count=0
     local plugin_key install_path skill_dir skill_name
+    local skill_candidates
+    skill_candidates="$(mktemp "${TMPDIR:-/tmp}/sync-codex-plugin-skills.XXXXXX")"
 
     while IFS= read -r plugin_key; do
         [[ -n "$plugin_key" ]] || continue
@@ -315,9 +317,7 @@ sync_plugin_skills() {
                 [[ "$skill_name" == .* ]] && continue
 
                 if is_skill_dir "$skill_dir"; then
-                    copy_dir "$skill_dir" "$CODEX_SKILLS_DIR/$skill_name"
-                    mark_synced_skill "$skill_name"
-                    count=$((count + 1))
+                    printf '%s\t%s\n' "$skill_name" "$skill_dir" >> "$skill_candidates"
                 else
                     log "  Skipping $skill_name (no SKILL.md)"
                 fi
@@ -340,13 +340,44 @@ sync_plugin_skills() {
                 [[ "$skill_name" == .* ]] && continue
 
                 if is_skill_dir "$skill_dir"; then
-                    copy_dir "$skill_dir" "$CODEX_SKILLS_DIR/$skill_name"
-                    mark_synced_skill "$skill_name"
-                    count=$((count + 1))
+                    printf '%s\t%s\n' "$skill_name" "$skill_dir" >> "$skill_candidates"
                 fi
             done
         fi
     done < <(jq -r '.plugins | keys[]?' "$PLUGINS_JSON")
+
+    while IFS=$'\t' read -r skill_name skill_dir; do
+        [[ -n "$skill_name" && -n "$skill_dir" ]] || continue
+        copy_dir "$skill_dir" "$CODEX_SKILLS_DIR/$skill_name"
+        mark_synced_skill "$skill_name"
+        count=$((count + 1))
+    done < <(
+        python3 - "$skill_candidates" <<'PY'
+import sys
+
+candidates_path = sys.argv[1]
+entries: list[tuple[str, str]] = []
+
+with open(candidates_path, "r", encoding="utf-8") as handle:
+    for raw_line in handle:
+        line = raw_line.rstrip("\n")
+        if not line:
+            continue
+        skill_name, skill_path = line.split("\t", 1)
+        entries.append((skill_name, skill_path))
+
+final_index: dict[str, int] = {}
+final_path: dict[str, str] = {}
+for index, (skill_name, skill_path) in enumerate(entries):
+    final_index[skill_name] = index
+    final_path[skill_name] = skill_path
+
+for skill_name, _ in sorted(final_index.items(), key=lambda item: item[1]):
+    print(f"{skill_name}\t{final_path[skill_name]}")
+PY
+    )
+
+    rm -f "$skill_candidates"
 
     info "Plugin skills synced: $count"
 }
