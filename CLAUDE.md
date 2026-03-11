@@ -26,7 +26,7 @@ Applies to agents. Follow these directives as system-level behavior.
 - Traceability rule: every change maps `REQ-*` -> tests -> commit/PR.
 - Handoff contract (`REVIEW`, required): assumptions, changed files, commands run, results, unresolved risks.
 - Phase gates:
-  - `SPEC` gate: IDs, invariants, non-goals, acceptance criteria, risk tags are present.
+  - `SPEC` gate: IDs, invariants, non-goals, acceptance criteria present; risk tags required when high-risk items exist. Load `spec-best-practices` skill. File must be named `SPEC.md`, colocated with the code it describes.
   - `PLAN` gate: task graph with files/types/tests and explicit risk classification.
   - `TDD` gate: failing tests first; required test layers added (unit/integration/contract/property/regression as applicable).
   - `DEV` gate: local environment boots; deterministic health checks pass (readiness, migrations, seed data, key APIs, timeout budgets).
@@ -86,7 +86,8 @@ Load all relevant best-practices skills immediately as your first action when wo
 | Tilt: `Tiltfile`, tilt commands | tilt |
 | Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
 | Atlas: `atlas.hcl`, `.hcl` schema files, Atlas CLI commands | atlas-best-practices |
-| Spec files: `*.spec.md`, `SPEC.md`, `spec/*.md`, test design | testing-best-practices |
+| Spec authoring: creating, reviewing, or updating `SPEC.md` files | spec-best-practices |
+| Spec-derived test design: `*.spec.md`, `spec/*.md`, `SPEC.md` when designing tests | testing-best-practices |
 | Spec alignment: spec file + implementation in context | specalign |
 | Git: commits, branches, PRs, history rewriting | git-best-practices |
 
@@ -103,6 +104,9 @@ Load all applicable skills together when contexts overlap:
 - **testing-best-practices + [language]**: Load testing skill alongside the project's language skill when designing tests from specs
 - **tilt + tmux**: Always load both when running `tilt up` or any long-lived process in tmux
 - **tilt + tiltup**: Always load both when starting tilt or fixing Tiltfile errors
+- **spec-best-practices + specalign**: Load both when reviewing or updating existing specs against implementation
+- **spec-best-practices + testing-best-practices**: Load both when deriving test strategy from a spec
+- **spec-best-practices + /specout**: Load skill before running specout interview
 - **specalign + testing-best-practices**: Load both when a spec file and its implementation are in context
 - **e2e + playwright-best-practices**: Load both when running or fixing Playwright e2e tests
 - **e2e + specalign**: Load both when e2e failures may indicate spec drift

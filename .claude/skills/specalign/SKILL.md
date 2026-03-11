@@ -41,9 +41,10 @@ This awareness should be passive - flag drift in your responses without interrup
 
 ### Step 1: Locate the Spec
 
-A spec file is required. Search for:
-- `*.spec.md`, `*-spec.md`, `SPEC.md`
-- `spec/*.md`, `docs/*.spec.md`
+A spec file is required. Search for `SPEC.md` at colocated paths:
+- `SPEC.md` (root, `apps/*/`, `packages/*/`, `src/lib/*/`)
+- Supporting files linked from a `SPEC.md` TOC (e.g., `commands.spec.md`)
+- Legacy patterns as fallback: `*.spec.md`, `*-spec.md`, `spec/*.md`
 
 If multiple specs exist, ask which to align. If none exist, stop - this workflow requires an existing spec.
 
