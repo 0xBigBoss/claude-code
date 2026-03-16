@@ -1,6 +1,6 @@
 ---
 name: tiltup
-description: Start Tilt dev environment in zmx, monitor bootstrap to healthy state, fix Tiltfile bugs without hard-coding or fallbacks. Use when starting tilt, debugging Tiltfile errors, or bootstrapping a dev environment.
+description: Use when starting tilt, debugging Tiltfile errors, or bootstrapping a dev environment. Starts Tilt in zmx, monitors bootstrap to healthy state, fixes Tiltfile bugs without hard-coding or fallbacks.
 ---
 
 # Tilt Up
