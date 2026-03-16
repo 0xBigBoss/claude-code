@@ -1,6 +1,6 @@
 ---
 name: tilt
-description: Queries Tilt resource status, logs, and manages dev environments. Use when checking deployment health, investigating errors, reading logs, or working with Tiltfiles.
+description: Use when checking deployment health, investigating errors, reading logs, or working with Tiltfiles. Queries Tilt resource status, logs, and manages dev environments.
 ---
 
 # Tilt
@@ -62,11 +62,7 @@ tilt down                           # Stop and clean up
 
 ## Running tilt up
 
-**zmx session rules** (mandatory — see `zmx` skill for full patterns):
-
-- **MUST** check `zmx list --short` before creating sessions — never create duplicates
-- **MUST** derive session name from git root — never hardcode
-- **MUST** use `zmx run` — never attach from agent context
+Follow `zmx` skill patterns — check for existing sessions, derive name from git root, use `zmx run` (not attach):
 
 ```bash
 PROJECT=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" || basename "$PWD")
