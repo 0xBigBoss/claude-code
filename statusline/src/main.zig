@@ -1018,6 +1018,13 @@ pub fn main() !void {
         }
     }
 
+    // zmx session indicator
+    if (std.posix.getenv("ZMX_SESSION")) |zmx_session| {
+        if (zmx_session.len > 0) {
+            try writer.print(" {s}zmx:{s}{s}", .{ colors.gray, zmx_session, colors.reset });
+        }
+    }
+
     // Add model display with gauge
     if (input.model) |model| {
         if (model.display_name) |name| {
