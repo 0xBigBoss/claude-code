@@ -62,24 +62,21 @@ tilt down                           # Stop and clean up
 
 ## Running tilt up
 
-**tmux session rules** (mandatory — see `tmux` skill for full patterns):
+**zmx session rules** (mandatory — see `zmx` skill for full patterns):
 
-- **MUST** check `tmux has-session` before `tmux new-session` — never create duplicate sessions
+- **MUST** check `zmx list --short` before creating sessions — never create duplicates
 - **MUST** derive session name from git root — never hardcode
-- **MUST** add a window to an existing session — never create a parallel session
-- **MUST** use `send-keys` — never pass inline commands to `new-session`
+- **MUST** use `zmx run` — never attach from agent context
 
 ```bash
-SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
+PROJECT=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" || basename "$PWD")
+SESSION="${PROJECT}-tilt"
 
-if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-  tmux new-session -d -s "$SESSION" -n tilt
-  tmux send-keys -t "$SESSION:tilt" 'tilt up' Enter
-elif ! tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -q "^tilt$"; then
-  tmux new-window -t "$SESSION" -n tilt
-  tmux send-keys -t "$SESSION:tilt" 'tilt up' Enter
+if zmx list --short 2>/dev/null | grep -q "^${SESSION}$"; then
+  echo "Tilt session already exists: $SESSION"
 else
-  echo "Tilt window already exists in session: $SESSION"
+  zmx run "$SESSION" 'tilt up'
+  echo "Started tilt in zmx session: $SESSION"
 fi
 ```
 

@@ -102,7 +102,7 @@ Load all applicable skills together when contexts overlap:
 - **Python + Tilt**: Python services in a Tilt-managed dev environment
 - **Go + Tilt**: Go services in a Tilt-managed dev environment
 - **testing-best-practices + [language]**: Load testing skill alongside the project's language skill when designing tests from specs
-- **tilt + tmux**: Always load both when running `tilt up` or any long-lived process in tmux
+- **tilt + zmx**: Always load both when running `tilt up` or any long-lived process in zmx
 - **tilt + tiltup**: Always load both when starting tilt or fixing Tiltfile errors
 - **spec-best-practices + specalign**: Load both when reviewing or updating existing specs against implementation
 - **spec-best-practices + testing-best-practices**: Load both when deriving test strategy from a spec

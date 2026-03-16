@@ -1,6 +1,6 @@
 ---
 name: tiltup
-description: Start Tilt dev environment in tmux, monitor bootstrap to healthy state, fix Tiltfile bugs without hard-coding or fallbacks. Use when starting tilt, debugging Tiltfile errors, or bootstrapping a dev environment.
+description: Start Tilt dev environment in zmx, monitor bootstrap to healthy state, fix Tiltfile bugs without hard-coding or fallbacks. Use when starting tilt, debugging Tiltfile errors, or bootstrapping a dev environment.
 ---
 
 # Tilt Up
@@ -40,8 +40,8 @@ Restart only for: Tilt version upgrades, port/host config changes, crashes, clus
 
 1. Check if tilt is already running:
    ```bash
-   SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
-   tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -q "^tilt$"
+   PROJECT=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" || basename "$PWD")
+   zmx list --short 2>/dev/null | grep -q "^${PROJECT}-tilt$"
    ```
    If running, check health via `tilt get uiresources -o json` and skip to Step 3.
 
@@ -52,20 +52,18 @@ Restart only for: Tilt version upgrades, port/host config changes, crashes, clus
 
 3. Check for k3d cluster or Docker prerequisites.
 
-### Step 2: Start Tilt in tmux
+### Step 2: Start Tilt in zmx
 
-Follow the `tmux` skill patterns:
+Follow the `zmx` skill patterns:
 ```bash
-SESSION=$(basename $(git rev-parse --show-toplevel 2>/dev/null) || basename $PWD)
+PROJECT=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" || basename "$PWD")
+SESSION="${PROJECT}-tilt"
 
-if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-  tmux new-session -d -s "$SESSION" -n tilt
-  tmux send-keys -t "$SESSION:tilt" 'tilt up' Enter
-elif ! tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -q "^tilt$"; then
-  tmux new-window -t "$SESSION" -n tilt
-  tmux send-keys -t "$SESSION:tilt" 'tilt up' Enter
+if zmx list --short 2>/dev/null | grep -q "^${SESSION}$"; then
+  echo "Tilt session already exists: $SESSION"
 else
-  echo "Tilt window already exists in session: $SESSION"
+  zmx run "$SESSION" 'tilt up'
+  echo "Started tilt in zmx session: $SESSION"
 fi
 ```
 
@@ -103,7 +101,7 @@ After 3 fix iterations on the same resource without progress:
 ## Tilt Status: <healthy|degraded|errored>
 
 **Resources**: X/Y ok
-**Session**: tmux $SESSION:tilt
+**Session**: zmx $SESSION
 
 ### Errors (if any)
 - <resource>: <root cause> — <what was fixed or what remains>
