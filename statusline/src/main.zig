@@ -534,6 +534,31 @@ fn formatLinesChanged(input: StatuslineInput, writer: anytype) !bool {
     return true;
 }
 
+/// Read idle-since file for this session and write the indicator directly.
+/// Reads and formats in one call to avoid returning a dangling stack slice.
+/// Returns true if indicator was written, false if not idle or file missing.
+fn formatIdleSince(writer: anytype, session_id: ?[]const u8) !bool {
+    const sid = session_id orelse return false;
+    if (sid.len == 0) return false;
+    const home = std.posix.getenv("HOME") orelse return false;
+    var path_buf: [512]u8 = undefined;
+    const path = std.fmt.bufPrint(&path_buf, "{s}/.claude/.idle-since-{s}", .{ home, sid }) catch return false;
+
+    const file = std.fs.cwd().openFile(path, .{}) catch return false;
+    defer file.close();
+
+    // File contains a short time string like "14:45\n"
+    var buf: [32]u8 = undefined;
+    const bytes_read = file.read(&buf) catch return false;
+    if (bytes_read == 0) return false;
+
+    const trimmed = std.mem.trim(u8, buf[0..bytes_read], " \t\n\r");
+    if (trimmed.len == 0) return false;
+
+    try writer.print(" 💤{s}{s}{s}", .{ colors.light_gray, trimmed, colors.reset });
+    return true;
+}
+
 /// Get the last segment of a path (e.g., "/foo/bar/baz" -> "baz")
 fn getLastPathSegment(path: []const u8) []const u8 {
     if (path.len == 0) return path;
@@ -1085,6 +1110,9 @@ pub fn main() !void {
             try writer.print("{s}", .{colors.reset});
         }
     }
+
+    // Idle-since indicator (visible only when agent is waiting for input)
+    _ = try formatIdleSince(writer, input.session_id);
 
     // Output the complete statusline at once
     const output = output_stream.getWritten();
@@ -1960,4 +1988,29 @@ test "parseCodexReviewStateFromContent with no frontmatter" {
 test "parseCodexReviewStateFromContent with empty content" {
     const state = parseCodexReviewStateFromContent("");
     try std.testing.expect(!state.active);
+}
+
+test "formatIdleSince returns false without session_id" {
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    const result_null = try formatIdleSince(writer, null);
+    try std.testing.expect(!result_null);
+    try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
+
+    const result_empty = try formatIdleSince(writer, "");
+    try std.testing.expect(!result_empty);
+    try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
+}
+
+test "formatIdleSince returns false for missing file" {
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    // Nonexistent session ID -> file won't exist -> returns false
+    const result = try formatIdleSince(writer, "nonexistent-session-id-12345");
+    try std.testing.expect(!result);
+    try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
 }
