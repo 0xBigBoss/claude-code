@@ -16,8 +16,8 @@ Split arguments into two groups:
 - **LOOP_FLAGS**: Any `--max-iterations`, `--max-reviews`, `--completion-promise`, `--no-review`, `--debug` flags (passed to ralph-loop)
 
 Default loop flags if not specified:
-- `--max-iterations 15`
-- `--max-reviews 10`
+- `--max-iterations 30`
+- `--max-reviews 20`
 - `--completion-promise "COMPLETE"`
 
 ## Workflow
@@ -40,8 +40,8 @@ This will:
 **CRITICAL: After the handoff context is saved, you MUST continue with this step. The Ralph loop is NOT active until you invoke ralph-loop. Do not stop after the handoff.**
 
 Invoke `/ralph-reviewed:ralph-loop` with:
-- The task prompt: `Read ~/.claude/handoffs/<filename> and complete the task described there. Work through each step, verify with the "Done when" commands. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations.`
-- The parsed LOOP_FLAGS (or defaults: `--max-iterations 15 --max-reviews 10 --completion-promise "COMPLETE"`)
+- The task prompt: `Read ~/.claude/handoffs/<filename> and complete the task described there. Work through each step, verify with the "Done when" commands. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 30 iterations.`
+- The parsed LOOP_FLAGS (or defaults: `--max-iterations 30 --max-reviews 20 --completion-promise "COMPLETE"`)
 
 ---
 
