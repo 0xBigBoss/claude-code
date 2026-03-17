@@ -93,7 +93,30 @@
       "~/.claude/handoffs"
     ]
   },
-  "hooks": {},
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sid=$(jq -r '.session_id // empty' 2>/dev/null); [ -n \"$sid\" ] && date '+%H:%M' > ~/.claude/.idle-since-\"$sid\"; find ~/.claude -maxdepth 1 -name '.idle-since-*' -mtime +7 -delete 2>/dev/null; echo '{}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sid=$(jq -r '.session_id // empty' 2>/dev/null); [ -n \"$sid\" ] && rm -f ~/.claude/.idle-since-\"$sid\"; echo '{}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
   "statusLine": {
     "type": "command",
     "command": "statusline"
