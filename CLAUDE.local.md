@@ -68,13 +68,25 @@ claude plugin update <plugin-name>
 
 ## Publishing Plugin Updates
 
-Keep plugin versions in sync in both locations:
+**Any change to plugin source files requires a version bump.** Lefthook pre-commit and pre-push hooks enforce this automatically via `claude-code/scripts/check-plugin-versions.sh`.
 
-1. `claude-code/plugins/<plugin-name>/.claude-plugin/plugin.json`
-2. `claude-code/.claude-plugin/marketplace.json`
+### Version bump checklist
 
-Then refresh marketplace metadata:
+1. Bump `version` in `claude-code/plugins/<name>/.claude-plugin/plugin.json`
+2. Bump `version` for the same plugin in `claude-code/.claude-plugin/marketplace.json`
+3. Both versions must match — the hook fails on mismatch
+4. Stage `plugin.json` alongside your source changes — the hook warns if source files changed without it
+
+### After committing
+
+Refresh the local marketplace so the runtime picks up the new version:
 
 ```bash
 claude plugin marketplace update 0xbigboss-plugins
+```
+
+### Manual check
+
+```bash
+claude-code/scripts/check-plugin-versions.sh
 ```
