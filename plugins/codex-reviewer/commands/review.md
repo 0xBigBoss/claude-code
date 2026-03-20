@@ -14,7 +14,7 @@ Arguments: $ARGUMENTS
 
 Parse the following from arguments:
 - **FOCUS**: Everything before the first `--` flag (the review focus)
-- **--max-cycles**: Number (default: 20) - maximum review cycles before auto-approve
+- **--max-cycles**: Number (default: 30) - maximum review cycles before auto-approve
 
 **Parsing rules:**
 1. Text before any `--` flags is the review focus
@@ -22,8 +22,8 @@ Parse the following from arguments:
 3. If no focus text provided, use the default focus
 
 **Examples:**
-- `/codex-reviewer:review` → default focus, max 20 cycles
-- `/codex-reviewer:review "focus on security vulnerabilities"` → security review, max 20 cycles
+- `/codex-reviewer:review` → default focus, max 30 cycles
+- `/codex-reviewer:review "focus on security vulnerabilities"` → security review, max 30 cycles
 - `/codex-reviewer:review --max-cycles 3` → default focus, max 3 cycles
 - `/codex-reviewer:review "verify error handling" --max-cycles 10` → error handling review, max 10 cycles
 
@@ -133,7 +133,7 @@ Review gate active. Run `/codex-reviewer:cancel` to abort.
 
 **Important:**
 - Use the actual handoff path from Step 1
-- Use the `--max-cycles` value if provided, otherwise default to 20
+- Use the `--max-cycles` value if provided, otherwise default to 30
 - The stop hook reads `handoff_path` at review time
 
 ---
@@ -164,6 +164,6 @@ Review gate active. Run `/codex-reviewer:cancel` to abort.
 ## Notes
 
 - Codex review can take 5-20+ minutes depending on complexity
-- Max 20 review cycles by default; use `--max-cycles N` to customize
+- Max 30 review cycles by default; use `--max-cycles N` to customize
 - Use `/codex-reviewer:cancel` to abort the review gate
 - Debug logs at `~/.claude/codex/{session_id}/crash.log`
