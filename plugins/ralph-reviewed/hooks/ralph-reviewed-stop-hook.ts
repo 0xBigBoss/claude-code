@@ -191,10 +191,35 @@ function getStateFilePath(cwd: string): string {
 
 // --- rl CLI integration ---
 
+let rlBinary: string | null = null;
+
+function findRl(cwd: string): string {
+  if (rlBinary) return rlBinary;
+
+  // 1. Check if rl is on PATH
+  const which = spawnSync("which", ["rl"], { encoding: "utf-8" });
+  if (which.status === 0 && which.stdout.trim()) {
+    rlBinary = "rl";
+    return rlBinary;
+  }
+
+  // 2. Use .rl/rl wrapper (created by rl init with absolute path fallback)
+  const wrapper = join(cwd, ".rl", "rl");
+  if (existsSync(wrapper)) {
+    rlBinary = wrapper;
+    return rlBinary;
+  }
+
+  // 3. Last resort: try rl anyway (may fail)
+  rlBinary = "rl";
+  return rlBinary;
+}
+
 function callRl(args: string[], cwd: string): { ok: boolean; stdout: string } {
-  const result = spawnSync("rl", args, { cwd, encoding: "utf-8", timeout: 10000 });
+  const rl = findRl(cwd);
+  const result = spawnSync(rl, args, { cwd, encoding: "utf-8", timeout: 10000 });
   if (result.status !== 0) {
-    crash(`rl ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
+    crash(`${rl} ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
     return { ok: false, stdout: result.stdout || "" };
   }
   return { ok: true, stdout: result.stdout || "" };
@@ -625,7 +650,7 @@ Your previous completion was reviewed and requires changes.
 
 ${reviewResult.feedback}
 
-Address ALL open issues above, then output <promise>COMPLETE</promise> when truly complete.
+Address ALL open issues above, then run \`.rl/rl done\` when truly complete.
 
 ---
 
