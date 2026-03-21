@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# BASH_ENV script for Claude Code: loads direnv environment automatically.
+# Bash sources this file before executing non-interactive commands (bash -c "...").
+# Paired with a cd() override so directory changes mid-command also trigger direnv.
+
+# Guard against recursion: direnv spawns bash to evaluate .envrc,
+# which would source BASH_ENV again, causing an infinite loop.
+if [ -n "$_DIRENV_BASH_ENV_ACTIVE" ]; then
+  return 0 2>/dev/null || exit 0
+fi
+export _DIRENV_BASH_ENV_ACTIVE=1
+
+# Load direnv for the initial working directory
+eval "$(direnv export bash 2>/dev/null)" || true
+
+# Override directory-changing builtins so direnv reloads on any dir change
+_direnv_reload() { eval "$(direnv export bash 2>/dev/null)" || true; }
+
+cd()    { builtin cd "$@"    || return $?; _direnv_reload; }
+pushd() { builtin pushd "$@" || return $?; _direnv_reload; }
+popd()  { builtin popd "$@"  || return $?; _direnv_reload; }
