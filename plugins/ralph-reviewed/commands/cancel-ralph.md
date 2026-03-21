@@ -1,37 +1,25 @@
 ---
 description: Cancel active Ralph Reviewed loop
-allowed-tools: Bash(git:*), Bash(cat:*), Bash(rm:*), Bash(test:*)
+allowed-tools: Bash(rl:*), Bash(.rl/rl:*), Bash(git:*), Bash(rm:*), Bash(test:*)
 ---
 
 # Cancel Ralph Reviewed Loop
 
 Stop an active Ralph loop immediately.
 
-## Find State File
-
-Get git repository root (state file is at repo root):
-```bash
-git rev-parse --show-toplevel 2>/dev/null || pwd
-```
-Store this as GIT_ROOT.
-
 ## Check for Active Loop
 
 ```bash
-test -f {GIT_ROOT}/.rl/state.json && echo "found" || echo "not_found"
+rl status --json 2>/dev/null || .rl/rl status --json 2>/dev/null || echo '{"error": "no loop"}'
 ```
 
-## If Found
+## If Active
 
-1. Read state for reporting:
-   ```bash
-   cat {GIT_ROOT}/.rl/state.json
-   ```
-   Extract `iteration` and `review_count` from the JSON.
+1. Note the iteration and review count from the status output.
 
-2. Delete the state file:
+2. Delete the state file to end the loop:
    ```bash
-   rm {GIT_ROOT}/.rl/state.json
+   rm "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.rl/state.json"
    ```
 
 3. Report:
