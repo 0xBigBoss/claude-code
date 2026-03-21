@@ -799,56 +799,48 @@ fn parseYamlInt(line: []const u8, key: []const u8) ?u32 {
     return std.fmt.parseInt(u32, value, 10) catch null;
 }
 
-/// Parse Ralph state from file content string (YAML frontmatter)
+/// Parse Ralph state from JSON content string
 /// Exposed for testing; returns default RalphState if parsing fails
-/// Note: Only reads fields at the top of frontmatter; large fields like
-/// review_history are ignored, so we don't need the full file content.
 fn parseRalphStateFromContent(content: []const u8) RalphState {
     var state = RalphState{};
 
-    // Must start with ---
-    if (!std.mem.startsWith(u8, content, "---")) return state;
-    const after_first = content[3..];
-    // Skip newline after first ---
-    const start_idx: usize = if (after_first.len > 0 and after_first[0] == '\n') 1 else 0;
+    // Use std.json to parse the JSON state file
+    const JsonState = struct {
+        active: ?bool = null,
+        iteration: ?u32 = null,
+        max_iterations: ?u32 = null,
+        review_enabled: ?bool = null,
+        review_count: ?u32 = null,
+        max_review_cycles: ?u32 = null,
+    };
 
-    // Find closing --- if present, otherwise parse what we have
-    // (state files can be large due to review_history, but our fields are at the top)
-    const frontmatter = if (std.mem.indexOf(u8, after_first[start_idx..], "\n---")) |end_idx|
-        after_first[start_idx..][0..end_idx]
-    else
-        after_first[start_idx..];
+    const parsed = std.json.parseFromSlice(JsonState, std.heap.page_allocator, content, .{
+        .ignore_unknown_fields = true,
+    }) catch return state;
+    defer parsed.deinit();
 
-    // Parse lines until we hit closing delimiter or exhaust content
-    var lines = std.mem.splitScalar(u8, frontmatter, '\n');
-    while (lines.next()) |line| {
-        const trimmed = std.mem.trim(u8, line, " \t\r");
-        // Stop if we hit the closing delimiter
-        if (std.mem.eql(u8, trimmed, "---")) break;
-        if (parseYamlBool(trimmed, "active:")) |v| state.active = v;
-        if (parseYamlInt(trimmed, "iteration:")) |v| state.iteration = v;
-        if (parseYamlInt(trimmed, "max_iterations:")) |v| state.max_iterations = v;
-        if (parseYamlBool(trimmed, "review_enabled:")) |v| state.review_enabled = v;
-        if (parseYamlInt(trimmed, "review_count:")) |v| state.review_count = v;
-        if (parseYamlInt(trimmed, "max_review_cycles:")) |v| state.max_review_cycles = v;
-    }
+    const v = parsed.value;
+    if (v.active) |a| state.active = a;
+    if (v.iteration) |i| state.iteration = i;
+    if (v.max_iterations) |m| state.max_iterations = m;
+    if (v.review_enabled) |r| state.review_enabled = r;
+    if (v.review_count) |r| state.review_count = r;
+    if (v.max_review_cycles) |m| state.max_review_cycles = m;
 
     return state;
 }
 
 /// Parse Ralph loop state from state file at git root
 fn parseRalphState(allocator: Allocator, git_root: []const u8) RalphState {
-    // Construct path: {git_root}/.claude/ralph-loop.local.md
-    const path = std.fmt.allocPrint(allocator, "{s}/.claude/ralph-loop.local.md", .{git_root}) catch return RalphState{};
+    // Construct path: {git_root}/.rl/state.json
+    const path = std.fmt.allocPrint(allocator, "{s}/.rl/state.json", .{git_root}) catch return RalphState{};
     defer allocator.free(path);
 
-    // Read only first 2KB - our fields (active, iteration, etc.) are at the top
-    // review_history can grow to 8KB+ but comes after our fields
-    // Using fixed buffer avoids allocation and handles any file size
+    // Read first 4KB - JSON state file should be well under this
     const file = std.fs.cwd().openFile(path, .{}) catch return RalphState{};
     defer file.close();
 
-    var buf: [2048]u8 = undefined;
+    var buf: [4096]u8 = undefined;
     const bytes_read = file.read(&buf) catch return RalphState{};
     if (bytes_read == 0) return RalphState{};
 
@@ -1787,17 +1779,9 @@ test "parseYamlInt function" {
     try std.testing.expect(parseYamlInt("other: 50", "iteration:") == null);
 }
 
-test "parseRalphStateFromContent with valid frontmatter" {
+test "parseRalphStateFromContent with valid JSON" {
     const content =
-        \\---
-        \\active: true
-        \\iteration: 5
-        \\max_iterations: 30
-        \\review_enabled: true
-        \\review_count: 2
-        \\max_review_cycles: 10
-        \\---
-        \\# Some markdown content
+        \\{"active":true,"iteration":5,"max_iterations":30,"review_enabled":true,"review_count":2,"max_review_cycles":10}
     ;
 
     const state = parseRalphStateFromContent(content);
@@ -1811,10 +1795,7 @@ test "parseRalphStateFromContent with valid frontmatter" {
 
 test "parseRalphStateFromContent with partial fields" {
     const content =
-        \\---
-        \\active: true
-        \\iteration: 3
-        \\---
+        \\{"active":true,"iteration":3}
     ;
 
     const state = parseRalphStateFromContent(content);
@@ -1827,29 +1808,13 @@ test "parseRalphStateFromContent with partial fields" {
     try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
 }
 
-test "parseRalphStateFromContent with no frontmatter" {
-    const content = "# Just markdown, no frontmatter";
+test "parseRalphStateFromContent with invalid JSON" {
+    const content = "# Just markdown, not JSON";
 
     const state = parseRalphStateFromContent(content);
     // Should return defaults
     try std.testing.expect(!state.active);
     try std.testing.expectEqual(@as(u32, 0), state.iteration);
-}
-
-test "parseRalphStateFromContent with unclosed frontmatter" {
-    // Now we parse what we have even without closing delimiter
-    // (supports truncated reads of large state files)
-    const content =
-        \\---
-        \\active: true
-        \\iteration: 5
-        \\# Missing closing delimiter
-    ;
-
-    const state = parseRalphStateFromContent(content);
-    // Should parse available fields even without closing ---
-    try std.testing.expect(state.active);
-    try std.testing.expectEqual(@as(u32, 5), state.iteration);
 }
 
 test "parseRalphStateFromContent with empty content" {
@@ -1859,13 +1824,7 @@ test "parseRalphStateFromContent with empty content" {
 
 test "parseRalphStateFromContent with extra fields ignored" {
     const content =
-        \\---
-        \\active: true
-        \\iteration: 7
-        \\unknown_field: some_value
-        \\completion_promise: "COMPLETE"
-        \\timestamp: "2025-01-01T00:00:00Z"
-        \\---
+        \\{"active":true,"iteration":7,"unknown_field":"some_value","completion_promise":"COMPLETE","timestamp":"2025-01-01T00:00:00Z"}
     ;
 
     const state = parseRalphStateFromContent(content);

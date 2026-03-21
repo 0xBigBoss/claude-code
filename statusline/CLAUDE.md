@@ -30,7 +30,7 @@ zig build -Doptimize=ReleaseFast
 
 - Git metadata is read from the current workspace directory.
 - Review gate state files are read from:
-  - `{git_root}/.claude/ralph-loop.local.md`
+  - `{git_root}/.rl/state.json`
   - `{git_root}/.claude/codex-review.local.md`
 
 ## Guardrails
