@@ -18,27 +18,23 @@ Store this as GIT_ROOT.
 ## Check for Active Loop
 
 ```bash
-test -f {GIT_ROOT}/.claude/ralph-loop.local.md && echo "found" || echo "not_found"
+test -f {GIT_ROOT}/.rl/state.json && echo "found" || echo "not_found"
 ```
 
 ## If Found
 
-1. Extract current iteration for reporting:
+1. Read state for reporting:
    ```bash
-   cat {GIT_ROOT}/.claude/ralph-loop.local.md | grep "^iteration:" | cut -d' ' -f2
+   cat {GIT_ROOT}/.rl/state.json
+   ```
+   Extract `iteration` and `review_count` from the JSON.
+
+2. Delete the state file:
+   ```bash
+   rm {GIT_ROOT}/.rl/state.json
    ```
 
-2. Extract review count:
-   ```bash
-   cat {GIT_ROOT}/.claude/ralph-loop.local.md | grep "^review_count:" | cut -d' ' -f2
-   ```
-
-3. Delete the state file:
-   ```bash
-   rm {GIT_ROOT}/.claude/ralph-loop.local.md
-   ```
-
-4. Report:
+3. Report:
    ```
    Cancelled Ralph Reviewed loop.
    - Was at iteration: {N}

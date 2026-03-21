@@ -136,6 +136,9 @@
     "silo@0xBigBoss-silo": true,
     "send-infra@send-infra-plugins": true
   },
+  "env": {
+    "BASH_ENV": "/Users/allen/code/dotfiles/claude-code/hooks/direnv-bash-env"
+  },
   "alwaysThinkingEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1754076652911
