@@ -152,6 +152,17 @@ When tests fail, investigate root cause and fix the underlying issue. Do not:
 
 If a test appears incorrect or the task seems infeasible, report the issue rather than gaming around it. Solutions should work correctly for all valid inputs and follow the principle that drove the test—not just its literal assertions.
 
+## Test realism
+
+Unit tests verify logic. They do not verify the application works.
+
+- Prefer integration tests over mocked unit tests for data flow and permissions.
+- Mocks are acceptable for external services (TTS, network) but not for your own
+  data layer (sync engine, database queries, auth).
+- If a test passes with mocks but would fail against the real system, the test
+  is wrong.
+- Before claiming work is complete: "would this survive a manual walkthrough?"
+
 ## Module structure and cohesion
 
 Organize code by single responsibility: each file/module handles one coherent concern. Split when a file handles genuinely separate concerns or different parts change for different reasons. Keep code together when related functionality shares types, helpers, or state. Prioritize cohesion and clear interfaces over arbitrary line counts; follow language-idiomatic conventions (see language skill files for specifics).
