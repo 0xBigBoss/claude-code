@@ -14,7 +14,7 @@
       "name": "ralph-reviewed",
       "source": "./plugins/ralph-reviewed",
       "description": "Iterative Ralph loops with Codex CLI review gates at completion",
-      "version": "1.8.8",
+      "version": "2.0.0",
       "author": {
         "name": "Allen",
         "email": "bigboss@metalrodeo.xyz"

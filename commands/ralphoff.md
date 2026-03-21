@@ -18,7 +18,6 @@ Split arguments into two groups:
 
 Default loop flags if not specified:
 - `--max-iterations 30`
-- `--completion-promise "COMPLETE"`
 
 ## Git Context
 
@@ -59,7 +58,7 @@ Example: `ralph-myapp-sen-69-20260303-1430.md`
 
 ### Core Principle
 
-**A ralph handoff is just a handoff with verification commands.** Apply the same principles as `/handoff`: describe what to type, be concrete, link don't summarize, keep it short. The ralph-loop runner handles iteration state, TODO.md tracking, BLOCKED escapes, and completion promises — don't duplicate that machinery in the handoff.
+**A ralph handoff is just a handoff with verification commands.** Apply the same principles as `/handoff`: describe what to type, be concrete, link don't summarize, keep it short. The ralph-loop runner handles iteration state, TODO.md tracking, and completion via `rl done` — don't duplicate that machinery in the handoff.
 
 ### What belongs in the ralph handoff (task-specific)
 
@@ -72,7 +71,7 @@ Example: `ralph-myapp-sen-69-20260303-1430.md`
 
 - TODO.md format or iteration workflow instructions
 - Generic "if stuck, document the blocker" guidance
-- Completion promise syntax (`<promise>COMPLETE</promise>`)
+- Completion mechanism (`rl done` / `rl done --blocked`)
 - State tracking file management
 - Generic BLOCKED escape conditions
 
@@ -114,6 +113,17 @@ Use plain markdown (not XML tags):
 
 ## Done when
 
+"Done when" commands should verify behavior, not just file existence.
+
+Bad:    `ls app/test/setup.tsx`
+Better: `grep -c 'useQuery' app/test/setup.tsx`
+Best:   `bun test:integration --grep "test flow"`
+
+Include a verification discovery fallback:
+1. Check for e2e/integration tests covering the changed flows
+2. If none, check for a dev environment to boot
+3. If neither, note the gap as a known limitation
+
 All of these pass:
 ```bash
 command-to-build
@@ -146,7 +156,7 @@ Only include if there are known risk areas. Omit for straightforward tasks.]
 
 ### Anti-Patterns to Avoid
 
-- **Duplicating ralph-loop runner instructions** — TODO.md format, iteration workflow, BLOCKED syntax, completion promise format. The runner handles all of this.
+- **Duplicating ralph-loop runner instructions** — TODO.md format, iteration workflow, `rl done` / `rl done --blocked`. The runner handles all of this.
 - **Separate success criteria and verification sections** — merge them into "Done when"
 - **Generic "if stuck" instructions** — only include task-specific fallback strategies
 - **Prose architecture summaries** — link to README or SPEC
@@ -169,5 +179,5 @@ Generate the timestamp using: `date +%Y%m%d-%H%M`
 When using this context file with `/ralph-reviewed:ralph-loop`, the command format is:
 
 ```
-/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 15 iterations." --completion-promise "COMPLETE" <LOOP_FLAGS>
+/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Run .rl/rl done when all verifications pass, or .rl/rl done --blocked if stuck." <LOOP_FLAGS>
 ```

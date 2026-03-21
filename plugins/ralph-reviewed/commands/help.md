@@ -26,14 +26,16 @@ Start an iterative loop with review gates.
 ```
 
 **Options:**
-- `--max-iterations <n>` - Max work iterations before auto-stop (default: 50)
+- `--max-iterations <n>` - Max work iterations before auto-stop (default: 30)
 - `--max-reviews <n>` - Max review cycles before force-complete (default: --max-iterations)
-- `--completion-promise <text>` - Phrase that signals completion (default: COMPLETE)
 - `--no-review` - Disable Codex review gate
+- `--debug` - Enable debug logging
+
+**Completion:** The agent runs `.rl/rl done` when finished, or `.rl/rl done --blocked` if stuck.
 
 **Examples:**
 ```
-/ralph-reviewed:ralph-loop "Build a REST API with CRUD for todos. Include tests." --completion-promise "COMPLETE" --max-iterations 30
+/ralph-reviewed:ralph-loop "Build a REST API with CRUD for todos. Include tests." --max-iterations 30
 
 /ralph-reviewed:ralph-loop "Fix the authentication bug in src/auth.ts. Tests must pass." --max-reviews 2
 ```
@@ -50,7 +52,7 @@ Show this help message.
 
 **Loop won't stop:**
 - Use `/ralph-reviewed:cancel-ralph` to force stop
-- Check that your completion promise matches exactly
+- Ensure the agent ran `.rl/rl done` before stopping
 
 **Codex not reviewing:**
 - Ensure `codex` CLI is installed and authenticated

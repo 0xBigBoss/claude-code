@@ -1,5 +1,5 @@
 # Ralph loop state (managed by hook, not tracked in VCS)
-.claude/ralph-loop.local.md
+.rl/
 
 # Python bytecode
 __pycache__/

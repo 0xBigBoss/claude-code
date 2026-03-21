@@ -1,7 +1,7 @@
 ---
 description: Start Ralph Reviewed loop in current session
-allowed-tools: Bash(git:*), Bash(mkdir:*), Bash(date:*), Bash(cat:*), Write(**/ralph-loop.local.md)
-argument-hint: "task description" [--max-iterations N] [--max-reviews N] [--completion-promise TEXT] [--no-review] [--debug]
+allowed-tools: Bash(.rl/rl:*), Bash(git:*), Bash(cat:*)
+argument-hint: "task description" [--max-iterations N] [--max-reviews N] [--no-review] [--debug]
 ---
 
 # Start Ralph Reviewed Loop
@@ -16,79 +16,53 @@ Parse the following from arguments:
 - **PROMPT**: Everything before the first `--` flag (the task description)
 - **--max-iterations**: Number (default: 30)
 - **--max-reviews**: Number (optional, defaults to --max-iterations if not specified)
-- **--completion-promise**: String (default: "COMPLETE")
 - **--no-review**: Boolean flag (default: false)
-- **--debug**: Boolean flag (default: false) - writes debug logs to ~/.claude/ralphs/{session_id}/debug.log
+- **--debug**: Boolean flag (default: false)
 
 ## Setup
 
-1. Get git repository root (state file must be at repo root to survive directory changes):
+1. Locate the `rl` CLI — find it in the ralph-reviewed plugin scripts:
    ```bash
-   git rev-parse --show-toplevel
+   find ~/.claude/plugins -name rl -path '*/ralph-reviewed/scripts/*' 2>/dev/null | head -1
    ```
-   Store this as GIT_ROOT. If not in a git repo, use current directory.
+   If not found, try `~/code/dotfiles/claude-code/plugins/ralph-reviewed/scripts/rl`.
+   Store the path as RL_PATH.
 
-2. Create state directory at repo root:
+2. Initialize the loop (creates `.rl/` with state.json, prompt.md, and `.rl/rl` symlink):
    ```bash
-   mkdir -p {GIT_ROOT}/.claude
-   ```
-
-3. Generate timestamp:
-   ```bash
-   date -u +"%Y-%m-%dT%H:%M:%SZ"
+   {RL_PATH} init "{PROMPT}" --max-iterations {MAX_ITERATIONS} --max-reviews {MAX_REVIEWS} {--no-review if set} {--debug if set}
    ```
 
-4. Write the state file to `{GIT_ROOT}/.claude/ralph-loop.local.md`:
+3. Verify setup:
+   ```bash
+   .rl/rl status
+   ```
 
-```markdown
----
-active: true
-iteration: 0
-max_iterations: {MAX_ITERATIONS}
-completion_promise: "{COMPLETION_PROMISE}"
-original_prompt: |
-  {PROMPT}
-timestamp: "{TIMESTAMP}"
-review_enabled: {true unless --no-review}
-review_count: 0
-max_review_cycles: {MAX_REVIEWS}
-pending_feedback: null
-debug: {true if --debug, else false}
----
-```
-
-## Confirmation Output
-
-After creating the state file, output:
-
-```
-Ralph Reviewed loop started.
-
-Task: {first 100 chars of PROMPT}...
-
-Configuration:
-- Max iterations: {MAX_ITERATIONS}
-- Max review cycles: {MAX_REVIEWS}
-- Completion promise: {COMPLETION_PROMISE}
-- Review enabled: {yes/no}
-- Debug: {yes/no} (logs to ~/.claude/ralphs/{session_id}/debug.log)
-
-The stop hook will now intercept exit attempts. When you believe the task is complete, output:
-
-<promise>{COMPLETION_PROMISE}</promise>
-
-Your work will be reviewed by Codex before the loop can end.
-
----
-
-Beginning work on task...
-```
+All subsequent `rl` calls use `.rl/rl` (symlink created by init).
 
 ## Completion and Escape
 
-- When the task is done, output `<promise>{COMPLETION_PROMISE}</promise>` — triggers Codex review before the loop ends.
-- If genuinely blocked (missing dependency, impossible constraint), document the blocker and output `<promise>BLOCKED</promise>` — terminates the loop without review.
+- **Done:** run `.rl/rl done` — triggers Codex review on next stop.
+- **Blocked:** run `.rl/rl done --blocked` — terminates without review.
 
-## Begin Working
+## Working Guidelines
 
-After setup, immediately begin working on the task described in PROMPT. The stop hook handles iteration logic automatically.
+**Pacing.** Each iteration should produce thoughtful work. Researching, loading skills, and studying patterns IS productive — don't rush to `.rl/rl done`.
+
+**Churn breaker.** If a reviewer flags the same area twice, your next iteration must be research — load skills, read docs, study the codebase. No code fix until you understand why the previous fix was wrong.
+
+**Depth before breadth.** Complete each phase fully before starting the next.
+
+**Skill loading.** Check `.claude/skills/` for relevant skills before writing code.
+
+**Live verification.** Before claiming completion: run e2e/integration tests if they exist, boot the dev environment if available, or note the gap. Passing unit tests with a broken application is not done.
+
+**Log progress** with `.rl/rl`:
+- `.rl/rl log phase "starting migration"` — new phase
+- `.rl/rl log commit <sha> "summary"` — after commits
+- `.rl/rl log decision "chose X because..."` — design decisions
+- `.rl/rl log summary "status update"` — every ~5 iterations
+
+---
+
+Begin working on the task. The stop hook handles iteration logic automatically.

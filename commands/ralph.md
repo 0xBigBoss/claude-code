@@ -13,12 +13,11 @@ Arguments: $ARGUMENTS
 
 Split arguments into two groups:
 - **HANDOFF_ARGS**: Everything before any `--` flags (passed to ralphoff as completion criteria)
-- **LOOP_FLAGS**: Any `--max-iterations`, `--max-reviews`, `--completion-promise`, `--no-review`, `--debug` flags (passed to ralph-loop)
+- **LOOP_FLAGS**: Any `--max-iterations`, `--max-reviews`, `--no-review`, `--debug` flags (passed to ralph-loop)
 
 Default loop flags if not specified:
 - `--max-iterations 30`
 - `--max-reviews 20`
-- `--completion-promise "COMPLETE"`
 
 ## Workflow
 
@@ -40,8 +39,8 @@ This will:
 **CRITICAL: After the handoff context is saved, you MUST continue with this step. The Ralph loop is NOT active until you invoke ralph-loop. Do not stop after the handoff.**
 
 Invoke `/ralph-reviewed:ralph-loop` with:
-- The task prompt: `Read ~/.claude/handoffs/<filename> and complete the task described there. Work through each step, verify with the "Done when" commands. Output COMPLETE when all verifications pass, or BLOCKED if stuck after 30 iterations.`
-- The parsed LOOP_FLAGS (or defaults: `--max-iterations 30 --max-reviews 20 --completion-promise "COMPLETE"`)
+- The task prompt: `Read ~/.claude/handoffs/<filename> and complete the task described there. Work through each step, verify with the "Done when" commands. Run .rl/rl done when all verifications pass, or .rl/rl done --blocked if stuck.`
+- The parsed LOOP_FLAGS (or defaults: `--max-iterations 30 --max-reviews 20`)
 
 ---
 
@@ -49,12 +48,12 @@ Invoke `/ralph-reviewed:ralph-loop` with:
 
 **CRITICAL: You MUST complete this step. Verify the loop state file was created.**
 
-1. **Verify the state file exists**:
+1. **Verify the loop is active**:
    ```bash
-   cat "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/ralph-loop.local.md" | head -5
+   .rl/rl status
    ```
 
-2. If the state file exists, the loop is active. Begin working on the task immediately.
+2. If status shows active, begin working on the task immediately.
 
 ## Example Usage
 
