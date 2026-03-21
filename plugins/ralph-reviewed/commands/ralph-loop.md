@@ -1,6 +1,6 @@
 ---
 description: Start Ralph Reviewed loop in current session
-allowed-tools: Bash(.rl/rl:*), Bash(git:*), Bash(cat:*)
+allowed-tools: Bash(rl:*), Bash(.rl/rl:*), Bash(git:*), Bash(cat:*)
 argument-hint: "task description" [--max-iterations N] [--max-reviews N] [--no-review] [--debug]
 ---
 
@@ -21,16 +21,15 @@ Parse the following from arguments:
 
 ## Setup
 
-1. Locate the `rl` CLI — find it in the ralph-reviewed plugin scripts:
+1. Locate the `rl` CLI — check if installed globally, fall back to bunx:
    ```bash
-   find ~/.claude/plugins -name rl -path '*/ralph-reviewed/scripts/*' 2>/dev/null | head -1
+   command -v rl >/dev/null 2>&1 && echo "rl" || echo "bunx @0xbigboss/rl"
    ```
-   If not found, try `~/code/dotfiles/claude-code/plugins/ralph-reviewed/scripts/rl`.
-   Store the path as RL_PATH.
+   Store the result as RL_CMD.
 
 2. Initialize the loop (creates `.rl/` with state.json, prompt.md, and `.rl/rl` symlink):
    ```bash
-   {RL_PATH} init "{PROMPT}" --max-iterations {MAX_ITERATIONS} --max-reviews {MAX_REVIEWS} {--no-review if set} {--debug if set}
+   {RL_CMD} init "{PROMPT}" --max-iterations {MAX_ITERATIONS} --max-reviews {MAX_REVIEWS} {--no-review if set} {--debug if set}
    ```
 
 3. Verify setup:

@@ -1,11 +1,12 @@
 # Ralph Reviewed QA
 
-End-to-end test of the ralph-reviewed plugin v2.0.0. Run this from a test repo to verify the full loop works — `rl` CLI, stop hook, Codex review gate, feedback cycle.
+End-to-end test of the ralph-reviewed plugin v3.0.0. Run this from a test repo to verify the full loop works — `rl` CLI, stop hook, Codex review gate, feedback cycle.
 
 ## Prerequisites
 
 - Test repo at `/tmp/ralph-test` with a broken `math.ts` (see setup below)
 - Plugin loaded via `--plugin-dir ~/code/dotfiles/claude-code/plugins/ralph-reviewed`
+- `rl` CLI installed (`npm i -g @0xbigboss/rl` or `bunx @0xbigboss/rl`)
 - `codex` CLI installed and authenticated (for review gate tests)
 
 ## Setup
@@ -35,8 +36,11 @@ git -C /tmp/ralph-test add -A && git -C /tmp/ralph-test commit -q -m "add broken
 
 ### What to verify during the loop
 
+**rl discovery:**
+- [ ] `rl` is found on PATH (via `command -v rl`) or falls back to `bunx @0xbigboss/rl`
+- [ ] No references to `find ~/.claude/plugins` or embedded script paths
+
 **rl init:**
-- [ ] `rl init` is found and runs (check `find` or fallback path)
 - [ ] `.rl/state.json` exists with lean schema: `active`, `iteration`, `max_iterations`, `timestamp`, `review_enabled`, `review_count`, `max_review_cycles`, `debug` — no `completion_promise`, `original_prompt`, `pending_feedback`, `review_history`
 - [ ] `.rl/prompt.md` exists with the task text
 - [ ] `.rl/rl` symlink exists and works (`rl status` returns output)
@@ -47,6 +51,12 @@ git -C /tmp/ralph-test add -A && git -C /tmp/ralph-test commit -q -m "add broken
 - [ ] Agent uses `.rl/rl log commit` after each commit
 - [ ] Agent uses `.rl/rl done` to signal completion (not bare `COMPLETE` text)
 - [ ] Iteration headers from the stop hook show no denominators (e.g. `Iteration 1` not `Iteration 1/10`)
+
+**Stop hook uses rl CLI:**
+- [ ] Stop hook reads state via `rl status --json` (no local `parseStateFile`)
+- [ ] Stop hook reads prompt via `rl prompt --json` (no local `readPrompt`)
+- [ ] Stop hook updates state via `rl state set` (no local `serializeState`)
+- [ ] Stop hook logs reviews via `rl log review` (no local `appendLog`)
 
 **Codex review gate (if review enabled):**
 - [ ] Stop hook triggers Codex review after `.rl/rl done`
@@ -59,7 +69,7 @@ git -C /tmp/ralph-test add -A && git -C /tmp/ralph-test commit -q -m "add broken
 **After loop ends:**
 - [ ] `state.json` is deleted (cleanup on approve/max/blocked)
 - [ ] `prompt.md`, `log.jsonl`, review outputs persist in `.rl/`
-- [ ] `.rl/rl clean` removes the entire `.rl/` directory
+- [ ] `rl clean` removes the entire `.rl/` directory
 
 ### What to watch for (bugs and edge cases)
 
@@ -70,8 +80,8 @@ git -C /tmp/ralph-test add -A && git -C /tmp/ralph-test commit -q -m "add broken
 - Does the `.rl/rl` symlink survive across iterations?
 
 **Stop hook:**
-- Does the hook correctly detect `completion_claimed` from fresh state.json re-read?
-- Does the hook clear `completion_claimed` on the next iteration write (via `serializeState` which doesn't include the flag)?
+- Does the hook correctly detect `completion_claimed` from `rl status --json`?
+- Does the hook clear `completion_claimed` via `rl state set` on the next iteration?
 - Does the `blocked_claimed` flag work the same way?
 - If the agent runs `.rl/rl done` but then the review rejects, does the next iteration NOT think completion is still claimed?
 - What happens if max iterations and max reviews are both hit simultaneously?
@@ -86,7 +96,7 @@ git -C /tmp/ralph-test add -A && git -C /tmp/ralph-test commit -q -m "add broken
 **Feedback cycle:**
 - Is the reviewer's free-text feedback passed through to the agent cleanly?
 - Does the agent get the original prompt re-injected on rejection?
-- Does the `getLastRejectFeedback` function correctly find the last reject entry in log.jsonl?
+- Does `getLastRejectFeedback` correctly find the last reject entry in log.jsonl?
 
 ## Test: No-review mode
 
@@ -103,7 +113,7 @@ git -C /tmp/ralph-test add -A && git -C /tmp/ralph-test commit -q -m "add broken
 After any test:
 
 ```bash
-.rl/rl clean
+rl clean
 ls .rl/  # should fail — directory gone
 ```
 
