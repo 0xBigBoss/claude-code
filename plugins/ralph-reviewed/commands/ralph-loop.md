@@ -1,6 +1,6 @@
 ---
 description: Start Ralph Reviewed loop in current session
-allowed-tools: Bash(rl:*), Bash(.rl/rl:*), Bash(git:*), Bash(cat:*)
+allowed-tools: Bash(rl:*), Bash(.rl/rl:*), Bash(bunx:*), Bash(npx:*), Bash(git:*), Bash(cat:*), Bash(command:*)
 argument-hint: "task description" [--max-iterations N] [--max-reviews N] [--no-review] [--debug]
 ---
 
