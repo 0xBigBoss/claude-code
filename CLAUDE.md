@@ -129,6 +129,10 @@ Skills provide error handling conventions, code quality patterns, type-first dev
 - Use brief bullets when it improves scanability; paths in backticks; code fences only when helpful.
 - Technical documentation in third person; instructions in second person; avoid first person.
 
+## Code comments
+
+Comment liberally. Every comment must explain intent, rationale, or non-obvious constraints — never restate what the code does. Good comments answer "why this approach?" and "what would break if this changed?" Bad comments narrate syntax. Prefer more comments over fewer; when in doubt, comment.
+
 ## Error handling and completeness
 - **Errors must be handled or returned to callers**; every error requires explicit handling at every level of the stack (universal principle across all languages).
 - Fail loudly with clear messages on missing data or unsupported cases (silent failures compound into system-wide issues).
