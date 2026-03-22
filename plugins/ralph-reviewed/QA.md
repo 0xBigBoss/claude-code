@@ -6,7 +6,7 @@ End-to-end test of the ralph-reviewed plugin v3.0.0. Run this from a test repo t
 
 - Test repo at `/tmp/ralph-test` with a broken `math.ts` (see setup below)
 - Plugin loaded via `--plugin-dir ~/code/dotfiles/claude-code/plugins/ralph-reviewed`
-- `rl` CLI installed (see [github.com/0xbigboss/rl](https://github.com/0xbigboss/rl) — `npm i -g @0xbigboss/rl --registry https://npm.pkg.github.com`)
+- `rl` CLI on PATH (auto-installed by `/ralph-reviewed:ralph-loop` on first use, or manually: `git clone https://github.com/0xbigboss/rl /tmp/rl && cd /tmp/rl && bun install && bun build src/cli.ts --compile --outfile ~/.local/bin/rl`)
 - `codex` CLI installed and authenticated (for review gate tests)
 
 ## Setup

@@ -1,6 +1,6 @@
 ---
 description: Start Ralph Reviewed loop in current session
-allowed-tools: Bash(rl:*), Bash(.rl/rl:*), Bash(bunx:*), Bash(npx:*), Bash(git:*), Bash(cat:*), Bash(command:*)
+allowed-tools: Bash(rl:*), Bash(.rl/rl:*), Bash(bun:*), Bash(git:*), Bash(cat:*), Bash(command:*), Bash(mkdir:*)
 argument-hint: "task description" [--max-iterations N] [--max-reviews N] [--no-review] [--debug]
 ---
 
@@ -21,15 +21,27 @@ Parse the following from arguments:
 
 ## Setup
 
-1. Locate the `rl` CLI — check if installed globally, fall back to bunx:
+1. Ensure the `rl` CLI is installed. If not on PATH, build from source:
    ```bash
-   command -v rl >/dev/null 2>&1 && echo "rl" || echo "bunx @0xbigboss/rl"
+   command -v rl >/dev/null 2>&1 || (
+     echo "Installing rl CLI..." &&
+     git clone https://github.com/0xbigboss/rl /tmp/rl-build 2>/dev/null &&
+     cd /tmp/rl-build &&
+     bun install --frozen-lockfile &&
+     mkdir -p ~/.local/bin &&
+     bun build src/cli.ts --compile --outfile ~/.local/bin/rl &&
+     rm -rf /tmp/rl-build &&
+     echo "rl installed to ~/.local/bin/rl"
+   )
    ```
-   Store the result as RL_CMD.
-
-2. Initialize the loop (creates `.rl/` with state.json, prompt.md, and `.rl/rl` symlink):
+   Verify it's available:
    ```bash
-   {RL_CMD} init "{PROMPT}" --max-iterations {MAX_ITERATIONS} --max-reviews {MAX_REVIEWS} {--no-review if set} {--debug if set}
+   rl --version
+   ```
+
+2. Initialize the loop (creates `.rl/` with state.json, prompt.md, and `.rl/rl` wrapper):
+   ```bash
+   rl init "{PROMPT}" --max-iterations {MAX_ITERATIONS} --max-reviews {MAX_REVIEWS} {--no-review if set} {--debug if set}
    ```
 
 3. Verify setup:
@@ -37,7 +49,7 @@ Parse the following from arguments:
    .rl/rl status
    ```
 
-All subsequent `rl` calls use `.rl/rl` (symlink created by init).
+All subsequent `rl` calls use `.rl/rl` (wrapper created by init).
 
 ## Completion and Escape
 
