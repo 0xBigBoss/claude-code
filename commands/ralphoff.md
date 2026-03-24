@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(~/.claude/handoffs/**), Read(~/.claude/handoffs/**)
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(~/.handoffs/**), Read(~/.handoffs/**)
 argument-hint: [completion criteria] [--max-iterations N] [--max-reviews N] [--no-review] [--debug]
 description: Generate Ralph-loop-ready handoff prompt
 ---
@@ -49,7 +49,7 @@ HANDOFF_ARGS (the completion criteria portion of $ARGUMENTS, excluding any `--` 
 
 ## Task
 
-Write a Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>-<timestamp>.md` where:
+Write a Ralph-loop context file to `~/.handoffs/ralph-<repo>-<shortname>-<timestamp>.md` where:
 - `<repo>` is the repository name
 - `<shortname>` is derived from the branch name
 - `<timestamp>` is the current date/time as `YYYYMMDD-HHMM`
@@ -164,11 +164,11 @@ Only include if there are known risk areas. Omit for straightforward tasks.]
 
 ### Output Method
 
-1. Ensure directory exists: `mkdir -p ~/.claude/handoffs`
+1. Ensure directory exists: `mkdir -p ~/.handoffs`
 
-2. Write the Ralph-loop context file to `~/.claude/handoffs/ralph-<repo>-<shortname>-<timestamp>.md`
+2. Write the Ralph-loop context file to `~/.handoffs/ralph-<repo>-<shortname>-<timestamp>.md`
 
-3. Confirm with the path: "Ralph-loop context saved to `~/.claude/handoffs/<filename>`"
+3. Confirm with the path: "Ralph-loop context saved to `~/.handoffs/<filename>`"
 
 ### Timestamp Generation
 
@@ -179,5 +179,5 @@ Generate the timestamp using: `date +%Y%m%d-%H%M`
 When using this context file with `/ralph-reviewed:ralph-loop`, the command format is:
 
 ```
-/ralph-reviewed:ralph-loop "Read ~/.claude/handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Run .rl/rl done when all verifications pass, or .rl/rl done --blocked if stuck." <LOOP_FLAGS>
+/ralph-reviewed:ralph-loop "Read ~/.handoffs/<filename> and complete the task described there. Follow the success criteria and verification loop. Run .rl/rl done when all verifications pass, or .rl/rl done --blocked if stuck." <LOOP_FLAGS>
 ```

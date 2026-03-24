@@ -6,7 +6,8 @@
   },
   "permissions": {
     "allow": [
-      "Edit(~/.claude/handoffs/**)",
+      "Edit(~/.handoffs/**)",
+      "Write(~/.handoffs/**)",
 
       "Skill(typescript-best-practices)",
       "Skill(react-best-practices)",
@@ -90,7 +91,7 @@
       "Bash(wc:*)"
     ],
     "additionalDirectories": [
-      "~/.claude/handoffs"
+      "~/.handoffs"
     ]
   },
   "hooks": {
