@@ -1,7 +1,7 @@
 ---
 description: Start a Codex review gate - generates handoff context for the reviewer
 argument-hint: ["review focus"] [--max-cycles N]
-allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(head:*), Bash(grep:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(**/.claude/codex-review.local.md), Read(~/.claude/handoffs/**), Read(**/.claude/codex-review.local.md)
+allowed-tools: Bash(git:*), Bash(pwd:*), Bash(cat:*), Bash(head:*), Bash(grep:*), Bash(basename:*), Bash(mkdir:*), Bash(date:*), Write(**/.claude/codex-review.local.md), Read(~/.handoffs/**), Read(**/.claude/codex-review.local.md)
 ---
 
 # Start Codex Review Gate
@@ -57,7 +57,7 @@ The review gate is already active.
 
 **ALLOWED when gate is active:**
 - Regenerate the handoff file (`/handoff`) to capture your latest work
-- The handoff file at `~/.claude/handoffs/` can be updated freely
+- The handoff file at `~/.handoffs/` can be updated freely
 
 **FORBIDDEN when gate is active:**
 - Writing to the state file (`.claude/codex-review.local.md`)
@@ -92,7 +92,7 @@ Invoke the `/handoff` skill with the review focus.
 **Default focus (no arguments):**
 > Generate a handoff for a code reviewer who will verify the changes made in this session. Focus on what was changed, why, and how to verify correctness.
 
-The handoff will be written to `~/.claude/handoffs/handoff-<repo>-<shortname>.md`.
+The handoff will be written to `~/.handoffs/handoff-<repo>-<shortname>.md`.
 
 ---
 
@@ -116,7 +116,7 @@ The handoff will be written to `~/.claude/handoffs/handoff-<repo>-<shortname>.md
 ```yaml
 ---
 active: true
-handoff_path: "~/.claude/handoffs/handoff-<repo>-<shortname>.md"
+handoff_path: "~/.handoffs/handoff-<repo>-<shortname>.md"
 task_description: null
 files_changed: ["file1.ts", "file2.ts"]
 review_count: 0

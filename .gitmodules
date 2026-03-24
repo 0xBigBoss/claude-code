@@ -1,3 +1,6 @@
 [submodule "analytics"]
 	path = analytics
 	url = git@github.com:0xbigboss/claude-code-analytics.git
+[submodule "claude-code"]
+	path = claude-code
+	url = https://github.com/0xBigBoss/claude-code.git
