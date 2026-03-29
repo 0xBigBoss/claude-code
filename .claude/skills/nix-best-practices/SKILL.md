@@ -1,6 +1,6 @@
 ---
 name: nix-best-practices
-description: Nix patterns for flakes, overlays, unfree handling, and binary overlays. Use when working with flake.nix or shell.nix.
+description: Use when working with Nix flakes, overlays, shell.nix, or flake.nix files.
 ---
 
 # Nix Best Practices

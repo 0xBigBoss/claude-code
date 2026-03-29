@@ -1,22 +1,7 @@
 ---
 name: testing-best-practices
-description: Test layering, execution, and CI guidance across unit, integration, and e2e. Use when designing tests, writing test cases, or planning test strategy for a module.
+description: Use when designing tests, writing test cases, or planning test strategy for a module. Covers unit, integration, and e2e layering.
 ---
-
-## When to activate
-
-Engage when:
-- Working with spec files (`*.spec.md`, `SPEC.md`, `spec/*.md`)
-- Designing test cases or test strategy for a module
-- Writing or reviewing unit, integration, or e2e tests
-- After `/specout` completes
-- Planning CI test lanes
-
-## Mutation policy
-
-- Default: analyze code and produce test strategy, matrix, and implementation plan.
-- Do not edit spec files unless the user explicitly requests spec maintenance.
-- When this skill conflicts with system/project rules, follow system/project rules.
 
 ## Test layering policy
 
@@ -27,7 +12,6 @@ Purpose: verify individual functions and invariants in isolation.
 - **Data-driven**: parameterized tables covering happy path, boundary, error, and edge cases.
 - **Property-based**: fuzz invariants that must hold across all inputs (e.g., idempotency, sort stability, roundtrip serialization).
 - Derive cases from the module's public API surface: input types/constraints, output shape, error modes, invariants.
-- Cover categories per function: happy path, boundary values, error cases, edge cases, invariants.
 
 ### Integration / contract tests
 
@@ -45,7 +29,6 @@ Purpose: verify real user workflows through the full stack.
 
 - No mocks; exercise real services, databases, and APIs.
 - Happy-path workflows only; save edge cases for lower layers.
-- Fast: each test should complete within a reasonable timeout.
 - **State-tolerant**: never assume a clean slate; tolerate and work with prior state.
 - **Idempotent**: safe to run repeatedly without cleanup between runs.
 - **Flow-oriented**: validate real data paths end-to-end rather than isolated assertions.
@@ -56,8 +39,6 @@ Purpose: verify real user workflows through the full stack.
 - **No fabricated fixtures.** Derive test data from actual schemas, types, or seed data in the repo.
 - **No test-only hacks in product code.** No `if (process.env.TEST)` branches, no test-specific exports, no test backdoors.
 - **E2E must not rely on clean slate.** Tests must tolerate pre-existing data, prior test runs, and shared environments.
-- **Never weaken assertions to make tests pass.** Fix the underlying issue.
-- **Never hard-code values matching test assertions.** Implement general-purpose logic.
 
 ## Execution guidance
 
@@ -95,56 +76,16 @@ Before generating test cases:
 - Confirm scope from the user request and inspected code context; if ambiguous, state assumptions and proceed conservatively.
 - For each function: input types/constraints, output shape, error modes, invariants.
 - Probe for state dependencies and ordering constraints between functions.
-- Decide granularity from context: unit-level (individual functions) vs integration-level (compositions).
 
 ## Output format
 
-Keep outputs actionable and concise. Use markdown, not rigid JSON schemas.
+Use markdown. Produce three sections:
 
-### Test strategy
+**Test Strategy** -- one bullet per layer (unit/integration/e2e) naming the functions/flows and their coverage type.
 
-Brief summary of what to test and at which layer:
+**Test Matrix** -- table per function: columns `ID | Category | Name | Input | Expected`. Case ID scheme: `{CATEGORY}-{NN}` (HP, BV, ERR, EDGE). Append-only; never renumber.
 
-```markdown
-## Test Strategy
-
-- **Unit**: [functions/modules], data-driven + property-based for [invariants]
-- **Integration**: [API contracts], auth scoping, error envelopes
-- **E2E**: [workflows], happy-path flows against real services
-```
-
-### Test matrix
-
-Tabular case listing per function or flow:
-
-```markdown
-## Test Matrix
-
-### `functionName`
-
-| ID | Category | Name | Input | Expected |
-|----|----------|------|-------|----------|
-| HP-01 | happy_path | basic uppercase | "hello" | "HELLO" |
-| BV-01 | boundary | empty string | "" | "" |
-| ERR-01 | error | null input | null | INVALID_ARGUMENT |
-| EDGE-01 | edge | unicode combining | "cafe\u0301" | "CAFE\u0301" |
-```
-
-Case ID scheme: `{CATEGORY}-{NN}` (HP, BV, ERR, EDGE). Append-only; never renumber.
-
-### Implementation plan
-
-Ordered steps to write and run the tests:
-
-```markdown
-## Implementation Plan
-
-1. Add factory for [fixture] using seeded data
-2. Write parameterized unit tests for [function] (X cases)
-3. Write integration test for [API endpoint] auth + error contract
-4. Write e2e flow for [workflow] with preflight checks
-5. Run suite: `[command]`
-```
+**Implementation Plan** -- ordered steps: fixtures, unit tests, integration tests, e2e flows, run command.
 
 ## CI guidance
 
@@ -156,10 +97,7 @@ Ordered steps to write and run the tests:
 
 ### Nightly full lane
 
-- Full unit + integration + e2e suite.
-- Include property-based tests with higher iteration counts.
-- Idempotency verification: run critical setup paths twice, assert no side effects on second run.
-- Flake detection: flag tests that pass on retry but failed initially.
+Full unit + integration + e2e suite with higher property-based iteration counts. Flag tests that pass on retry but failed initially.
 
 ## Workflow
 

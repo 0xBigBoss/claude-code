@@ -1,29 +1,20 @@
 ---
 name: e2e
-description: Run e2e tests, fix flake and outdated tests, identify bugs against spec. Use when running e2e tests, debugging test failures, or fixing flaky tests. Never changes source code logic or API without spec backing.
+description: Use when running e2e tests, debugging test failures, or fixing flaky tests. Covers failure taxonomy, fix rules, and workflow. Never changes source code logic or API without spec backing.
 ---
 
 # E2E Testing
 
-## Principles (Always Active)
-
-These apply whenever working with e2e tests, test failures, or test flakiness:
-
-### Failure Taxonomy
+## Failure Taxonomy
 
 Every e2e failure is exactly one of:
 
 **A. Flaky** (test infrastructure issue)
-- Race conditions, timing-dependent assertions
-- Stale selectors after UI changes
-- Missing waits, incorrect wait targets
-- Network timing, mock setup ordering
+- Race conditions, timing-dependent assertions, stale selectors, missing waits
 - Symptom: passes on retry, fails intermittently
 
 **B. Outdated** (test no longer matches implementation)
-- Test asserts old behavior that was intentionally changed
-- Selectors reference removed/renamed elements
-- API contract changed, test wasn't updated
+- Test asserts old behavior that was intentionally changed; selectors reference removed elements
 - Symptom: consistent failure, app works correctly
 
 **C. Bug** (implementation doesn't match spec)
@@ -31,7 +22,7 @@ Every e2e failure is exactly one of:
 - **Only classify as bug when a spec exists to validate against**
 - If no spec exists, classify as "unverified failure" and report to the user
 
-### Fix Rules by Category
+## Fix Rules by Category
 
 **Flaky fixes:**
 - Replace `waitForTimeout` with auto-waiting locators
@@ -39,7 +30,6 @@ Every e2e failure is exactly one of:
 - Fix race conditions with `expect()` web-first assertions
 - Fix mock/route setup ordering (before navigation)
 - **Never add arbitrary delays** - fix the underlying wait
-- **Never weaken assertions** to make flaky tests pass
 - **Never add retry loops around assertions** - use the framework's built-in retry
 
 **Outdated fixes:**
@@ -50,24 +40,16 @@ Every e2e failure is exactly one of:
 **Bug fixes:**
 - Quote the spec section that defines expected behavior
 - Fix the source code to match the spec
-- **Unit tests MUST exist** before the fix is complete
-  - If unit tests exist, run them to confirm
-  - If unit tests don't exist, write them first (TDD)
+- **Unit tests MUST exist** before the fix is complete — write them first if missing (TDD)
 - **Never change e2e assertions** to match buggy code
 - **Never change API contracts or interfaces** without spec backing
 - If no spec exists, ask the user: bug or outdated test?
 
-### Source Code Boundary
+## Source Code Boundary
 
-E2e test fixes must not change:
-- Application logic or business rules
-- API contracts, request/response shapes
-- Database schemas or migrations
-- Configuration defaults
+E2e test fixes must not change application logic, API contracts, database schemas, or configuration defaults. The only exception: bug fixes where a spec explicitly defines the correct behavior and unit tests cover the fix.
 
-The only exception: bug fixes where a spec explicitly defines the correct behavior and unit tests cover the fix.
-
-## Workflow (When Explicitly Running E2E)
+## Workflow
 
 ### Step 1: Discover Test Infrastructure
 
@@ -78,20 +60,12 @@ The only exception: bug fixes where a spec explicitly defines the correct behavi
 
 ### Step 2: Run Tests
 
-Run with minimal reporter to avoid context overflow:
-
 ```bash
 # Playwright
 yarn playwright test --reporter=line
 
 # Or project-specific
 yarn test:e2e
-```
-
-If a filter is specified, apply it:
-```bash
-yarn playwright test --reporter=line -g "transfer"
-yarn test:e2e -- --grep "transfer"
 ```
 
 Parse failures into:
@@ -102,22 +76,13 @@ Parse failures into:
 
 ### Step 3: Categorize
 
-For each failure:
-1. Read the test file
-2. Read the source code it exercises
-3. Check for a corresponding spec file
-4. Assign category: flaky, outdated, bug, or unverified
+For each failure: read the test file, read the source code it exercises, check for a corresponding spec file, assign category (flaky / outdated / bug / unverified).
 
 ### Step 4: Fix by Category
 
-Apply fixes following the Principles above, in order:
-1. **Flaky** - fix test infrastructure issues first (unblocks other tests)
-2. **Outdated** - update stale assertions
-3. **Bug** - fix with spec + unit test gate
+Apply fixes in order: flaky first (unblocks other tests), then outdated, then bug.
 
 ### Step 5: Re-run and Report
-
-After all fixes, re-run the suite:
 
 ```
 ## E2E Results
@@ -136,3 +101,5 @@ After all fixes, re-run the suite:
 ### Unit Tests Added
 - `src/transfer.test.ts` - amount validation edge cases (covers BUG fix)
 ```
+
+See `testing-best-practices` for async handling, flake classification, and preflight check patterns.

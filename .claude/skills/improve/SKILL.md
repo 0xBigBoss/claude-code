@@ -1,6 +1,6 @@
 ---
 name: improve
-description: Structured improvement analysis grounded in session observations. Use after completing a task, before claiming done, before handoff, or when the user asks "what are some improvements?" Surfaces concrete suggestions across correctness, simplicity, security, tests, performance, and DX — prioritized by impact, each citing what was actually observed.
+description: Use after completing a task, before claiming done, before handoff, or when asked "what are some improvements?" Surfaces concrete suggestions grounded in session observations.
 ---
 
 # Improve

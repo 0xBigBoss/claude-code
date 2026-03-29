@@ -1,6 +1,6 @@
 ---
 name: git-best-practices
-description: Git workflow patterns for commits, branching, PRs, and history management across heterogeneous repositories. Use when creating commits, managing branches, opening pull requests, or rewriting history. Do not use for non-git implementation tasks or repo-specific release policy decisions without repository documentation.
+description: Use when creating commits, managing branches, opening PRs, or rewriting history. Not for non-git implementation tasks or repo-specific release policy decisions.
 ---
 
 # Git Best Practices
@@ -16,17 +16,15 @@ When this skill is loaded, follow these directives for all git operations:
 
 ## Agent Git Workflow
 
-Follow this sequence when performing git operations:
-
-1. **Check state** — run `git status` and `git diff HEAD`; output: working tree and unstaged/staged delta
-2. **Discover branches** — identify and store default/current/(optional) production branch names (see Branch Discovery)
+1. **Check state** — run `git status` and `git diff HEAD`
+2. **Discover branches** — identify default/current/(optional) production branch names (see Branch Discovery)
 3. **Stage by name** — `git add path/to/file` for each file; verify with `git status`
 4. **Write a conventional commit** — `type(scope): description` with optional body
-5. **Push safely** — use regular push by default; use `git push --force-with-lease origin {branch}` only for rewritten history and only after user confirmation
+5. **Push safely** — regular push by default; `git push --force-with-lease origin {branch}` only for rewritten history after user confirmation
 
 ### Checkpoint Commits
 
-Agents may create WIP checkpoint commits during long-running tasks. These are development artifacts, cleaned up before PR.
+Agents may create WIP checkpoint commits during long-running tasks, cleaned up before PR.
 
 - Prefix with `wip:` or use standard conventional commit format
 - Keep changes logically grouped even in WIP state
@@ -82,84 +80,7 @@ Add a body when:
 - Multi-part changes benefit from a bullet list
 - External context is needed (links, issue references, root cause)
 
-### Examples
-
-<examples>
-
-<example name="simple-fix">
-Single-line fix, no body needed:
-
-```
-fix(shell): restore Alt+F terminal navigation
-```
-</example>
-
-<example name="scoped-with-body">
-Non-obvious fix with body explaining root cause:
-
-```
-fix(shell): use HOMEBREW_PREFIX to avoid path_helper breaking plugins in login shells
-
-macOS path_helper reorders PATH in login shells, putting /usr/local/bin
-before /opt/homebrew/bin. This caused `brew --prefix` to resolve the stale
-Intel Homebrew, so fzf, zsh-autosuggestions, and zsh-syntax-highlighting
-all silently failed to load in Ghostty (which spawns login shells).
-
-Use the HOMEBREW_PREFIX env var (set by brew shellenv in .zshenv) instead
-of calling `brew --prefix` — it survives path_helper and is faster.
-```
-</example>
-
-<example name="multi-part-feature">
-Feature with bullet-list body for multi-part changes:
-
-```
-feat(install): add claude bootstrap runtime management
-
-- migrate Claude defaults to declarative files under claude/defaults
-- add claude-bootstrap check/fix/uninstall with backup-first migration
-- stop stowing full claude/codex runtime trees and tighten drift checks
-```
-</example>
-
-<example name="ticket-linked">
-Monorepo commit with ticket reference in branch and scope:
-
-```
-fix(pool-party): handle stale settlement state on reconnect
-
-PoolSettlement contract stays in pending state when the participant
-disconnects mid-settlement. Check settlement timestamp and expire
-stale entries on reconnect.
-
-Fixes SEND-718
-```
-</example>
-
-<example name="submodule-bump">
-Submodule update with downstream commit info:
-
-```
-chore(submodule): update claude-code
-
-Bump claude-code to 88d0c75 (feat(skills): add tiltup, specalign, and e2e skills).
-```
-
-For trivial bumps, `bump` or `bump claude-code submodule` is acceptable.
-</example>
-
-<example name="breaking-change">
-Breaking change using `!` suffix:
-
-```
-refactor(api)!: change auth endpoint response format
-
-The /auth/token endpoint now returns { access_token, expires_in }
-instead of { token, expiry }. All clients must update their parsers.
-```
-</example>
-
-</examples>
+See git-examples.md for commit message examples.
 
 ## Branch Discovery
 
@@ -176,22 +97,7 @@ git branch --show-current
 git branch -r --list 'origin/main' 'origin/master' 'origin/production'
 ```
 
-**Fallback when `gh` is unavailable or the repo has no remote:**
-
-```bash
-# Infer default branch from local refs
-git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'
-
-# Last resort: check local branches and fail loudly if unknown
-if git rev-parse --verify main >/dev/null 2>&1; then
-  echo main
-elif git rev-parse --verify master >/dev/null 2>&1; then
-  echo master
-else
-  echo "ERROR: unable to determine default branch (main/master not found)." >&2
-  exit 1
-fi
-```
+If `gh` is unavailable or the repo has no remote, see the fallback commands in git-examples.md.
 
 Store the discovered branch name and reference it throughout. Use the actual branch name in all subsequent commands.
 
