@@ -1,6 +1,6 @@
 ---
 name: ios-device-screenshot
-description: Take screenshots from physical iOS devices connected via USB using pymobiledevice3. Use when capturing screenshots from real iPhones/iPads (not simulators), debugging on-device, or needing high-fidelity device captures. Triggers on physical iOS device screenshots, pymobiledevice3 usage, or USB-connected device capture tasks.
+description: Use when capturing screenshots from physical iOS devices connected via USB using pymobiledevice3.
 ---
 
 # iOS Device Screenshot

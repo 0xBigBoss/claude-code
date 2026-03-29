@@ -1,6 +1,6 @@
 ---
 name: openai-image-gen
-description: Generate images using OpenAI's DALL-E 3 API. Use when needing to create graphics, icons, backgrounds, or any visual assets. Requires OPENAI_API_KEY in environment.
+description: Use when generating images, graphics, icons, or visual assets via OpenAI DALL-E 3 API. Requires OPENAI_API_KEY.
 ---
 
 # OpenAI Image Generation (DALL-E 3)

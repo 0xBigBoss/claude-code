@@ -1,6 +1,6 @@
 ---
 name: git-rebase-sync
-description: Sync a feature branch onto the latest origin base branch via git rebase, with safety rails, deliberate conflict resolution, and safe force-with-lease pushing.
+description: Use when syncing a feature branch onto the latest origin base branch via git rebase.
 metadata:
   short-description: Rebase branch sync
 ---

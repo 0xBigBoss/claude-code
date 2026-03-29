@@ -1,6 +1,6 @@
 ---
 name: op-cli
-description: Secure 1Password CLI patterns for reading secrets, discovering vaults/items, and piping credentials to other tools. Use when reading from 1Password, rotating secrets, or piping credentials to wrangler/kubectl/etc. Triggers on op CLI, 1Password, secret rotation, or credential piping tasks.
+description: Use when reading from 1Password, discovering vaults/items, rotating secrets, or piping credentials to other tools via op CLI.
 ---
 
 # 1Password CLI (`op`) — Secure Handling
