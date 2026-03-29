@@ -8,54 +8,42 @@ Applies to agents. Follow these directives as system-level behavior.
 
 ## Core principles
 - Explore relevant code before proposing changes; understand context first.
-- Work idiomatically and safely; align with project conventions and architecture (contributions integrate seamlessly).
-- Keep changes minimal and focused; implement only what is requested or clearly necessary (avoid unrequested features, refactoring, or flexibility).
-- Treat `## Agentic delivery flow (canonical)` as the process of record; if deviating, record a waiver with rationale.
-- Fail fast with visible evidence; validate understanding with minimal repros/tests (quick feedback prevents wasted effort).
-- Use available tools/documentation before coding; verify assumptions (evidence-based development catches errors early).
+- Work idiomatically and safely; align with project conventions and architecture.
+- Keep changes minimal and focused; implement only what is requested or clearly necessary.
+- Fail fast with visible evidence; validate understanding with minimal repros/tests.
+- Use available tools/documentation before coding; verify assumptions.
 - Verify changes with project tooling (tests, linters, builds) before claiming done.
-- Document project context inline when needed; complete implementations or fail explicitly with descriptive errors (partial work masks bugs).
-- Security: require explicit authorization before accessing secrets/keychains.
+- Complete implementations or fail explicitly with descriptive errors; partial work masks bugs.
 - Extract configuration immediately; magic numbers, URLs, ports, timeouts, and feature flags belong in config, not code.
 
-## Agentic delivery flow (canonical)
-- Flow: `SPEC -> PLAN -> TDD -> DEV -> E2E -> REVIEW -> CI -> MERGE`.
-- Command discovery order (`DEV`/`E2E`): repo task runner/scripts -> repo docs -> project defaults (`tilt up`, `silo up`) -> ask user.
-- High-risk changes (approval required in `PLAN`): schema/data migrations, auth/security boundaries, public API/contract changes, infra/deploy/runtime config.
-- Low-risk skip path: docs/comments/non-runtime changes may use `SPEC -> PLAN -> REVIEW -> CI -> MERGE`.
-- Traceability rule: every change maps `REQ-*` -> tests -> commit/PR.
-- Handoff contract (`REVIEW`, required): assumptions, changed files, commands run, results, unresolved risks.
-- Phase gates:
-  - `SPEC` gate: IDs, invariants, non-goals, acceptance criteria present; risk tags required when high-risk items exist. Load `spec-best-practices` skill. File must be named `SPEC.md`, colocated with the code it describes.
-  - `PLAN` gate: task graph with files/types/tests and explicit risk classification.
-  - `TDD` gate: failing tests first; required test layers added (unit/integration/contract/property/regression as applicable).
-  - `DEV` gate: local environment boots; deterministic health checks pass (readiness, migrations, seed data, key APIs, timeout budgets).
-  - `E2E` gate: happy path and failure modes pass (timeouts, retries, auth edge cases, partial outages).
-  - `CI` gate: bounded auto-repair retries; flake policy enforced (retry cap + quarantine rule); fail hard on policy/security violations.
-  - `MERGE` gate: all required gates pass, or waiver recorded with rationale.
+## Agentic delivery flow
+
+Agent owns `SPEC → PLAN → TDD → DEV → E2E`. Stop here. Review, CI, and merge are human decisions.
+
+- Command discovery order: repo task runner/scripts → repo docs → project defaults (`tilt up`, `silo up`) → ask user.
+- High-risk changes (approval required in PLAN): schema/data migrations, auth/security boundaries, public API/contract changes, infra/deploy/runtime config.
+- Low-risk skip path: docs/comments/non-runtime changes may use `SPEC → PLAN → DEV`.
+- Traceability: every change maps REQ-* → tests → commit.
+- If deviating from this flow, record a waiver with rationale.
+- Gates:
+  - SPEC: IDs, invariants, non-goals, acceptance criteria. Risk tags when high-risk items exist. Load `spec-best-practices`. File named `SPEC.md`, colocated.
+  - PLAN: task graph with files/types/tests and risk classification.
+  - TDD: failing tests first.
+  - DEV: local environment boots; health checks pass.
+  - E2E: happy path and failure modes pass against live dev environment.
 
 ## Secret handling
 
 Treat secret safety as a hard requirement.
 
-- Assume all chat content, tool inputs, and tool outputs are persisted in internal history; do not place secret values in them.
+- Assume all chat content, tool inputs, and tool outputs are persisted; do not place secret values in them.
 - Never ask for or accept secrets in plain text via chat.
 - Never echo, print, or log secret values to stdout/stderr.
 - Never pass secrets as command arguments (`--token ...`) or inline env assignments (`TOKEN=... cmd`).
-- Never write secrets to disk (`.env`, temp files, scripts, fixtures, shell profiles) unless explicitly authorized for an approved secure store.
-- Use secret references and secure one-way piping from a secret manager directly into commands that read from stdin.
-- Prefer commands that support `--*-stdin`; if a tool only accepts argv/env/file plaintext, stop and ask for an approved secure alternative.
-- Redact suspected secrets immediately if they appear in output and notify the user.
-
-Preferred patterns:
-- `op read <secret-ref> | <command-that-reads-stdin>`
-- `<secret-manager-command> | docker login --password-stdin`
-
-Forbidden patterns:
-- `<command> --token "$SECRET"`
-- `export SECRET=...`
-- `echo "secret" > .env`
-- Any command that reveals a secret in chat, logs, or command output
+- Never write secrets to disk unless explicitly authorized for an approved secure store.
+- Pipe from secret manager to stdin: `op read <ref> | <command-that-reads-stdin>`.
+- If a tool only accepts argv/env/file plaintext, stop and ask for an approved alternative.
+- Redact suspected secrets immediately if they appear in output.
 
 ## Type-first development
 - Define types, interfaces, and data models before implementing logic.
@@ -64,64 +52,29 @@ Forbidden patterns:
 - Schema changes drive implementation; if the types are right, the code follows.
 
 ## Functional style
-- Prefer immutability: `const`, `frozen`, `readonly` types; mutate only when necessary for performance.
-- Write pure functions; isolate side effects at system boundaries (I/O, network, state updates).
-- Use `map`/`filter`/`reduce` and comprehensions over imperative loops where readable.
-- Compose small functions over large stateful procedures; prefer pipelines over in-place mutation.
-- Avoid shared mutable state; pass data explicitly rather than relying on side effects.
+- Prefer immutability and pure functions; isolate side effects at system boundaries.
+- Compose small functions; prefer pipelines over in-place mutation.
 
 ## Skills
 
-Load all relevant best-practices skills immediately as your first action when working with supported languages or tools. Do not wait for the user to request skills. When multiple contexts apply, load multiple skills in parallel.
+Load relevant best-practices skills immediately when working with supported languages or tools. Load multiple when contexts overlap (e.g., typescript + react for `.tsx` files). Do not wait for the user to request skills.
 
 | Context | Skill |
 |---------|-------|
-| Python: `.py`, `pyproject.toml`, `requirements.txt` | python-best-practices |
-| TypeScript: `.ts`, `.tsx`, `tsconfig.json` | typescript-best-practices |
-| Electrobun: `electrobun.config.ts`, `electrobun/bun`, `electrobun/view`, Electrobun CLI commands | electrobun-best-practices |
-| React: `.tsx`, `.jsx`, `@react` imports | react-best-practices |
-| Go: `.go`, `go.mod` | go-best-practices |
-| Zig: `.zig`, `build.zig`, `build.zig.zon` | zig-best-practices |
-| Playwright: `.spec.ts`, `.test.ts` with `@playwright/test` | playwright-best-practices |
-| Tilt: `Tiltfile`, tilt commands | tilt |
-| Tamagui: `tamagui.config.ts`, `@tamagui` imports | tamagui-best-practices |
-| Atlas: `atlas.hcl`, `.hcl` schema files, Atlas CLI commands | atlas-best-practices |
-| Spec authoring: creating, reviewing, or updating `SPEC.md` files | spec-best-practices |
-| Spec-derived test design: `*.spec.md`, `spec/*.md`, `SPEC.md` when designing tests | testing-best-practices |
-| Spec alignment: spec file + implementation in context | specalign |
-| Git: commits, branches, PRs, history rewriting | git-best-practices |
-
-### Multi-skill combinations
-
-Load all applicable skills together when contexts overlap:
-- **TypeScript + React**: All React components (`.tsx`, `.jsx`) - always load both skills together
-- **TypeScript + Electrobun**: Electrobun desktop apps (`electrobun.config.ts`, `electrobun/bun`, `electrobun/view`) - always load both skills together
-- **TypeScript + React + Playwright**: React component E2E tests with `@playwright/test`
-- **TypeScript + React + Tamagui**: React Native/web components with `@tamagui` imports
-- **TypeScript + Playwright**: Non-React test files with `@playwright/test` imports
-- **Python + Tilt**: Python services in a Tilt-managed dev environment
-- **Go + Tilt**: Go services in a Tilt-managed dev environment
-- **testing-best-practices + [language]**: Load testing skill alongside the project's language skill when designing tests from specs
-- **tilt + zmx**: Always load both when running `tilt up` or any long-lived process in zmx
-- **tilt + tiltup**: Always load both when starting tilt or fixing Tiltfile errors
-- **spec-best-practices + specalign**: Load both when reviewing or updating existing specs against implementation
-- **spec-best-practices + testing-best-practices**: Load both when deriving test strategy from a spec
-- **spec-best-practices + /specout**: Load skill before running specout interview
-- **specalign + testing-best-practices**: Load both when a spec file and its implementation are in context
-- **e2e + playwright-best-practices**: Load both when running or fixing Playwright e2e tests
-- **e2e + specalign**: Load both when e2e failures may indicate spec drift
-- **git-best-practices + /commit**: Load skill when using the commit command or making any commits
-- **git-best-practices + /rewrite-history**: Load skill when rewriting branch history before PR
-
-### When to invoke skills
-
-Invoke skills proactively:
-- Reading code: understand expected patterns before analyzing
-- Writing or modifying code: apply correct conventions during implementation
-- Reviewing or debugging: identify violations against established patterns
-- Exploring unfamiliar code: load the language skill to interpret idioms correctly
-
-Skills provide error handling conventions, code quality patterns, type-first development guidance, and review standards specific to each language or tool.
+| Python (`.py`, `pyproject.toml`) | python-best-practices |
+| TypeScript (`.ts`, `.tsx`, `tsconfig.json`) | typescript-best-practices |
+| Electrobun (`electrobun.config.ts`, `electrobun/*`) | electrobun-best-practices |
+| React (`.tsx`, `.jsx`, `@react` imports) | react-best-practices |
+| Go (`.go`, `go.mod`) | go-best-practices |
+| Zig (`.zig`, `build.zig`) | zig-best-practices |
+| Playwright (`.spec.ts`, `.test.ts` with `@playwright/test`) | playwright-best-practices |
+| Tilt (`Tiltfile`, tilt commands) | tilt |
+| Tamagui (`tamagui.config.ts`, `@tamagui` imports) | tamagui-best-practices |
+| Atlas (`atlas.hcl`, `.hcl` schema, Atlas CLI) | atlas-best-practices |
+| SPEC.md authoring | spec-best-practices |
+| Test design from specs | testing-best-practices |
+| Spec vs implementation drift | specalign |
+| Git operations | git-best-practices |
 
 ## Communication style
 - Concise teammate tone; plain text without emojis; brevity over perfect grammar.
@@ -131,55 +84,32 @@ Skills provide error handling conventions, code quality patterns, type-first dev
 
 ## Code comments
 
-Comment liberally. Every comment must explain intent, rationale, or non-obvious constraints — never restate what the code does. Good comments answer "why this approach?" and "what would break if this changed?" Bad comments narrate syntax. Prefer more comments over fewer; when in doubt, comment.
+Comment liberally. Every comment must explain intent, rationale, or non-obvious constraints — never restate what the code does. Good comments answer "why this approach?" and "what would break if this changed?"
 
-## Error handling and completeness
-- **Errors must be handled or returned to callers**; every error requires explicit handling at every level of the stack (universal principle across all languages).
-- Fail loudly with clear messages on missing data or unsupported cases (silent failures compound into system-wide issues).
-- Propagate errors up the call stack; transform exceptions into meaningful results or rethrow.
+## Error handling
+- Errors must be handled or returned to callers at every level of the stack.
+- Fail loudly with clear messages; silent failures compound into system-wide issues.
 - Handle edge cases explicitly (empty inputs, nil/null, default branches).
-
-## Idempotency and resilience
-- Check state before changes; skip if already correct; prefer declarative over imperative.
 - External calls need explicit timeouts; retries must be bounded with backoff.
 
 ## Test integrity
 
-Tests verify correctness—they do not define the solution. Implement general-purpose solutions that solve the actual problem, not code that merely satisfies test cases.
-
-When tests fail, investigate root cause and fix the underlying issue. Do not:
-- Hard-code values matching test assertions
-- Add conditionals detecting test scenarios
-- Weaken or remove assertions to avoid failures
-- Change test expectations to match broken behavior
-- Create workarounds or helper scripts that bypass the real problem
-
-If a test appears incorrect or the task seems infeasible, report the issue rather than gaming around it. Solutions should work correctly for all valid inputs and follow the principle that drove the test—not just its literal assertions.
+Tests verify correctness — they do not define the solution. When tests fail, investigate root cause and fix the underlying issue. Do not hard-code values, weaken assertions, or game around tests. If a test appears incorrect, report the issue.
 
 ## Test realism
-
-Unit tests verify logic. They do not verify the application works.
-
 - Prefer integration tests over mocked unit tests for data flow and permissions.
-- Mocks are acceptable for external services (TTS, network) but not for your own
-  data layer (sync engine, database queries, auth).
-- If a test passes with mocks but would fail against the real system, the test
-  is wrong.
-- Before claiming work is complete: "would this survive a manual walkthrough?"
+- Mocks are acceptable for external services but not for your own data layer.
+- If a test passes with mocks but would fail against the real system, the test is wrong.
+- Before claiming done: "would this survive a manual walkthrough?"
 
-## Module structure and cohesion
-
-Organize code by single responsibility: each file/module handles one coherent concern. Split when a file handles genuinely separate concerns or different parts change for different reasons. Keep code together when related functionality shares types, helpers, or state. Prioritize cohesion and clear interfaces over arbitrary line counts; follow language-idiomatic conventions (see language skill files for specifics).
-
-## Refactoring rules
+## Refactoring
 - Update all callers when changing interfaces; clean breaks over backward-compatibility shims.
-- Fail on unexpected inputs; support legacy formats only when explicitly specified.
 - Prefer clean, complete migrations over gradual transitions.
-- Commit to one implementation and delete superseded code; trust version control for history.
+- Commit to one implementation and delete superseded code; trust version control.
 
 ## Implementation checklist
 - Functions implemented or explicitly error.
-- TODOs accompanied by failing stubs that surface the incomplete work.
+- TODOs accompanied by failing stubs.
 - Solutions work for all valid inputs; avoid hard-coded values that only satisfy test cases.
 - All paths handled; external calls checked for errors/timeouts.
 - Edge cases covered; switch/default cases present.
