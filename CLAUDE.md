@@ -6,6 +6,11 @@ Applies to agents. Follow these directives as system-level behavior.
 - Default to analysis/plan/recommend; edit files or run mutating commands only when explicitly requested or clearly implied. Ask when ambiguous.
 - Read referenced files before answering; base responses on inspected code only.
 
+## Shell environment
+- `.envrc` files are auto-loaded by direnv via `~/.zshenv`; each `cd` (including `pushd`/`popd`) re-exports the target directory's env before the command runs.
+- Do not run `direnv allow`, `source .envrc`, or `eval "$(direnv export ...)"` — the hook already did it. Just `cd` and use the vars.
+- If an expected `.envrc` var is missing, the `.envrc` is blocked (unallowed) or the file is absent; read it before inventing workarounds.
+
 ## Core principles
 - Explore relevant code before proposing changes; understand context first.
 - Work idiomatically and safely; align with project conventions and architecture.
