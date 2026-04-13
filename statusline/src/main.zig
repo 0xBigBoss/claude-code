@@ -34,8 +34,13 @@ const glyphs = struct {
     const in_flight = "⏳";
     const approve = "✅";
     const reject = "❌";
-    // Research metric (★{best_metric_value})
+    // Research metric (★{best_metric_value}) with optional direction arrow
     const metric = "★";
+    const arrow_up = "↑";
+    const arrow_down = "↓";
+    // Terminal-state prefixes — loop is winding down, not actively iterating
+    const completion = "🏁"; // completion_claimed: agent claims done, awaiting verdict/user
+    const blocked = "🚧"; // blocked_claimed: loop marked blocked, next Stop cleans up
 };
 
 /// Current context usage token counts - added in v2.0.70
@@ -234,7 +239,8 @@ fn progressColor(current: u32, max: u32) []const u8 {
     }
 }
 
-/// rl loop strategy — matches `strategy` field in .rl/state.json v3
+/// rl loop strategy — matches `strategy` field in .rl/state.json v3.
+/// Each variant has distinct counter semantics that drive dispatch in `RalphState.format`.
 const Strategy = enum {
     ralph,
     review,
@@ -250,7 +256,7 @@ const Strategy = enum {
 
     fn glyph(self: Strategy) []const u8 {
         return switch (self) {
-            // Legacy fallback: older state files without strategy were ralph-style loops
+            // Legacy fallback: state files without strategy are treated as ralph-style
             .ralph, .unknown => glyphs.ralph,
             .review => glyphs.review,
             .research => glyphs.research,
@@ -258,19 +264,60 @@ const Strategy = enum {
     }
 };
 
-/// Derived verdict state for the rl segment tail glyph.
-/// Precedence (resolved at parse time): in_flight > approve > reject > none.
-/// Rationale: a running review worker supersedes any stored verdict from a prior round
-/// by construction — the worker clears `review_in_flight_job_id` only after writing the
-/// new verdict (see ~/0xbigboss/rl/SPEC.md REQ-RL-093).
-const Verdict = enum {
+/// Direction for a research-strategy metric (minimize/maximize).
+/// Parsed from the `metric_direction` field; drives the ★-arrow glyph.
+const MetricDirection = enum {
+    none,
+    maximize,
+    minimize,
+
+    fn fromString(s: []const u8) MetricDirection {
+        if (std.mem.eql(u8, s, "maximize")) return .maximize;
+        if (std.mem.eql(u8, s, "minimize")) return .minimize;
+        return .none;
+    }
+};
+
+/// Derived verdict state for the rl segment's trailing glyph.
+/// Unlike the first-cut design, this is NOT resolved at parse time — it requires
+/// both the current git HEAD and optionally a job-file status check, so it's
+/// resolved in `format` where those inputs are in scope.
+const VerdictState = enum {
     none,
     in_flight,
     approve,
     reject,
 };
 
-/// rl loop state — read from .rl/state.json (v3 schema, rl 1.0+)
+/// Status of a background job as read from `.rl/jobs/{id}.json`.
+/// `missing` covers "file not found", "parse failed", and "unknown status string".
+const JobStatus = enum {
+    missing,
+    queued,
+    running,
+    completed,
+    failed,
+    cancelled,
+
+    fn fromString(s: []const u8) JobStatus {
+        if (std.mem.eql(u8, s, "queued")) return .queued;
+        if (std.mem.eql(u8, s, "running")) return .running;
+        if (std.mem.eql(u8, s, "completed")) return .completed;
+        if (std.mem.eql(u8, s, "failed")) return .failed;
+        if (std.mem.eql(u8, s, "cancelled")) return .cancelled;
+        return .missing;
+    }
+};
+
+/// rl loop state — projected from .rl/state.json v3 (rl 1.0+). Optional fields are
+/// null when the state file omits them; defaults match rl's init values where known.
+/// See ~/0xbigboss/rl/src/schemas.ts LoopStateV3Schema for the authoritative shape.
+///
+/// String-valued fields (`review_verdict_sha`, `review_in_flight_job_id`) are stored
+/// as fixed-size stack buffers so a RalphState is entirely by-value and carries no
+/// allocator lifetime. Max length 64 bytes comfortably fits a git sha (40 hex) and
+/// an rl job id ("review-{ms}-{6char}" ~= 28 bytes). Overflowing strings are treated
+/// as if the field were absent.
 const RalphState = struct {
     active: bool = false,
     strategy: Strategy = .unknown,
@@ -279,35 +326,109 @@ const RalphState = struct {
     review_enabled: bool = false,
     review_count: u32 = 0,
     max_review_cycles: u32 = 10,
-    verdict: Verdict = .none,
+    // Verdict contract (rl 1.0)
+    review_verdict_raw: VerdictRaw = .none,
+    review_verdict_sha_buf: [64]u8 = undefined,
+    review_verdict_sha_len: u8 = 0,
+    review_in_flight_job_id_buf: [64]u8 = undefined,
+    review_in_flight_job_id_len: u8 = 0,
+    // Research fields
     best_metric_value: ?f64 = null,
+    metric_direction: MetricDirection = .none,
+    // Terminal-state flags
+    completion_claimed: bool = false,
+    blocked_claimed: bool = false,
+    // Iteration audit (used for loop-age rendering)
+    iteration_start_ms: ?i64 = null,
     /// Schema version from the `version` field, if present. Consumers use this for
     /// debug-mode drift detection only; rendering never branches on it.
     version: ?u32 = null,
 
-    /// Format rl loop status for statusline display.
-    /// Returns true if something was written.
-    fn format(self: RalphState, writer: anytype) !bool {
+    fn verdictSha(self: *const RalphState) ?[]const u8 {
+        if (self.review_verdict_sha_len == 0) return null;
+        return self.review_verdict_sha_buf[0..self.review_verdict_sha_len];
+    }
+
+    fn inFlightJobId(self: *const RalphState) ?[]const u8 {
+        if (self.review_in_flight_job_id_len == 0) return null;
+        return self.review_in_flight_job_id_buf[0..self.review_in_flight_job_id_len];
+    }
+
+    /// Format rl loop segment for statusline display (strategy-dispatched).
+    /// - `git_head`: output of `git rev-parse HEAD`, or empty for "HEAD unknown"
+    /// - `git_root`: workspace root; used to read job files for orphan detection
+    /// - `allocator`: scratch allocator for path construction and job-file reads
+    /// - `now_ms`: current wall-clock time in milliseconds (monotonic-ish; `std.time.milliTimestamp()`)
+    /// Returns true when any output was written.
+    fn format(
+        self: RalphState,
+        writer: anytype,
+        allocator: Allocator,
+        git_root: []const u8,
+        git_head: []const u8,
+        now_ms: i64,
+    ) !bool {
         if (!self.active) return false;
 
-        // Strategy glyph + iteration counter
-        try writer.print(" {s} {s}{d}/{d}{s}", .{
-            self.strategy.glyph(),
+        // Terminal-state prefix (REQ-SL-062): blocked wins over completion
+        if (self.blocked_claimed) {
+            try writer.print(" {s}", .{glyphs.blocked});
+        } else if (self.completion_claimed) {
+            try writer.print(" {s}", .{glyphs.completion});
+        }
+
+        // Strategy glyph always leads the counter block
+        try writer.print(" {s}", .{self.strategy.glyph()});
+
+        switch (self.strategy) {
+            .ralph, .unknown => try self.formatRalphCounters(writer),
+            .review => try self.formatReviewCounters(writer),
+            .research => try self.formatResearchCounters(writer),
+        }
+
+        // Verdict / in-flight glyph (ralph + review only, and only when review_enabled)
+        if ((self.strategy == .ralph or self.strategy == .unknown or self.strategy == .review) and self.review_enabled) {
+            const verdict_state = self.resolveVerdictState(allocator, git_root, git_head);
+            switch (verdict_state) {
+                .none => {},
+                .in_flight => try writer.print(" {s}", .{glyphs.in_flight}),
+                .approve => try writer.print(" {s}", .{glyphs.approve}),
+                .reject => try writer.print(" {s}", .{glyphs.reject}),
+            }
+        }
+
+        // Research metric with optional direction arrow (REQ-SL-064)
+        if (self.strategy == .research) {
+            if (self.best_metric_value) |v| {
+                const arrow: []const u8 = switch (self.metric_direction) {
+                    .maximize => glyphs.arrow_up,
+                    .minimize => glyphs.arrow_down,
+                    .none => "",
+                };
+                try writer.print(" {s}{s}{d:.3}", .{ glyphs.metric, arrow, v });
+            }
+        }
+
+        // Loop age from iteration_start_ms (REQ-SL-065)
+        if (self.iteration_start_ms) |start_ms| {
+            if (now_ms > start_ms) {
+                try formatLoopAge(writer, now_ms - start_ms);
+            }
+        }
+
+        return true;
+    }
+
+    /// Ralph layout: iteration/max_iterations as the primary counter, optional review counter.
+    /// Rationale: `iteration` is advanced by `ralph.ts:139` on every Stop and `ralph.ts:245` on every
+    /// reject, so it's the meaningful "how far through my loop am I" signal the original author intended.
+    fn formatRalphCounters(self: RalphState, writer: anytype) !void {
+        try writer.print(" {s}{d}/{d}{s}", .{
             progressColor(self.iteration, self.max_iterations),
             self.iteration,
             self.max_iterations,
             colors.reset,
         });
-
-        // Research strategy: no review gating; optionally show best metric value
-        if (self.strategy == .research) {
-            if (self.best_metric_value) |v| {
-                try writer.print(" {s}{d:.3}", .{ glyphs.metric, v });
-            }
-            return true;
-        }
-
-        // Ralph / review strategies: review sub-counter + verdict tail glyph
         if (self.review_enabled) {
             try writer.print(" {s} {s}{d}/{d}{s}", .{
                 glyphs.counter,
@@ -316,18 +437,74 @@ const RalphState = struct {
                 self.max_review_cycles,
                 colors.reset,
             });
+        }
+    }
 
-            switch (self.verdict) {
-                .none => {},
-                .in_flight => try writer.print(" {s}", .{glyphs.in_flight}),
-                .approve => try writer.print(" {s}", .{glyphs.approve}),
-                .reject => try writer.print(" {s}", .{glyphs.reject}),
-            }
+    /// Review layout: review_count/max_review_cycles ONLY. The review strategy's Stop hook
+    /// (~/0xbigboss/rl/src/strategies/review.ts) never touches `iteration`, so rendering it
+    /// would always read 0 (or whatever init set) — permanent dead signal. Hide it.
+    fn formatReviewCounters(self: RalphState, writer: anytype) !void {
+        if (self.review_enabled) {
+            try writer.print(" {s} {s}{d}/{d}{s}", .{
+                glyphs.counter,
+                progressColor(self.review_count, self.max_review_cycles),
+                self.review_count,
+                self.max_review_cycles,
+                colors.reset,
+            });
+        }
+    }
+
+    /// Research layout: iteration/max_iterations counts experiments. No review counter
+    /// (research loops don't gate on review). Metric and arrow render after counters in `format`.
+    fn formatResearchCounters(self: RalphState, writer: anytype) !void {
+        try writer.print(" {s}{d}/{d}{s}", .{
+            progressColor(self.iteration, self.max_iterations),
+            self.iteration,
+            self.max_iterations,
+            colors.reset,
+        });
+    }
+
+    /// Resolve the trailing verdict glyph per REQ-SL-063. Mirrors the rl Stop hook's
+    /// decision procedure so what the statusline shows matches what the hook will do next.
+    ///
+    /// Priority:
+    ///   1. in_flight_job_id set AND job status is queued/running → .in_flight
+    ///      (orphan markers where the job file is missing or terminal fall through)
+    ///   2. verdict == approve AND verdict_sha matches HEAD → .approve
+    ///   3. verdict == reject AND verdict_sha matches HEAD → .reject
+    ///   4. otherwise → .none (stale, orphan, null, or HEAD-unknown all collapse here)
+    fn resolveVerdictState(
+        self: *const RalphState,
+        allocator: Allocator,
+        git_root: []const u8,
+        git_head: []const u8,
+    ) VerdictState {
+        if (self.inFlightJobId()) |job_id| {
+            const status = readJobStatus(allocator, git_root, job_id);
+            if (status == .queued or status == .running) return .in_flight;
+            // Orphan marker (missing/completed/failed/cancelled) — fall through
         }
 
-        return true;
+        // Staleness check: we only honor verdicts whose sha matches current HEAD.
+        // An empty git_head means `git rev-parse HEAD` failed — fail OPEN and
+        // render the stored verdict anyway, since hiding an actionable signal
+        // because of a git glitch is worse than showing a potentially stale one.
+        const verdict_sha = self.verdictSha() orelse return .none;
+        if (git_head.len > 0 and !std.mem.eql(u8, verdict_sha, git_head)) return .none;
+
+        return switch (self.review_verdict_raw) {
+            .none => .none,
+            .approve => .approve,
+            .reject => .reject,
+        };
     }
 };
+
+/// Raw verdict string parsed from state.json. Kept separate from VerdictState because
+/// the displayable state requires cross-checking sha + in-flight job status.
+const VerdictRaw = enum { none, approve, reject };
 
 /// Git file status representation
 const GitStatus = struct {
@@ -848,14 +1025,24 @@ fn parseYamlInt(line: []const u8, key: []const u8) ?u32 {
     return std.fmt.parseInt(u32, value, 10) catch null;
 }
 
+/// Copy a string slice into a fixed-size stack buffer, returning the bytes written.
+/// If the source exceeds the buffer, returns 0 (treated as "absent" by the accessors).
+fn copyIntoFixedBuf(dest: []u8, src: []const u8) u8 {
+    if (src.len == 0 or src.len > dest.len) return 0;
+    @memcpy(dest[0..src.len], src);
+    return @intCast(src.len);
+}
+
 /// Parse rl loop state from JSON content string.
 /// Exposed for testing. Returns default (inactive) RalphState if parsing fails.
-/// The caller-supplied `allocator` is used for all JSON allocations.
+/// The returned state is entirely by-value — all string fields are copied into
+/// stack buffers on the struct, so the result is safe to use after the allocator
+/// is freed.
 fn parseRalphStateFromContent(allocator: Allocator, content: []const u8) RalphState {
     var state = RalphState{};
 
-    // Mirror of .rl/state.json v3 — all fields optional so unknown/absent keys
-    // degrade gracefully. See ~/0xbigboss/rl/SPEC.md:387 for the authoritative schema.
+    // Mirror of .rl/state.json v3. See ~/0xbigboss/rl/src/schemas.ts LoopStateV3Schema.
+    // All fields optional so unknown/absent keys degrade gracefully (I-6).
     const JsonState = struct {
         version: ?u32 = null,
         strategy: ?[]const u8 = null,
@@ -866,8 +1053,13 @@ fn parseRalphStateFromContent(allocator: Allocator, content: []const u8) RalphSt
         review_count: ?u32 = null,
         max_review_cycles: ?u32 = null,
         review_verdict: ?[]const u8 = null,
+        review_verdict_sha: ?[]const u8 = null,
         review_in_flight_job_id: ?[]const u8 = null,
         best_metric_value: ?f64 = null,
+        metric_direction: ?[]const u8 = null,
+        completion_claimed: ?bool = null,
+        blocked_claimed: ?bool = null,
+        iteration_start_ms: ?i64 = null,
     };
 
     const parsed = std.json.parseFromSlice(JsonState, allocator, content, .{
@@ -884,21 +1076,23 @@ fn parseRalphStateFromContent(allocator: Allocator, content: []const u8) RalphSt
     if (v.review_count) |r| state.review_count = r;
     if (v.max_review_cycles) |m| state.max_review_cycles = m;
     if (v.best_metric_value) |b| state.best_metric_value = b;
+    if (v.completion_claimed) |c| state.completion_claimed = c;
+    if (v.blocked_claimed) |b| state.blocked_claimed = b;
+    if (v.iteration_start_ms) |ms| state.iteration_start_ms = ms;
     if (v.strategy) |s| state.strategy = Strategy.fromString(s);
+    if (v.metric_direction) |d| state.metric_direction = MetricDirection.fromString(d);
 
-    // Verdict precedence: a running worker always supersedes a stored verdict
-    // (the worker clears review_in_flight_job_id only after writing the new verdict,
-    // so a non-null job id means the prior verdict is stale-by-construction).
-    if (v.review_in_flight_job_id) |id| {
-        if (id.len > 0) state.verdict = .in_flight;
+    if (v.review_verdict_sha) |sha| {
+        state.review_verdict_sha_len = copyIntoFixedBuf(&state.review_verdict_sha_buf, sha);
     }
-    if (state.verdict == .none) {
-        if (v.review_verdict) |verdict| {
-            if (std.mem.eql(u8, verdict, "approve")) {
-                state.verdict = .approve;
-            } else if (std.mem.eql(u8, verdict, "reject")) {
-                state.verdict = .reject;
-            }
+    if (v.review_in_flight_job_id) |id| {
+        state.review_in_flight_job_id_len = copyIntoFixedBuf(&state.review_in_flight_job_id_buf, id);
+    }
+    if (v.review_verdict) |verdict| {
+        if (std.mem.eql(u8, verdict, "approve")) {
+            state.review_verdict_raw = .approve;
+        } else if (std.mem.eql(u8, verdict, "reject")) {
+            state.review_verdict_raw = .reject;
         }
     }
 
@@ -907,11 +1101,12 @@ fn parseRalphStateFromContent(allocator: Allocator, content: []const u8) RalphSt
 
 /// Parse rl loop state from .rl/state.json at git root.
 /// Returns default (inactive) state on any I/O or parse failure.
+/// The returned RalphState is by-value and safe to use independently of the allocator.
 fn parseRalphState(allocator: Allocator, git_root: []const u8) RalphState {
     const path = std.fmt.allocPrint(allocator, "{s}/.rl/state.json", .{git_root}) catch return RalphState{};
     defer allocator.free(path);
 
-    // 4 KiB cap: observed state.json files are <1 KiB; 4 KiB gives 4x headroom.
+    // 4 KiB cap: observed v3 state.json files are ~600 bytes; 4 KiB gives >6x headroom.
     const file = std.fs.cwd().openFile(path, .{}) catch return RalphState{};
     defer file.close();
 
@@ -920,6 +1115,80 @@ fn parseRalphState(allocator: Allocator, git_root: []const u8) RalphState {
     if (bytes_read == 0) return RalphState{};
 
     return parseRalphStateFromContent(allocator, buf[0..bytes_read]);
+}
+
+/// Read a background job's status field from `.rl/jobs/{job_id}.json`.
+/// Returns `.missing` on any failure (file not found, parse error, unexpected string,
+/// oversize file). Used for orphan detection on `review_in_flight_job_id`.
+/// Cost: one allocPrint, one openFile, one 4 KiB read, one JSON parse.
+fn readJobStatus(allocator: Allocator, git_root: []const u8, job_id: []const u8) JobStatus {
+    const path = std.fmt.allocPrint(allocator, "{s}/.rl/jobs/{s}.json", .{ git_root, job_id }) catch return .missing;
+    defer allocator.free(path);
+
+    const file = std.fs.cwd().openFile(path, .{}) catch return .missing;
+    defer file.close();
+
+    var buf: [4096]u8 = undefined;
+    const bytes_read = file.read(&buf) catch return .missing;
+    if (bytes_read == 0) return .missing;
+
+    return parseJobStatusFromContent(allocator, buf[0..bytes_read]);
+}
+
+/// Exposed for testing. Parses the `status` field from a job JSON blob.
+fn parseJobStatusFromContent(allocator: Allocator, content: []const u8) JobStatus {
+    const JobFile = struct { status: ?[]const u8 = null };
+    const parsed = std.json.parseFromSlice(JobFile, allocator, content, .{
+        .ignore_unknown_fields = true,
+    }) catch return .missing;
+    defer parsed.deinit();
+
+    const status_str = parsed.value.status orelse return .missing;
+    return JobStatus.fromString(status_str);
+}
+
+/// Run `git rev-parse HEAD` in `dir`. Returns empty string on any failure.
+/// Caller receives an allocator-owned slice; free with `allocator.free` or rely on arena.
+/// Callers treat empty-string as "HEAD unknown" — the verdict staleness check fails open.
+fn getGitHead(allocator: Allocator, dir: []const u8) []const u8 {
+    var buf: [256]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buf);
+    const temp_alloc = fba.allocator();
+    const cmd = temp_alloc.dupeZ(u8, "git rev-parse HEAD") catch return "";
+    return execCommand(allocator, cmd, dir) catch "";
+}
+
+/// Format a loop age (in ms) as a compact ` +{N}{s|m|h|d}` string with color grading.
+/// Color thresholds: green <1h, yellow <4h, red ≥4h.
+fn formatLoopAge(writer: anytype, age_ms: i64) !void {
+    if (age_ms < 0) return;
+    const total_s: u64 = @intCast(@divTrunc(age_ms, 1000));
+
+    const color: []const u8 = blk: {
+        if (total_s < 60 * 60) break :blk colors.green;
+        if (total_s < 4 * 60 * 60) break :blk colors.yellow;
+        break :blk colors.red;
+    };
+
+    try writer.print(" {s}+", .{color});
+
+    if (total_s < 60) {
+        try writer.print("{d}s", .{total_s});
+    } else if (total_s < 60 * 60) {
+        try writer.print("{d}m", .{total_s / 60});
+    } else if (total_s < 24 * 60 * 60) {
+        const hours = total_s / 3600;
+        const minutes = (total_s % 3600) / 60;
+        if (minutes == 0) {
+            try writer.print("{d}h", .{hours});
+        } else {
+            try writer.print("{d}h{d}m", .{ hours, minutes });
+        }
+    } else {
+        try writer.print("{d}d", .{total_s / (24 * 60 * 60)});
+    }
+
+    try writer.print("{s}", .{colors.reset});
 }
 
 /// Append a single timestamped line to /tmp/statusline-debug.log.
@@ -1080,7 +1349,10 @@ pub fn main() !void {
                     }
                 }
 
-                _ = try ralph_state.format(writer);
+                // git HEAD for verdict staleness check (REQ-SL-067). Empty on failure → fail-open.
+                const git_head = getGitHead(allocator, current_dir.?);
+                const now_ms = std.time.milliTimestamp();
+                _ = try ralph_state.format(writer, allocator, git_root, git_head, now_ms);
             }
         }
     }
@@ -1754,82 +2026,27 @@ test "RalphState progressColor thresholds" {
     try std.testing.expectEqualStrings(colors.green, progressColor(0, 0));
 }
 
-test "RalphState format inactive returns false" {
+// --- rl segment rendering tests ---
+//
+// Shared test harness: renderRalphState wraps format() with a stack buffer so test
+// cases stay tight. A non-git-repo path and empty git_head are used so the
+// orphan-detection + staleness-check code paths run without touching the filesystem.
+
+fn renderRalphState(state: *const RalphState, buf: []u8, now_ms: i64) ![]const u8 {
+    var stream = std.io.fixedBufferStream(buf);
+    const writer = stream.writer();
+    _ = try state.*.format(writer, std.testing.allocator, "/nonexistent-root", "", now_ms);
+    return stream.getWritten();
+}
+
+test "RalphState format inactive returns false and writes nothing" {
     const state = RalphState{ .active = false };
-    var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream_buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&stream_buf);
     const writer = stream.writer();
-
-    const result = try state.format(writer);
-    try std.testing.expect(!result);
+    const wrote = try state.format(writer, std.testing.allocator, "/nonexistent", "", 0);
+    try std.testing.expect(!wrote);
     try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
-}
-
-test "RalphState format active shows iteration with default ralph glyph" {
-    const state = RalphState{
-        .active = true,
-        .iteration = 3,
-        .max_iterations = 50,
-        .review_enabled = false,
-    };
-    var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-
-    const result = try state.format(writer);
-    try std.testing.expect(result);
-    const output = stream.getWritten();
-    // Default strategy (.unknown) renders the ralph glyph
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.ralph) != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "3/50") != null);
-    // 3/50 = 6% → green
-    try std.testing.expect(std.mem.indexOf(u8, output, colors.green) != null);
-    // Review sub-counter is suppressed when review_enabled = false
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) == null);
-    // No verdict glyph either
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.in_flight) == null);
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) == null);
-}
-
-test "RalphState format active with reviews, no verdict" {
-    const state = RalphState{
-        .active = true,
-        .strategy = .ralph,
-        .iteration = 5,
-        .max_iterations = 30,
-        .review_enabled = true,
-        .review_count = 2,
-        .max_review_cycles = 5,
-    };
-    var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-
-    const result = try state.format(writer);
-    try std.testing.expect(result);
-    const output = stream.getWritten();
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.ralph) != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "5/30") != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "2/5") != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, colors.green) != null);
-    // No verdict glyph when verdict == .none
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) == null);
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.in_flight) == null);
-}
-
-test "RalphState strategy glyphs" {
-    const cases = [_]struct { s: Strategy, expected: []const u8 }{
-        .{ .s = .ralph, .expected = glyphs.ralph },
-        .{ .s = .review, .expected = glyphs.review },
-        .{ .s = .research, .expected = glyphs.research },
-        .{ .s = .unknown, .expected = glyphs.ralph }, // legacy fallback
-    };
-    for (cases) |tc| {
-        try std.testing.expectEqualStrings(tc.expected, tc.s.glyph());
-    }
 }
 
 test "Strategy.fromString maps known values" {
@@ -1840,129 +2057,480 @@ test "Strategy.fromString maps known values" {
     try std.testing.expectEqual(Strategy.unknown, Strategy.fromString(""));
 }
 
-test "RalphState format review strategy with approve verdict" {
-    const state = RalphState{
+test "Strategy glyph mapping" {
+    try std.testing.expectEqualStrings(glyphs.ralph, Strategy.ralph.glyph());
+    try std.testing.expectEqualStrings(glyphs.review, Strategy.review.glyph());
+    try std.testing.expectEqualStrings(glyphs.research, Strategy.research.glyph());
+    try std.testing.expectEqualStrings(glyphs.ralph, Strategy.unknown.glyph()); // legacy fallback
+}
+
+test "JobStatus.fromString maps known values" {
+    try std.testing.expectEqual(JobStatus.queued, JobStatus.fromString("queued"));
+    try std.testing.expectEqual(JobStatus.running, JobStatus.fromString("running"));
+    try std.testing.expectEqual(JobStatus.completed, JobStatus.fromString("completed"));
+    try std.testing.expectEqual(JobStatus.failed, JobStatus.fromString("failed"));
+    try std.testing.expectEqual(JobStatus.cancelled, JobStatus.fromString("cancelled"));
+    try std.testing.expectEqual(JobStatus.missing, JobStatus.fromString("weird"));
+    try std.testing.expectEqual(JobStatus.missing, JobStatus.fromString(""));
+}
+
+test "parseJobStatusFromContent with running job" {
+    const content =
+        \\{"id":"review-123-abc","kind":"review","status":"running","pid":1234}
+    ;
+    try std.testing.expectEqual(JobStatus.running, parseJobStatusFromContent(std.testing.allocator, content));
+}
+
+test "parseJobStatusFromContent with completed job" {
+    const content = "{\"status\":\"completed\"}";
+    try std.testing.expectEqual(JobStatus.completed, parseJobStatusFromContent(std.testing.allocator, content));
+}
+
+test "parseJobStatusFromContent with missing status field" {
+    const content = "{\"id\":\"review-123\",\"kind\":\"review\"}";
+    try std.testing.expectEqual(JobStatus.missing, parseJobStatusFromContent(std.testing.allocator, content));
+}
+
+test "parseJobStatusFromContent with garbage" {
+    try std.testing.expectEqual(JobStatus.missing, parseJobStatusFromContent(std.testing.allocator, "not json"));
+    try std.testing.expectEqual(JobStatus.missing, parseJobStatusFromContent(std.testing.allocator, ""));
+}
+
+test "RalphState ralph iterate branch (ralph.ts:152-160)" {
+    // Matches ralph.ts:152 stateUpdates: { iteration: nextIteration, completion_claimed: false }
+    var state = RalphState{
         .active = true,
-        .strategy = .review,
-        .iteration = 1,
-        .max_iterations = 30,
+        .strategy = .ralph,
+        .iteration = 3,
+        .max_iterations = 50,
         .review_enabled = true,
         .review_count = 0,
-        .max_review_cycles = 30,
-        .verdict = .approve,
+        .max_review_cycles = 10,
     };
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-    _ = try state.format(writer);
-    const output = stream.getWritten();
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.review) != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) != null);
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.ralph) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "3/50") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "0/10") != null);
+    // No verdict glyph — fresh iterate has no verdict yet
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
     try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) == null);
 }
 
-test "RalphState format review strategy with reject verdict" {
-    const state = RalphState{
+test "RalphState ralph without review_enabled hides review counter" {
+    var state = RalphState{
         .active = true,
-        .strategy = .review,
-        .iteration = 2,
+        .strategy = .ralph,
+        .iteration = 5,
+        .max_iterations = 30,
+        .review_enabled = false,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.ralph) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "5/30") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) == null);
+}
+
+test "RalphState ralph fresh approve verdict (ralph.ts:218-223)" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .ralph,
+        .iteration = 5,
         .max_iterations = 30,
         .review_enabled = true,
         .review_count = 1,
-        .max_review_cycles = 30,
-        .verdict = .reject,
+        .max_review_cycles = 10,
+        .review_verdict_raw = .approve,
+        .completion_claimed = true, // ralph.ts branch 4b runs only after completion claim
     };
-    var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-    _ = try state.format(writer);
+    state.review_verdict_sha_len = copyIntoFixedBuf(&state.review_verdict_sha_buf, "deadbeef");
+
+    // Using git_head = "deadbeef" so staleness check passes. We can't go through
+    // renderRalphState since it hardcodes empty git_head; call format directly.
+    var stream_buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&stream_buf);
+    _ = try state.format(stream.writer(), std.testing.allocator, "/nonexistent", "deadbeef", 0);
     const output = stream.getWritten();
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) != null);
+
+    // Completion prefix + strategy glyph + counters + verdict glyph
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.completion) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.ralph) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "5/30") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "1/10") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) != null);
+}
+
+test "RalphState ralph reject-iterate branch (ralph.ts:252-265)" {
+    // ralph.ts reject branch bumps iteration++, review_count++, and CLEARS the verdict
+    // fields. So the statusline should show incremented counters and NO verdict glyph.
+    var state = RalphState{
+        .active = true,
+        .strategy = .ralph,
+        .iteration = 6, // was 5, now 6
+        .max_iterations = 30,
+        .review_enabled = true,
+        .review_count = 2, // was 1, now 2
+        .max_review_cycles = 10,
+        .review_verdict_raw = .none, // cleared by worker
+    };
+    // review_verdict_sha also cleared
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, "6/30") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "2/10") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) == null);
     try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
 }
 
-test "RalphState format in-flight glyph when worker running" {
-    const state = RalphState{
+test "RalphState review strategy layout omits iteration counter" {
+    // review.ts never mutates state.iteration — displaying it would be misleading.
+    var state = RalphState{
         .active = true,
         .strategy = .review,
-        .iteration = 1,
+        .iteration = 0, // permanently 0 in review strategy
         .max_iterations = 30,
+        .review_enabled = true,
+        .review_count = 3,
+        .max_review_cycles = 30,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.review) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "3/30") != null);
+    // Must NOT contain "0/30" (the iteration counter)
+    // Note: review_count is "3/30", max_review_cycles matches max_iterations here — so the
+    // only way "0/30" could appear is from a rendered iteration counter.
+    try std.testing.expect(std.mem.indexOf(u8, output, "0/30") == null);
+}
+
+test "RalphState review queueing-review branch (review.ts:162-173)" {
+    // review.ts enqueue branch sets review_in_flight_job_id but does NOT clear the
+    // prior verdict. The statusline's in-flight check (via readJobStatus) would try
+    // to open a job file that doesn't exist in this test; the orphan path returns
+    // `missing` and the staleness check then fails — so no verdict glyph should render.
+    var state = RalphState{
+        .active = true,
+        .strategy = .review,
+        .review_enabled = true,
+        .review_count = 1,
+        .max_review_cycles = 30,
+        .review_verdict_raw = .reject, // prior round's reject
+    };
+    state.review_verdict_sha_len = copyIntoFixedBuf(&state.review_verdict_sha_buf, "abc12345");
+    state.review_in_flight_job_id_len = copyIntoFixedBuf(&state.review_in_flight_job_id_buf, "review-123-xyz");
+    // git_head matches verdict_sha. The orphan check runs first: the job file under
+    // /nonexistent-root/.rl/jobs/ doesn't exist → readJobStatus returns .missing →
+    // in_flight branch falls through → staleness check passes → render ❌.
+    var stream_buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&stream_buf);
+    _ = try state.format(stream.writer(), std.testing.allocator, "/nonexistent-root", "abc12345", 0);
+    const output = stream.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.in_flight) == null);
+}
+
+test "RalphState review reject-iterate clears verdict (review.ts:148-155)" {
+    // After a confirmed reject, the rl hook writes review_count++ AND clears the verdict
+    // fields. Next render should show no verdict glyph.
+    var state = RalphState{
+        .active = true,
+        .strategy = .review,
+        .review_enabled = true,
+        .review_count = 2,
+        .max_review_cycles = 30,
+        .review_verdict_raw = .none,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, "2/30") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
+}
+
+test "RalphState review fresh approve with matching HEAD" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .review,
         .review_enabled = true,
         .review_count = 0,
         .max_review_cycles = 30,
-        .verdict = .in_flight,
+        .review_verdict_raw = .approve,
     };
-    var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-    _ = try state.format(writer);
+    state.review_verdict_sha_len = copyIntoFixedBuf(&state.review_verdict_sha_buf, "cafebabe");
+    var stream_buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&stream_buf);
+    _ = try state.format(stream.writer(), std.testing.allocator, "/nonexistent-root", "cafebabe", 0);
     const output = stream.getWritten();
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.in_flight) != null);
-    // Precedence: in-flight wins over any stored verdict (verified at parse time)
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) != null);
 }
 
-test "RalphState format review strategy suppresses verdict when review_enabled is false" {
-    // A review-strategy loop with review_enabled explicitly false should not render
-    // the review sub-counter or a verdict glyph.
-    const state = RalphState{
+test "RalphState verdict suppressed when HEAD drifts from verdict_sha (staleness)" {
+    var state = RalphState{
         .active = true,
         .strategy = .review,
-        .iteration = 1,
-        .max_iterations = 30,
-        .review_enabled = false,
-        .verdict = .approve,
+        .review_enabled = true,
+        .review_count = 0,
+        .max_review_cycles = 30,
+        .review_verdict_raw = .reject,
     };
-    var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-    _ = try state.format(writer);
+    state.review_verdict_sha_len = copyIntoFixedBuf(&state.review_verdict_sha_buf, "oldsha1234");
+    var stream_buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&stream_buf);
+    // git_head != verdict_sha → stale → suppress verdict glyph
+    _ = try state.format(stream.writer(), std.testing.allocator, "/nonexistent-root", "newsha5678", 0);
     const output = stream.getWritten();
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.review) != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) == null);
     try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
 }
 
-test "RalphState format research strategy without metric" {
-    const state = RalphState{
+test "RalphState verdict renders when git_head is empty (fail-open on unknown HEAD)" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .review,
+        .review_enabled = true,
+        .review_verdict_raw = .approve,
+    };
+    state.review_verdict_sha_len = copyIntoFixedBuf(&state.review_verdict_sha_buf, "somesha");
+    var buf: [256]u8 = undefined;
+    // renderRalphState passes empty git_head — fail-open means verdict still renders
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) != null);
+}
+
+test "RalphState in-flight with orphan job file falls through to verdict" {
+    // review_in_flight_job_id set but the job file doesn't exist → orphan → fall through
+    // to verdict check. Matching sha → render verdict glyph.
+    var state = RalphState{
+        .active = true,
+        .strategy = .review,
+        .review_enabled = true,
+        .review_verdict_raw = .approve,
+    };
+    state.review_verdict_sha_len = copyIntoFixedBuf(&state.review_verdict_sha_buf, "headsha");
+    state.review_in_flight_job_id_len = copyIntoFixedBuf(&state.review_in_flight_job_id_buf, "review-orphan-xx");
+    var stream_buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&stream_buf);
+    _ = try state.format(stream.writer(), std.testing.allocator, "/nonexistent-root", "headsha", 0);
+    const output = stream.getWritten();
+    // Orphan → fall through → staleness passes → ✅ renders
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.in_flight) == null);
+}
+
+test "RalphState terminal-state prefix: blocked_claimed" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .review,
+        .review_enabled = true,
+        .review_count = 0,
+        .max_review_cycles = 30,
+        .blocked_claimed = true,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.blocked) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.completion) == null);
+}
+
+test "RalphState terminal-state prefix: completion_claimed" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .ralph,
+        .iteration = 5,
+        .max_iterations = 30,
+        .completion_claimed = true,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.completion) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.blocked) == null);
+}
+
+test "RalphState terminal-state prefix: blocked beats completion" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .review,
+        .review_enabled = true,
+        .completion_claimed = true,
+        .blocked_claimed = true,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.blocked) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.completion) == null);
+}
+
+test "RalphState research strategy without metric (research.ts:125-135)" {
+    var state = RalphState{
         .active = true,
         .strategy = .research,
         .iteration = 5,
         .max_iterations = 30,
-        .review_enabled = true, // should be ignored for research
+        // research ignores review fields even if set
+        .review_enabled = true,
         .review_count = 3,
         .max_review_cycles = 10,
-        .verdict = .approve, // should be ignored for research
+        .review_verdict_raw = .approve,
     };
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-    _ = try state.format(writer);
-    const output = stream.getWritten();
+    const output = try renderRalphState(&state, &buf, 0);
     try std.testing.expect(std.mem.indexOf(u8, output, glyphs.research) != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "5/30") != null);
-    // Research hides review counter, verdict glyphs, and metric
+    // Research hides review counter, verdict glyphs, and (without metric) the star
     try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) == null);
     try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
     try std.testing.expect(std.mem.indexOf(u8, output, glyphs.metric) == null);
 }
 
-test "RalphState format research strategy with best metric value" {
-    const state = RalphState{
+test "RalphState research with maximize metric renders up-arrow" {
+    var state = RalphState{
         .active = true,
         .strategy = .research,
-        .iteration = 5,
+        .iteration = 12,
         .max_iterations = 30,
         .best_metric_value = 0.823,
+        .metric_direction = .maximize,
     };
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-    _ = try state.format(writer);
-    const output = stream.getWritten();
+    const output = try renderRalphState(&state, &buf, 0);
     try std.testing.expect(std.mem.indexOf(u8, output, glyphs.research) != null);
     try std.testing.expect(std.mem.indexOf(u8, output, glyphs.metric) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.arrow_up) != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "0.823") != null);
+}
+
+test "RalphState research with minimize metric renders down-arrow" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .research,
+        .iteration = 8,
+        .max_iterations = 30,
+        .best_metric_value = 0.045,
+        .metric_direction = .minimize,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.arrow_down) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "0.045") != null);
+}
+
+test "RalphState research with unknown direction omits arrow" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .research,
+        .best_metric_value = 1.5,
+        .metric_direction = .none,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 0);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.metric) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.arrow_up) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.arrow_down) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "1.500") != null);
+}
+
+test "RalphState loop age: seconds" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .ralph,
+        .iteration = 1,
+        .max_iterations = 30,
+        .iteration_start_ms = 1000,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 31000); // 30s later
+    try std.testing.expect(std.mem.indexOf(u8, output, "+30s") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, colors.green) != null);
+}
+
+test "RalphState loop age: minutes in green range" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .ralph,
+        .iteration_start_ms = 0,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 45 * 60 * 1000); // 45m
+    try std.testing.expect(std.mem.indexOf(u8, output, "+45m") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, colors.green) != null);
+}
+
+test "RalphState loop age: hours in yellow range" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .ralph,
+        .iteration_start_ms = 0,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 2 * 60 * 60 * 1000 + 15 * 60 * 1000); // 2h15m
+    try std.testing.expect(std.mem.indexOf(u8, output, "+2h15m") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, colors.yellow) != null);
+}
+
+test "RalphState loop age: hours with zero-minute suffix" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .ralph,
+        .iteration_start_ms = 0,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 3 * 60 * 60 * 1000); // exactly 3h
+    try std.testing.expect(std.mem.indexOf(u8, output, "+3h") != null);
+    // Should NOT contain "+3h0m"
+    try std.testing.expect(std.mem.indexOf(u8, output, "+3h0m") == null);
+}
+
+test "RalphState loop age: days in red range" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .ralph,
+        .iteration_start_ms = 0,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 3 * 24 * 60 * 60 * 1000); // 3d
+    try std.testing.expect(std.mem.indexOf(u8, output, "+3d") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, colors.red) != null);
+}
+
+test "RalphState loop age: absent when iteration_start_ms is null" {
+    var state = RalphState{
+        .active = true,
+        .strategy = .ralph,
+        .iteration_start_ms = null,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 1_000_000);
+    // No "+" prefix followed by digit/h/m/s/d
+    try std.testing.expect(std.mem.indexOf(u8, output, "+") == null);
+}
+
+test "RalphState loop age: absent when now_ms <= iteration_start_ms" {
+    // Clock skew edge case — don't render a negative age.
+    var state = RalphState{
+        .active = true,
+        .strategy = .ralph,
+        .iteration_start_ms = 5000,
+    };
+    var buf: [256]u8 = undefined;
+    const output = try renderRalphState(&state, &buf, 3000);
+    try std.testing.expect(std.mem.indexOf(u8, output, "+") == null);
+}
+
+test "copyIntoFixedBuf overflow returns zero" {
+    var buf: [8]u8 = undefined;
+    try std.testing.expectEqual(@as(u8, 0), copyIntoFixedBuf(&buf, "this_is_longer_than_eight"));
+    try std.testing.expectEqual(@as(u8, 0), copyIntoFixedBuf(&buf, ""));
+    try std.testing.expectEqual(@as(u8, 3), copyIntoFixedBuf(&buf, "abc"));
+    try std.testing.expectEqualStrings("abc", buf[0..3]);
+}
+
+test "RalphState accessors return null for empty buffers" {
+    const state = RalphState{};
+    try std.testing.expect(state.verdictSha() == null);
+    try std.testing.expect(state.inFlightJobId() == null);
 }
 
 test "parseYamlBool function" {
@@ -1984,9 +2552,9 @@ test "parseYamlInt function" {
 test "parseRalphStateFromContent with valid v3 JSON" {
     const allocator = std.testing.allocator;
     const content =
-        \\{"version":3,"strategy":"review","active":true,"iteration":5,"max_iterations":30,"review_enabled":true,"review_count":2,"max_review_cycles":10}
+        \\{"version":3,"strategy":"review","active":true,"iteration":5,"max_iterations":30,
+        \\"review_enabled":true,"review_count":2,"max_review_cycles":10}
     ;
-
     const state = parseRalphStateFromContent(allocator, content);
     try std.testing.expect(state.active);
     try std.testing.expectEqual(@as(u32, 5), state.iteration);
@@ -1996,117 +2564,140 @@ test "parseRalphStateFromContent with valid v3 JSON" {
     try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
     try std.testing.expectEqual(Strategy.review, state.strategy);
     try std.testing.expectEqual(@as(?u32, 3), state.version);
-    try std.testing.expectEqual(Verdict.none, state.verdict);
+    try std.testing.expectEqual(VerdictRaw.none, state.review_verdict_raw);
 }
 
-test "parseRalphStateFromContent with partial fields" {
+test "parseRalphStateFromContent with partial fields falls back to defaults" {
     const allocator = std.testing.allocator;
-    const content =
-        \\{"active":true,"iteration":3}
-    ;
-
-    const state = parseRalphStateFromContent(allocator, content);
+    const state = parseRalphStateFromContent(allocator, "{\"active\":true,\"iteration\":3}");
     try std.testing.expect(state.active);
     try std.testing.expectEqual(@as(u32, 3), state.iteration);
-    // Defaults for missing fields
     try std.testing.expectEqual(@as(u32, 50), state.max_iterations);
     try std.testing.expect(!state.review_enabled);
-    try std.testing.expectEqual(@as(u32, 0), state.review_count);
-    try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
     try std.testing.expectEqual(Strategy.unknown, state.strategy);
     try std.testing.expectEqual(@as(?u32, null), state.version);
+    try std.testing.expectEqual(MetricDirection.none, state.metric_direction);
+    try std.testing.expect(!state.completion_claimed);
+    try std.testing.expect(!state.blocked_claimed);
+    try std.testing.expect(state.verdictSha() == null);
+    try std.testing.expect(state.inFlightJobId() == null);
 }
 
-test "parseRalphStateFromContent with invalid JSON" {
-    const allocator = std.testing.allocator;
-    const state = parseRalphStateFromContent(allocator, "# Just markdown, not JSON");
-    try std.testing.expect(!state.active);
-    try std.testing.expectEqual(@as(u32, 0), state.iteration);
-}
-
-test "parseRalphStateFromContent with empty content" {
-    const allocator = std.testing.allocator;
-    const state = parseRalphStateFromContent(allocator, "");
+test "parseRalphStateFromContent with invalid JSON returns defaults" {
+    const state = parseRalphStateFromContent(std.testing.allocator, "# not JSON");
     try std.testing.expect(!state.active);
 }
 
-test "parseRalphStateFromContent ignores extra fields" {
-    const allocator = std.testing.allocator;
+test "parseRalphStateFromContent with empty content returns defaults" {
+    const state = parseRalphStateFromContent(std.testing.allocator, "");
+    try std.testing.expect(!state.active);
+}
+
+test "parseRalphStateFromContent ignores unknown fields" {
     const content =
-        \\{"active":true,"iteration":7,"unknown_field":"some_value","completion_promise":"COMPLETE","timestamp":"2025-01-01T00:00:00Z"}
+        \\{"active":true,"iteration":7,"unknown_field":"x","completion_promise":"COMPLETE"}
     ;
-
-    const state = parseRalphStateFromContent(allocator, content);
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
     try std.testing.expect(state.active);
     try std.testing.expectEqual(@as(u32, 7), state.iteration);
 }
 
-test "parseRalphStateFromContent resolves approve verdict" {
-    const allocator = std.testing.allocator;
+test "parseRalphStateFromContent parses approve verdict + sha" {
     const content =
-        \\{"version":3,"strategy":"review","active":true,"iteration":1,"max_iterations":30,
-        \\"review_enabled":true,"review_count":0,"max_review_cycles":30,
+        \\{"version":3,"strategy":"review","active":true,
         \\"review_verdict":"approve","review_verdict_sha":"deadbeef",
         \\"review_in_flight_job_id":null}
     ;
-    const state = parseRalphStateFromContent(allocator, content);
-    try std.testing.expectEqual(Verdict.approve, state.verdict);
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
+    try std.testing.expectEqual(VerdictRaw.approve, state.review_verdict_raw);
+    try std.testing.expect(state.verdictSha() != null);
+    try std.testing.expectEqualStrings("deadbeef", state.verdictSha().?);
+    try std.testing.expect(state.inFlightJobId() == null);
 }
 
-test "parseRalphStateFromContent resolves reject verdict" {
-    const allocator = std.testing.allocator;
+test "parseRalphStateFromContent parses reject verdict" {
     const content =
-        \\{"version":3,"strategy":"review","active":true,
-        \\"review_verdict":"reject","review_in_flight_job_id":null}
+        \\{"version":3,"active":true,"review_verdict":"reject","review_verdict_sha":"abc"}
     ;
-    const state = parseRalphStateFromContent(allocator, content);
-    try std.testing.expectEqual(Verdict.reject, state.verdict);
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
+    try std.testing.expectEqual(VerdictRaw.reject, state.review_verdict_raw);
 }
 
-test "parseRalphStateFromContent in-flight beats stored verdict" {
-    // Real-world race: a new review worker started while a prior verdict is still on disk.
-    // The worker clears review_in_flight_job_id only after writing the new verdict,
-    // so in-flight always wins.
-    const allocator = std.testing.allocator;
+test "parseRalphStateFromContent parses in-flight job id" {
     const content =
-        \\{"version":3,"strategy":"review","active":true,
-        \\"review_verdict":"approve","review_verdict_sha":"deadbeef",
-        \\"review_in_flight_job_id":"review-1776040657173-2j38kp"}
+        \\{"version":3,"active":true,"review_in_flight_job_id":"review-123-abc"}
     ;
-    const state = parseRalphStateFromContent(allocator, content);
-    try std.testing.expectEqual(Verdict.in_flight, state.verdict);
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
+    try std.testing.expect(state.inFlightJobId() != null);
+    try std.testing.expectEqualStrings("review-123-abc", state.inFlightJobId().?);
 }
 
-test "parseRalphStateFromContent treats empty in-flight job id as not in flight" {
-    const allocator = std.testing.allocator;
-    const content =
-        \\{"active":true,"review_verdict":"approve","review_in_flight_job_id":""}
-    ;
-    const state = parseRalphStateFromContent(allocator, content);
-    try std.testing.expectEqual(Verdict.approve, state.verdict);
+test "parseRalphStateFromContent treats empty in-flight job id as absent" {
+    const content = "{\"active\":true,\"review_in_flight_job_id\":\"\"}";
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
+    try std.testing.expect(state.inFlightJobId() == null);
 }
 
-test "parseRalphStateFromContent with research metric" {
-    const allocator = std.testing.allocator;
+test "parseRalphStateFromContent parses research metric + direction" {
     const content =
         \\{"version":3,"strategy":"research","active":true,"iteration":5,"max_iterations":30,
         \\"metric_name":"accuracy","metric_direction":"maximize","best_metric_value":0.8231}
     ;
-    const state = parseRalphStateFromContent(allocator, content);
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
     try std.testing.expectEqual(Strategy.research, state.strategy);
     try std.testing.expect(state.best_metric_value != null);
     try std.testing.expectApproxEqAbs(@as(f64, 0.8231), state.best_metric_value.?, 0.0001);
+    try std.testing.expectEqual(MetricDirection.maximize, state.metric_direction);
+}
+
+test "parseRalphStateFromContent parses minimize direction" {
+    const content = "{\"strategy\":\"research\",\"metric_direction\":\"minimize\"}";
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
+    try std.testing.expectEqual(MetricDirection.minimize, state.metric_direction);
+}
+
+test "parseRalphStateFromContent parses terminal-state flags" {
+    const content = "{\"active\":true,\"completion_claimed\":true,\"blocked_claimed\":true}";
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
+    try std.testing.expect(state.completion_claimed);
+    try std.testing.expect(state.blocked_claimed);
+}
+
+test "parseRalphStateFromContent parses iteration_start_ms" {
+    const content = "{\"active\":true,\"iteration_start_ms\":1776040656906}";
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
+    try std.testing.expect(state.iteration_start_ms != null);
+    try std.testing.expectEqual(@as(i64, 1776040656906), state.iteration_start_ms.?);
 }
 
 test "parseRalphStateFromContent captures stale schema version" {
-    const allocator = std.testing.allocator;
-    const content =
-        \\{"version":2,"active":true,"iteration":1}
-    ;
-    const state = parseRalphStateFromContent(allocator, content);
-    // Parse still succeeds — drift detection happens in the debug-log branch, not the render path.
+    const content = "{\"version\":2,\"active\":true,\"iteration\":1}";
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
     try std.testing.expect(state.active);
     try std.testing.expectEqual(@as(?u32, 2), state.version);
+}
+
+test "parseRalphStateFromContent handles real-world state.json shape" {
+    // Actual payload observed in ~/0xbigboss/rl/.rl/state.json on 2026-04-13.
+    const content =
+        \\{"version":3,"strategy":"review","active":true,"iteration":0,"max_iterations":30,
+        \\"timestamp":"2026-04-13T01:07:58Z","review_enabled":true,"review_count":0,
+        \\"max_review_cycles":30,"debug":false,"review_verdict":"reject",
+        \\"review_verdict_sha":"8bc2c48697d39eb0488b64ddd00f7a0a3bcdcd64",
+        \\"review_verdict_ts":"2026-04-13T01:09:44.749Z",
+        \\"review_verdict_job_id":"review-1776042481651-abccbr",
+        \\"review_in_flight_job_id":null,"iteration_start_ms":1776042478932,
+        \\"iteration_start_sha":"8bc2c48","blocked_claimed":true}
+    ;
+    const state = parseRalphStateFromContent(std.testing.allocator, content);
+    try std.testing.expect(state.active);
+    try std.testing.expectEqual(Strategy.review, state.strategy);
+    try std.testing.expectEqual(VerdictRaw.reject, state.review_verdict_raw);
+    try std.testing.expect(state.blocked_claimed);
+    try std.testing.expect(state.verdictSha() != null);
+    try std.testing.expectEqualStrings("8bc2c48697d39eb0488b64ddd00f7a0a3bcdcd64", state.verdictSha().?);
+    try std.testing.expect(state.inFlightJobId() == null);
+    try std.testing.expect(state.iteration_start_ms != null);
 }
 
 test "formatIdleSince returns false without session_id" {
