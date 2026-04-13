@@ -22,6 +22,22 @@ const colors = struct {
     const bg_reset = "\x1b[49m"; // Reset background only
 };
 
+/// Statusline-segment glyphs grouped for grepability
+const glyphs = struct {
+    // Strategy glyphs — rl loop type indicator
+    const ralph = "🔁";
+    const review = "🧪";
+    const research = "🔬";
+    // Review sub-counter (counts confirmed-reject verdicts vs max_review_cycles)
+    const counter = "🔍";
+    // Verdict / in-flight state glyphs
+    const in_flight = "⏳";
+    const approve = "✅";
+    const reject = "❌";
+    // Research metric (★{best_metric_value})
+    const metric = "★";
+};
+
 /// Current context usage token counts - added in v2.0.70
 /// Provides accurate per-message token counts for context window calculation
 const CurrentUsage = struct {
@@ -218,63 +234,96 @@ fn progressColor(current: u32, max: u32) []const u8 {
     }
 }
 
-/// Ralph Reviewed loop state
+/// rl loop strategy — matches `strategy` field in .rl/state.json v3
+const Strategy = enum {
+    ralph,
+    review,
+    research,
+    unknown,
+
+    fn fromString(s: []const u8) Strategy {
+        if (std.mem.eql(u8, s, "ralph")) return .ralph;
+        if (std.mem.eql(u8, s, "review")) return .review;
+        if (std.mem.eql(u8, s, "research")) return .research;
+        return .unknown;
+    }
+
+    fn glyph(self: Strategy) []const u8 {
+        return switch (self) {
+            // Legacy fallback: older state files without strategy were ralph-style loops
+            .ralph, .unknown => glyphs.ralph,
+            .review => glyphs.review,
+            .research => glyphs.research,
+        };
+    }
+};
+
+/// Derived verdict state for the rl segment tail glyph.
+/// Precedence (resolved at parse time): in_flight > approve > reject > none.
+/// Rationale: a running review worker supersedes any stored verdict from a prior round
+/// by construction — the worker clears `review_in_flight_job_id` only after writing the
+/// new verdict (see ~/0xbigboss/rl/SPEC.md REQ-RL-093).
+const Verdict = enum {
+    none,
+    in_flight,
+    approve,
+    reject,
+};
+
+/// rl loop state — read from .rl/state.json (v3 schema, rl 1.0+)
 const RalphState = struct {
     active: bool = false,
+    strategy: Strategy = .unknown,
     iteration: u32 = 0,
     max_iterations: u32 = 50,
     review_enabled: bool = false,
     review_count: u32 = 0,
     max_review_cycles: u32 = 10,
+    verdict: Verdict = .none,
+    best_metric_value: ?f64 = null,
+    /// Schema version from the `version` field, if present. Consumers use this for
+    /// debug-mode drift detection only; rendering never branches on it.
+    version: ?u32 = null,
 
-    /// Format Ralph status for statusline display
-    /// Returns true if something was written
+    /// Format rl loop status for statusline display.
+    /// Returns true if something was written.
     fn format(self: RalphState, writer: anytype) !bool {
         if (!self.active) return false;
 
-        // Iteration display: 🔄 N/M
-        const iter_color = progressColor(self.iteration, self.max_iterations);
-        try writer.print(" 🔄 {s}{d}/{d}{s}", .{
-            iter_color,
+        // Strategy glyph + iteration counter
+        try writer.print(" {s} {s}{d}/{d}{s}", .{
+            self.strategy.glyph(),
+            progressColor(self.iteration, self.max_iterations),
             self.iteration,
             self.max_iterations,
             colors.reset,
         });
 
-        // Review display: 🔍 N/M (only if enabled)
+        // Research strategy: no review gating; optionally show best metric value
+        if (self.strategy == .research) {
+            if (self.best_metric_value) |v| {
+                try writer.print(" {s}{d:.3}", .{ glyphs.metric, v });
+            }
+            return true;
+        }
+
+        // Ralph / review strategies: review sub-counter + verdict tail glyph
         if (self.review_enabled) {
-            const rev_color = progressColor(self.review_count, self.max_review_cycles);
-            try writer.print(" 🔍 {s}{d}/{d}{s}", .{
-                rev_color,
+            try writer.print(" {s} {s}{d}/{d}{s}", .{
+                glyphs.counter,
+                progressColor(self.review_count, self.max_review_cycles),
                 self.review_count,
                 self.max_review_cycles,
                 colors.reset,
             });
+
+            switch (self.verdict) {
+                .none => {},
+                .in_flight => try writer.print(" {s}", .{glyphs.in_flight}),
+                .approve => try writer.print(" {s}", .{glyphs.approve}),
+                .reject => try writer.print(" {s}", .{glyphs.reject}),
+            }
         }
-
-        return true;
-    }
-};
-
-/// Codex Reviewer state (standalone review gate, not part of Ralph loop)
-const CodexReviewState = struct {
-    active: bool = false,
-    review_count: u32 = 0,
-    max_review_cycles: u32 = 10,
-
-    /// Format Codex review status for statusline display
-    /// Returns true if something was written
-    fn format(self: CodexReviewState, writer: anytype) !bool {
-        if (!self.active) return false;
-
-        // Review display: 🔎 N/M (left-tilted magnifying glass for Codex, distinct from Ralph's 🔍)
-        const rev_color = progressColor(self.review_count, self.max_review_cycles);
-        try writer.print(" 🔎 {s}{d}/{d}{s}", .{
-            rev_color,
-            self.review_count,
-            self.max_review_cycles,
-            colors.reset,
-        });
 
         return true;
     }
@@ -799,44 +848,70 @@ fn parseYamlInt(line: []const u8, key: []const u8) ?u32 {
     return std.fmt.parseInt(u32, value, 10) catch null;
 }
 
-/// Parse Ralph state from JSON content string
-/// Exposed for testing; returns default RalphState if parsing fails
-fn parseRalphStateFromContent(content: []const u8) RalphState {
+/// Parse rl loop state from JSON content string.
+/// Exposed for testing. Returns default (inactive) RalphState if parsing fails.
+/// The caller-supplied `allocator` is used for all JSON allocations.
+fn parseRalphStateFromContent(allocator: Allocator, content: []const u8) RalphState {
     var state = RalphState{};
 
-    // Use std.json to parse the JSON state file
+    // Mirror of .rl/state.json v3 — all fields optional so unknown/absent keys
+    // degrade gracefully. See ~/0xbigboss/rl/SPEC.md:387 for the authoritative schema.
     const JsonState = struct {
+        version: ?u32 = null,
+        strategy: ?[]const u8 = null,
         active: ?bool = null,
         iteration: ?u32 = null,
         max_iterations: ?u32 = null,
         review_enabled: ?bool = null,
         review_count: ?u32 = null,
         max_review_cycles: ?u32 = null,
+        review_verdict: ?[]const u8 = null,
+        review_in_flight_job_id: ?[]const u8 = null,
+        best_metric_value: ?f64 = null,
     };
 
-    const parsed = std.json.parseFromSlice(JsonState, std.heap.page_allocator, content, .{
+    const parsed = std.json.parseFromSlice(JsonState, allocator, content, .{
         .ignore_unknown_fields = true,
     }) catch return state;
     defer parsed.deinit();
 
     const v = parsed.value;
+    if (v.version) |ver| state.version = ver;
     if (v.active) |a| state.active = a;
     if (v.iteration) |i| state.iteration = i;
     if (v.max_iterations) |m| state.max_iterations = m;
     if (v.review_enabled) |r| state.review_enabled = r;
     if (v.review_count) |r| state.review_count = r;
     if (v.max_review_cycles) |m| state.max_review_cycles = m;
+    if (v.best_metric_value) |b| state.best_metric_value = b;
+    if (v.strategy) |s| state.strategy = Strategy.fromString(s);
+
+    // Verdict precedence: a running worker always supersedes a stored verdict
+    // (the worker clears review_in_flight_job_id only after writing the new verdict,
+    // so a non-null job id means the prior verdict is stale-by-construction).
+    if (v.review_in_flight_job_id) |id| {
+        if (id.len > 0) state.verdict = .in_flight;
+    }
+    if (state.verdict == .none) {
+        if (v.review_verdict) |verdict| {
+            if (std.mem.eql(u8, verdict, "approve")) {
+                state.verdict = .approve;
+            } else if (std.mem.eql(u8, verdict, "reject")) {
+                state.verdict = .reject;
+            }
+        }
+    }
 
     return state;
 }
 
-/// Parse Ralph loop state from state file at git root
+/// Parse rl loop state from .rl/state.json at git root.
+/// Returns default (inactive) state on any I/O or parse failure.
 fn parseRalphState(allocator: Allocator, git_root: []const u8) RalphState {
-    // Construct path: {git_root}/.rl/state.json
     const path = std.fmt.allocPrint(allocator, "{s}/.rl/state.json", .{git_root}) catch return RalphState{};
     defer allocator.free(path);
 
-    // Read first 4KB - JSON state file should be well under this
+    // 4 KiB cap: observed state.json files are <1 KiB; 4 KiB gives 4x headroom.
     const file = std.fs.cwd().openFile(path, .{}) catch return RalphState{};
     defer file.close();
 
@@ -844,54 +919,22 @@ fn parseRalphState(allocator: Allocator, git_root: []const u8) RalphState {
     const bytes_read = file.read(&buf) catch return RalphState{};
     if (bytes_read == 0) return RalphState{};
 
-    return parseRalphStateFromContent(buf[0..bytes_read]);
+    return parseRalphStateFromContent(allocator, buf[0..bytes_read]);
 }
 
-/// Parse Codex review state from file content string (YAML frontmatter)
-/// Exposed for testing; returns default CodexReviewState if parsing fails
-fn parseCodexReviewStateFromContent(content: []const u8) CodexReviewState {
-    var state = CodexReviewState{};
-
-    // Must start with ---
-    if (!std.mem.startsWith(u8, content, "---")) return state;
-    const after_first = content[3..];
-    // Skip newline after first ---
-    const start_idx: usize = if (after_first.len > 0 and after_first[0] == '\n') 1 else 0;
-
-    // Find closing --- if present, otherwise parse what we have
-    const frontmatter = if (std.mem.indexOf(u8, after_first[start_idx..], "\n---")) |end_idx|
-        after_first[start_idx..][0..end_idx]
-    else
-        after_first[start_idx..];
-
-    // Parse lines until we hit closing delimiter or exhaust content
-    var lines = std.mem.splitScalar(u8, frontmatter, '\n');
-    while (lines.next()) |line| {
-        const trimmed = std.mem.trim(u8, line, " \t\r");
-        if (std.mem.eql(u8, trimmed, "---")) break;
-        if (parseYamlBool(trimmed, "active:")) |v| state.active = v;
-        if (parseYamlInt(trimmed, "review_count:")) |v| state.review_count = v;
-        if (parseYamlInt(trimmed, "max_review_cycles:")) |v| state.max_review_cycles = v;
-    }
-
-    return state;
-}
-
-/// Parse Codex review state from state file at git root
-fn parseCodexReviewState(allocator: Allocator, git_root: []const u8) CodexReviewState {
-    // Construct path: {git_root}/.claude/codex-review.local.md
-    const path = std.fmt.allocPrint(allocator, "{s}/.claude/codex-review.local.md", .{git_root}) catch return CodexReviewState{};
-    defer allocator.free(path);
-
-    // Read only first 2KB - our fields (active, review_count, etc.) are at the top
-    const file = std.fs.cwd().openFile(path, .{}) catch return CodexReviewState{};
+/// Append a single timestamped line to /tmp/statusline-debug.log.
+/// Best-effort: all failure modes are swallowed so debug logging never affects rendering.
+fn appendDebugLog(comptime fmt: []const u8, args: anytype) void {
+    const file = std.fs.cwd().createFile("/tmp/statusline-debug.log", .{ .truncate = false }) catch return;
     defer file.close();
-
-    var buf: [2048]u8 = undefined;
-    const bytes_read = file.read(&buf) catch return CodexReviewState{};
-    if (bytes_read == 0) return CodexReviewState{};
-
-    return parseCodexReviewStateFromContent(buf[0..bytes_read]);
+    file.seekFromEnd(0) catch return;
+    var file_buffer: [512]u8 = undefined;
+    var file_writer = file.writerStreaming(&file_buffer);
+    const writer = &file_writer.interface;
+    const timestamp = std.time.timestamp();
+    writer.print("[{d}] ", .{timestamp}) catch return;
+    writer.print(fmt ++ "\n", args) catch return;
+    writer.flush() catch return;
 }
 
 pub fn main() !void {
@@ -1019,18 +1062,25 @@ pub fn main() !void {
             try writer.print("{s}", .{colors.reset});
         }
 
-        // Add Ralph loop and Codex review status if active (only in git repos)
+        // Add rl loop segment if active (only in git repos)
         if (is_git) {
             if (try getGitRoot(allocator, current_dir.?)) |git_root| {
                 defer allocator.free(git_root);
 
-                // Ralph loop status (iterations + optional review count)
                 const ralph_state = parseRalphState(allocator, git_root);
-                _ = try ralph_state.format(writer);
 
-                // Codex review status (standalone review gate)
-                const codex_state = parseCodexReviewState(allocator, git_root);
-                _ = try codex_state.format(writer);
+                // Debug-mode drift detector (REQ-SL-038): warn when the state file
+                // carries a schema version we don't know about. Render still proceeds
+                // with legacy defaults — never fail a render on drift.
+                if (debug_mode) {
+                    if (ralph_state.version) |v| {
+                        if (v != 3) {
+                            appendDebugLog("rl state schema version {d} != 3 — rendering with legacy defaults", .{v});
+                        }
+                    }
+                }
+
+                _ = try ralph_state.format(writer);
             }
         }
     }
@@ -1715,7 +1765,7 @@ test "RalphState format inactive returns false" {
     try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
 }
 
-test "RalphState format active shows iteration" {
+test "RalphState format active shows iteration with default ralph glyph" {
     const state = RalphState{
         .active = true,
         .iteration = 3,
@@ -1729,18 +1779,23 @@ test "RalphState format active shows iteration" {
     const result = try state.format(writer);
     try std.testing.expect(result);
     const output = stream.getWritten();
-    // Should contain the loop emoji and iteration count
-    try std.testing.expect(std.mem.indexOf(u8, output, "🔄") != null);
+    // Default strategy (.unknown) renders the ralph glyph
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.ralph) != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "3/50") != null);
-    // Should contain green color (3/50 = 6% < 50%)
+    // 3/50 = 6% → green
     try std.testing.expect(std.mem.indexOf(u8, output, colors.green) != null);
-    // Should NOT contain review emoji
-    try std.testing.expect(std.mem.indexOf(u8, output, "🔍") == null);
+    // Review sub-counter is suppressed when review_enabled = false
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) == null);
+    // No verdict glyph either
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.in_flight) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) == null);
 }
 
-test "RalphState format active with reviews" {
+test "RalphState format active with reviews, no verdict" {
     const state = RalphState{
         .active = true,
+        .strategy = .ralph,
         .iteration = 5,
         .max_iterations = 30,
         .review_enabled = true,
@@ -1754,13 +1809,160 @@ test "RalphState format active with reviews" {
     const result = try state.format(writer);
     try std.testing.expect(result);
     const output = stream.getWritten();
-    // Should contain both emojis and counts
-    try std.testing.expect(std.mem.indexOf(u8, output, "🔄") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.ralph) != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "5/30") != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "🔍") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "2/5") != null);
-    // Should contain green for iteration (5/30 = 16%) and yellow for review (2/5 = 40%)
     try std.testing.expect(std.mem.indexOf(u8, output, colors.green) != null);
+    // No verdict glyph when verdict == .none
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.in_flight) == null);
+}
+
+test "RalphState strategy glyphs" {
+    const cases = [_]struct { s: Strategy, expected: []const u8 }{
+        .{ .s = .ralph, .expected = glyphs.ralph },
+        .{ .s = .review, .expected = glyphs.review },
+        .{ .s = .research, .expected = glyphs.research },
+        .{ .s = .unknown, .expected = glyphs.ralph }, // legacy fallback
+    };
+    for (cases) |tc| {
+        try std.testing.expectEqualStrings(tc.expected, tc.s.glyph());
+    }
+}
+
+test "Strategy.fromString maps known values" {
+    try std.testing.expectEqual(Strategy.ralph, Strategy.fromString("ralph"));
+    try std.testing.expectEqual(Strategy.review, Strategy.fromString("review"));
+    try std.testing.expectEqual(Strategy.research, Strategy.fromString("research"));
+    try std.testing.expectEqual(Strategy.unknown, Strategy.fromString("nonsense"));
+    try std.testing.expectEqual(Strategy.unknown, Strategy.fromString(""));
+}
+
+test "RalphState format review strategy with approve verdict" {
+    const state = RalphState{
+        .active = true,
+        .strategy = .review,
+        .iteration = 1,
+        .max_iterations = 30,
+        .review_enabled = true,
+        .review_count = 0,
+        .max_review_cycles = 30,
+        .verdict = .approve,
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+    _ = try state.format(writer);
+    const output = stream.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.review) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) == null);
+}
+
+test "RalphState format review strategy with reject verdict" {
+    const state = RalphState{
+        .active = true,
+        .strategy = .review,
+        .iteration = 2,
+        .max_iterations = 30,
+        .review_enabled = true,
+        .review_count = 1,
+        .max_review_cycles = 30,
+        .verdict = .reject,
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+    _ = try state.format(writer);
+    const output = stream.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.reject) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
+}
+
+test "RalphState format in-flight glyph when worker running" {
+    const state = RalphState{
+        .active = true,
+        .strategy = .review,
+        .iteration = 1,
+        .max_iterations = 30,
+        .review_enabled = true,
+        .review_count = 0,
+        .max_review_cycles = 30,
+        .verdict = .in_flight,
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+    _ = try state.format(writer);
+    const output = stream.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.in_flight) != null);
+    // Precedence: in-flight wins over any stored verdict (verified at parse time)
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
+}
+
+test "RalphState format review strategy suppresses verdict when review_enabled is false" {
+    // A review-strategy loop with review_enabled explicitly false should not render
+    // the review sub-counter or a verdict glyph.
+    const state = RalphState{
+        .active = true,
+        .strategy = .review,
+        .iteration = 1,
+        .max_iterations = 30,
+        .review_enabled = false,
+        .verdict = .approve,
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+    _ = try state.format(writer);
+    const output = stream.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.review) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
+}
+
+test "RalphState format research strategy without metric" {
+    const state = RalphState{
+        .active = true,
+        .strategy = .research,
+        .iteration = 5,
+        .max_iterations = 30,
+        .review_enabled = true, // should be ignored for research
+        .review_count = 3,
+        .max_review_cycles = 10,
+        .verdict = .approve, // should be ignored for research
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+    _ = try state.format(writer);
+    const output = stream.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.research) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "5/30") != null);
+    // Research hides review counter, verdict glyphs, and metric
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.counter) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.approve) == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.metric) == null);
+}
+
+test "RalphState format research strategy with best metric value" {
+    const state = RalphState{
+        .active = true,
+        .strategy = .research,
+        .iteration = 5,
+        .max_iterations = 30,
+        .best_metric_value = 0.823,
+    };
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+    _ = try state.format(writer);
+    const output = stream.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.research) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, glyphs.metric) != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "0.823") != null);
 }
 
 test "parseYamlBool function" {
@@ -1779,174 +1981,132 @@ test "parseYamlInt function" {
     try std.testing.expect(parseYamlInt("other: 50", "iteration:") == null);
 }
 
-test "parseRalphStateFromContent with valid JSON" {
+test "parseRalphStateFromContent with valid v3 JSON" {
+    const allocator = std.testing.allocator;
     const content =
-        \\{"active":true,"iteration":5,"max_iterations":30,"review_enabled":true,"review_count":2,"max_review_cycles":10}
+        \\{"version":3,"strategy":"review","active":true,"iteration":5,"max_iterations":30,"review_enabled":true,"review_count":2,"max_review_cycles":10}
     ;
 
-    const state = parseRalphStateFromContent(content);
+    const state = parseRalphStateFromContent(allocator, content);
     try std.testing.expect(state.active);
     try std.testing.expectEqual(@as(u32, 5), state.iteration);
     try std.testing.expectEqual(@as(u32, 30), state.max_iterations);
     try std.testing.expect(state.review_enabled);
     try std.testing.expectEqual(@as(u32, 2), state.review_count);
     try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
+    try std.testing.expectEqual(Strategy.review, state.strategy);
+    try std.testing.expectEqual(@as(?u32, 3), state.version);
+    try std.testing.expectEqual(Verdict.none, state.verdict);
 }
 
 test "parseRalphStateFromContent with partial fields" {
+    const allocator = std.testing.allocator;
     const content =
         \\{"active":true,"iteration":3}
     ;
 
-    const state = parseRalphStateFromContent(content);
+    const state = parseRalphStateFromContent(allocator, content);
     try std.testing.expect(state.active);
     try std.testing.expectEqual(@as(u32, 3), state.iteration);
-    // Defaults should be used for missing fields
+    // Defaults for missing fields
     try std.testing.expectEqual(@as(u32, 50), state.max_iterations);
     try std.testing.expect(!state.review_enabled);
     try std.testing.expectEqual(@as(u32, 0), state.review_count);
     try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
+    try std.testing.expectEqual(Strategy.unknown, state.strategy);
+    try std.testing.expectEqual(@as(?u32, null), state.version);
 }
 
 test "parseRalphStateFromContent with invalid JSON" {
-    const content = "# Just markdown, not JSON";
-
-    const state = parseRalphStateFromContent(content);
-    // Should return defaults
+    const allocator = std.testing.allocator;
+    const state = parseRalphStateFromContent(allocator, "# Just markdown, not JSON");
     try std.testing.expect(!state.active);
     try std.testing.expectEqual(@as(u32, 0), state.iteration);
 }
 
 test "parseRalphStateFromContent with empty content" {
-    const state = parseRalphStateFromContent("");
+    const allocator = std.testing.allocator;
+    const state = parseRalphStateFromContent(allocator, "");
     try std.testing.expect(!state.active);
 }
 
-test "parseRalphStateFromContent with extra fields ignored" {
+test "parseRalphStateFromContent ignores extra fields" {
+    const allocator = std.testing.allocator;
     const content =
         \\{"active":true,"iteration":7,"unknown_field":"some_value","completion_promise":"COMPLETE","timestamp":"2025-01-01T00:00:00Z"}
     ;
 
-    const state = parseRalphStateFromContent(content);
+    const state = parseRalphStateFromContent(allocator, content);
     try std.testing.expect(state.active);
     try std.testing.expectEqual(@as(u32, 7), state.iteration);
-    // Should not crash on unknown fields
 }
 
-test "CodexReviewState default values" {
-    const state = CodexReviewState{};
-    try std.testing.expect(!state.active);
-    try std.testing.expectEqual(@as(u32, 0), state.review_count);
-    try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
-}
-
-test "CodexReviewState format inactive returns false" {
-    const state = CodexReviewState{ .active = false };
-    var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-
-    const result = try state.format(writer);
-    try std.testing.expect(!result);
-    try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
-}
-
-test "CodexReviewState format active shows review count" {
-    const state = CodexReviewState{
-        .active = true,
-        .review_count = 2,
-        .max_review_cycles = 5,
-    };
-    var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-
-    const result = try state.format(writer);
-    try std.testing.expect(result);
-    const output = stream.getWritten();
-    // Should contain the magnifying glass emoji and review count
-    try std.testing.expect(std.mem.indexOf(u8, output, "🔎") != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "2/5") != null);
-    // Should contain green color (2/5 = 40% < 50%)
-    try std.testing.expect(std.mem.indexOf(u8, output, colors.green) != null);
-}
-
-test "CodexReviewState format with high review count shows yellow" {
-    const state = CodexReviewState{
-        .active = true,
-        .review_count = 3,
-        .max_review_cycles = 5,
-    };
-    var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-
-    const result = try state.format(writer);
-    try std.testing.expect(result);
-    const output = stream.getWritten();
-    // 3/5 = 60% should be yellow (50-80% range)
-    try std.testing.expect(std.mem.indexOf(u8, output, colors.yellow) != null);
-}
-
-test "CodexReviewState format with critical review count shows red" {
-    const state = CodexReviewState{
-        .active = true,
-        .review_count = 4,
-        .max_review_cycles = 5,
-    };
-    var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
-
-    const result = try state.format(writer);
-    try std.testing.expect(result);
-    const output = stream.getWritten();
-    // 4/5 = 80% should be red (80-100% range)
-    try std.testing.expect(std.mem.indexOf(u8, output, colors.red) != null);
-}
-
-test "parseCodexReviewStateFromContent with valid frontmatter" {
+test "parseRalphStateFromContent resolves approve verdict" {
+    const allocator = std.testing.allocator;
     const content =
-        \\---
-        \\active: true
-        \\review_count: 3
-        \\max_review_cycles: 10
-        \\---
-        \\# Some markdown content
+        \\{"version":3,"strategy":"review","active":true,"iteration":1,"max_iterations":30,
+        \\"review_enabled":true,"review_count":0,"max_review_cycles":30,
+        \\"review_verdict":"approve","review_verdict_sha":"deadbeef",
+        \\"review_in_flight_job_id":null}
     ;
-
-    const state = parseCodexReviewStateFromContent(content);
-    try std.testing.expect(state.active);
-    try std.testing.expectEqual(@as(u32, 3), state.review_count);
-    try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
+    const state = parseRalphStateFromContent(allocator, content);
+    try std.testing.expectEqual(Verdict.approve, state.verdict);
 }
 
-test "parseCodexReviewStateFromContent with partial fields" {
+test "parseRalphStateFromContent resolves reject verdict" {
+    const allocator = std.testing.allocator;
     const content =
-        \\---
-        \\active: true
-        \\review_count: 2
-        \\---
+        \\{"version":3,"strategy":"review","active":true,
+        \\"review_verdict":"reject","review_in_flight_job_id":null}
     ;
+    const state = parseRalphStateFromContent(allocator, content);
+    try std.testing.expectEqual(Verdict.reject, state.verdict);
+}
 
-    const state = parseCodexReviewStateFromContent(content);
+test "parseRalphStateFromContent in-flight beats stored verdict" {
+    // Real-world race: a new review worker started while a prior verdict is still on disk.
+    // The worker clears review_in_flight_job_id only after writing the new verdict,
+    // so in-flight always wins.
+    const allocator = std.testing.allocator;
+    const content =
+        \\{"version":3,"strategy":"review","active":true,
+        \\"review_verdict":"approve","review_verdict_sha":"deadbeef",
+        \\"review_in_flight_job_id":"review-1776040657173-2j38kp"}
+    ;
+    const state = parseRalphStateFromContent(allocator, content);
+    try std.testing.expectEqual(Verdict.in_flight, state.verdict);
+}
+
+test "parseRalphStateFromContent treats empty in-flight job id as not in flight" {
+    const allocator = std.testing.allocator;
+    const content =
+        \\{"active":true,"review_verdict":"approve","review_in_flight_job_id":""}
+    ;
+    const state = parseRalphStateFromContent(allocator, content);
+    try std.testing.expectEqual(Verdict.approve, state.verdict);
+}
+
+test "parseRalphStateFromContent with research metric" {
+    const allocator = std.testing.allocator;
+    const content =
+        \\{"version":3,"strategy":"research","active":true,"iteration":5,"max_iterations":30,
+        \\"metric_name":"accuracy","metric_direction":"maximize","best_metric_value":0.8231}
+    ;
+    const state = parseRalphStateFromContent(allocator, content);
+    try std.testing.expectEqual(Strategy.research, state.strategy);
+    try std.testing.expect(state.best_metric_value != null);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.8231), state.best_metric_value.?, 0.0001);
+}
+
+test "parseRalphStateFromContent captures stale schema version" {
+    const allocator = std.testing.allocator;
+    const content =
+        \\{"version":2,"active":true,"iteration":1}
+    ;
+    const state = parseRalphStateFromContent(allocator, content);
+    // Parse still succeeds — drift detection happens in the debug-log branch, not the render path.
     try std.testing.expect(state.active);
-    try std.testing.expectEqual(@as(u32, 2), state.review_count);
-    // Default should be used for missing max_review_cycles
-    try std.testing.expectEqual(@as(u32, 10), state.max_review_cycles);
-}
-
-test "parseCodexReviewStateFromContent with no frontmatter" {
-    const content = "# Just markdown, no frontmatter";
-
-    const state = parseCodexReviewStateFromContent(content);
-    try std.testing.expect(!state.active);
-    try std.testing.expectEqual(@as(u32, 0), state.review_count);
-}
-
-test "parseCodexReviewStateFromContent with empty content" {
-    const state = parseCodexReviewStateFromContent("");
-    try std.testing.expect(!state.active);
+    try std.testing.expectEqual(@as(?u32, 2), state.version);
 }
 
 test "formatIdleSince returns false without session_id" {
