@@ -238,7 +238,35 @@ Consequence: `iteration_start_ms` encodes "rl init time", not "current iteration
 
   When rl adds a new branch or changes an existing `stateUpdates` block, the corresponding fixture must be updated. That turns the implicit coupling into an explicit contract.
 
-- **REQ-SL-069** (glyph namespace additions): `glyphs` gains `completion` (`🏁`), `blocked` (`🚧`), `arrow_up` (`↑`), `arrow_down` (`↓`). Existing glyphs unchanged.
+- **REQ-SL-069** (glyph namespace additions): `glyphs` gains `completion` (`🏁`), `blocked` (`🚧`), `arrow_up` (`↑`), `arrow_down` (`↓`), `impl` (`🔨`). Existing glyphs unchanged.
+
+- **REQ-SL-070** (impl-worker visibility): `rl implement start` spawns a detached worker that does NOT touch `state.json` and does NOT require an active rl loop — observed against `~/0xbigboss/0xsend/canton-monorepo.worktrees/famo-gas-floor-ratchet` on 2026-04-13, where an impl worker was running against `.rl/jobs/impl-famo-gas-phase-1-schema-repo-tzzyst.json` with no state.json present. The statusline emits a trailing ` 🔨` whenever `hasRunningImplJob(allocator, git_root)` returns true.
+
+  Detection procedure (`hasRunningImplJob`):
+  1. Open `{git_root}/.rl/jobs/` as an iterable directory. Missing directory → return false.
+  2. Iterate entries with a hard cap of 100 (prevents pathological cost in workspaces with many historical jobs).
+  3. For each entry whose name starts with `impl-` AND ends with `.json`:
+     - Read up to 4 KiB from the file
+     - Parse the `status` field via `parseJobStatusFromContent`
+     - If status is `queued` or `running` → return true (short-circuit)
+  4. If no running impl job found → return false.
+
+  The impl glyph renders at the tail of the rl segment area, emitted by a sibling function (`formatImplWorker`) called after `RalphState.format` — deliberately independent of loop state so an impl worker is visible even when no loop is initialized. When the rl segment also renders, the glyphs concatenate naturally:
+
+  ```
+  # rl 1.1 loop + impl worker running
+  🧪 🔍 2/30 ⏳ 🔨 +1h
+
+  # no state.json, just an impl worker
+  ~/foo/bar [main] 🔨
+
+  # ralph loop + impl worker
+  🔁 5/30 🔍 0/10 🔨 +30m
+  ```
+
+  Review-kind jobs (`review-*.json`) are explicitly ignored by the prefix filter — the rl segment already tracks review in-flight via `review_in_flight_job_id`. The impl glyph is strictly for the parallel impl-worker track introduced in rl 1.1.
+
+- **REQ-SL-071** (acceptance: impl glyph renders without state.json): The acceptance contract for REQ-SL-070 explicitly requires that the glyph renders in workspaces that have `.rl/jobs/impl-*.json` but NO `.rl/state.json`. Fixture tests cover this scenario.
 
 ### Other segments (captured for traceability)
 
@@ -275,6 +303,7 @@ rl 1.1 strategy-aware renderer (this change set — 2026-04-13):
 - [ ] `zig build test` passes with at least 60 tests total.
 - [ ] Live smoke passes against current `~/0xbigboss/rl` loop and `…/famo-classifier-alignment` loop — rendered segment matches what would be expected given each loop's live `state.json` + HEAD.
 - [ ] All existing non-rl tests remain green (no regression to path/git/model/gauge/cost/idle segments).
+- [x] Impl-worker visibility (REQ-SL-070): `hasRunningImplJob` scans `.rl/jobs/` for `impl-*.json` with status queued/running; renders `🔨` glyph independently of state.json. Tests cover: missing dir, queued/running/completed/failed/cancelled, review-kind job filter, non-json filter, prefix filter.
 
 ## Risk tags
 

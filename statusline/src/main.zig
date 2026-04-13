@@ -41,6 +41,8 @@ const glyphs = struct {
     // Terminal-state prefixes — loop is winding down, not actively iterating
     const completion = "🏁"; // completion_claimed: agent claims done, awaiting verdict/user
     const blocked = "🚧"; // blocked_claimed: loop marked blocked, next Stop cleans up
+    // Impl worker (rl 1.1): background `rl implement start` job, independent of loop state
+    const impl = "🔨";
 };
 
 /// Current context usage token counts - added in v2.0.70
@@ -1158,6 +1160,54 @@ fn getGitHead(allocator: Allocator, dir: []const u8) []const u8 {
     return execCommand(allocator, cmd, dir) catch "";
 }
 
+/// Scan `.rl/jobs/` for a currently-running `rl implement` worker. Returns true
+/// as soon as any file named `impl-*.json` reports status `queued` or `running`.
+///
+/// Implementation independent of state.json: `rl implement start` spawns a worker
+/// even when no rl loop is initialized, so the impl indicator must render on job
+/// presence alone. Iteration is bounded (max 100 entries) to keep the hot path
+/// predictable for long-running workspaces with many historical jobs.
+///
+/// Fail-closed on any filesystem or parse error: treat anything unexpected as
+/// "no running impl worker" rather than surfacing a misleading glyph.
+fn hasRunningImplJob(allocator: Allocator, git_root: []const u8) bool {
+    const dir_path = std.fmt.allocPrint(allocator, "{s}/.rl/jobs", .{git_root}) catch return false;
+    defer allocator.free(dir_path);
+
+    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return false;
+    defer dir.close();
+
+    var iter = dir.iterate();
+    var scanned: u32 = 0;
+    while (iter.next() catch null) |entry| {
+        if (scanned >= 100) break; // bounded scan
+        scanned += 1;
+
+        if (entry.kind != .file) continue;
+        if (!std.mem.startsWith(u8, entry.name, "impl-")) continue;
+        if (!std.mem.endsWith(u8, entry.name, ".json")) continue;
+
+        const file = dir.openFile(entry.name, .{}) catch continue;
+        defer file.close();
+
+        var buf: [4096]u8 = undefined;
+        const bytes_read = file.read(&buf) catch continue;
+        if (bytes_read == 0) continue;
+
+        const status = parseJobStatusFromContent(allocator, buf[0..bytes_read]);
+        if (status == .queued or status == .running) return true;
+    }
+    return false;
+}
+
+/// Emit the impl-worker indicator (` 🔨`) when at least one `rl implement` worker
+/// is running in this workspace. Returns true if anything was written.
+fn formatImplWorker(writer: anytype, allocator: Allocator, git_root: []const u8) !bool {
+    if (!hasRunningImplJob(allocator, git_root)) return false;
+    try writer.print(" {s}", .{glyphs.impl});
+    return true;
+}
+
 /// Format a loop age (in ms) as a compact ` +{N}{s|m|h|d}` string with color grading.
 /// Color thresholds: green <1h, yellow <4h, red ≥4h.
 fn formatLoopAge(writer: anytype, age_ms: i64) !void {
@@ -1353,6 +1403,11 @@ pub fn main() !void {
                 const git_head = getGitHead(allocator, current_dir.?);
                 const now_ms = std.time.milliTimestamp();
                 _ = try ralph_state.format(writer, allocator, git_root, git_head, now_ms);
+
+                // Impl-worker indicator (REQ-SL-070). Orthogonal to the rl segment —
+                // `rl implement start` spawns a worker even when no loop is active,
+                // so this check happens regardless of ralph_state.active.
+                _ = try formatImplWorker(writer, allocator, git_root);
             }
         }
     }
@@ -2531,6 +2586,131 @@ test "RalphState accessors return null for empty buffers" {
     const state = RalphState{};
     try std.testing.expect(state.verdictSha() == null);
     try std.testing.expect(state.inFlightJobId() == null);
+}
+
+// --- Impl-worker segment tests ---
+//
+// These exercise the filesystem-aware helper by constructing real temp directories
+// with fake job files. Fixture layout: tmpdir/.rl/jobs/<name>.json
+
+fn makeImplFixture(root: std.fs.Dir, subdir: []const u8) !std.fs.Dir {
+    root.makeDir(subdir) catch {};
+    var d = try root.openDir(subdir, .{});
+    errdefer d.close();
+    d.makePath(".rl/jobs") catch {};
+    return d;
+}
+
+fn writeFixtureJob(fixture: std.fs.Dir, name: []const u8, content: []const u8) !void {
+    const path = try std.fmt.allocPrint(std.testing.allocator, ".rl/jobs/{s}", .{name});
+    defer std.testing.allocator.free(path);
+    const file = try fixture.createFile(path, .{});
+    defer file.close();
+    try file.writeAll(content);
+}
+
+test "hasRunningImplJob returns false when .rl/jobs/ is missing" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+    try std.testing.expect(!hasRunningImplJob(std.testing.allocator, path));
+}
+
+test "hasRunningImplJob detects running impl job" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makePath(".rl/jobs");
+    try writeFixtureJob(tmp.dir, "impl-packet-abc.json", "{\"kind\":\"implement\",\"status\":\"running\"}");
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+    try std.testing.expect(hasRunningImplJob(std.testing.allocator, path));
+}
+
+test "hasRunningImplJob detects queued impl job" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makePath(".rl/jobs");
+    try writeFixtureJob(tmp.dir, "impl-queued.json", "{\"status\":\"queued\"}");
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+    try std.testing.expect(hasRunningImplJob(std.testing.allocator, path));
+}
+
+test "hasRunningImplJob ignores completed impl jobs" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makePath(".rl/jobs");
+    try writeFixtureJob(tmp.dir, "impl-done.json", "{\"status\":\"completed\"}");
+    try writeFixtureJob(tmp.dir, "impl-fail.json", "{\"status\":\"failed\"}");
+    try writeFixtureJob(tmp.dir, "impl-cancel.json", "{\"status\":\"cancelled\"}");
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+    try std.testing.expect(!hasRunningImplJob(std.testing.allocator, path));
+}
+
+test "hasRunningImplJob ignores review jobs" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makePath(".rl/jobs");
+    // A running review job should NOT trigger the impl glyph.
+    try writeFixtureJob(tmp.dir, "review-123-abc.json", "{\"status\":\"running\"}");
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+    try std.testing.expect(!hasRunningImplJob(std.testing.allocator, path));
+}
+
+test "hasRunningImplJob short-circuits on first running job" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makePath(".rl/jobs");
+    // Mixed — at least one running impl should return true.
+    try writeFixtureJob(tmp.dir, "impl-done-1.json", "{\"status\":\"completed\"}");
+    try writeFixtureJob(tmp.dir, "impl-running-2.json", "{\"status\":\"running\"}");
+    try writeFixtureJob(tmp.dir, "impl-done-3.json", "{\"status\":\"failed\"}");
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+    try std.testing.expect(hasRunningImplJob(std.testing.allocator, path));
+}
+
+test "hasRunningImplJob ignores non-json files and non-impl prefixes" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makePath(".rl/jobs");
+    // Files that should be skipped:
+    try writeFixtureJob(tmp.dir, "impl-running.txt", "{\"status\":\"running\"}"); // wrong extension
+    try writeFixtureJob(tmp.dir, "not-impl.json", "{\"status\":\"running\"}"); // wrong prefix
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+    try std.testing.expect(!hasRunningImplJob(std.testing.allocator, path));
+}
+
+test "formatImplWorker emits glyph when running job exists" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makePath(".rl/jobs");
+    try writeFixtureJob(tmp.dir, "impl-xyz.json", "{\"status\":\"running\"}");
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const wrote = try formatImplWorker(stream.writer(), std.testing.allocator, path);
+    try std.testing.expect(wrote);
+    try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), glyphs.impl) != null);
+}
+
+test "formatImplWorker writes nothing when no impl workers" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const wrote = try formatImplWorker(stream.writer(), std.testing.allocator, path);
+    try std.testing.expect(!wrote);
+    try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
 }
 
 test "parseYamlBool function" {
