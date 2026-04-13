@@ -78,7 +78,6 @@ Load relevant best-practices skills immediately when working with supported lang
 | Atlas (`atlas.hcl`, `.hcl` schema, Atlas CLI) | atlas-best-practices |
 | SPEC.md authoring | spec-best-practices |
 | Test design from specs | testing-best-practices |
-| Spec vs implementation drift | specalign |
 | Git operations | git-best-practices |
 
 ## Communication style
