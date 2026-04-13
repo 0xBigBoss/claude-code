@@ -48,7 +48,7 @@ Specs are freeform markdown. No rigid template, no YAML frontmatter, no required
 
 **Retroactive specs are first-class**: documenting existing behavior is valid and encouraged. Read the implementation, extract requirements from actual behavior, note inconsistencies as open items (not silent omissions), map traceability to existing tests.
 
-**Mutation policy**: do not edit a spec without explicit user direction. When drift is found, surface it immediately using `specalign` patterns. Never silently tolerate or fix drift — the user decides whether to update spec or code.
+**Mutation policy**: do not edit a spec without explicit user direction. When spec/implementation drift is found, surface it immediately. Never silently tolerate or fix drift — the user decides whether to update spec or code.
 
 **Spec vs. plan**: specs describe what and why; plans describe how and when. Plans are ephemeral. Absorb durable decisions into the spec; delete the plan doc.
 
@@ -56,6 +56,6 @@ Specs are freeform markdown. No rigid template, no YAML frontmatter, no required
 
 **Creation (SPEC gate)**: see ADF SPEC gate in CLAUDE.md for gate requirements. Determine placement, read existing file and identify gaps (or create at the correct colocated path), ensure all required elements are present.
 
-**Maintenance**: update spec when behavior changes; append new `REQ-*` IDs, never renumber; add test traceability as tests are written; run `specalign` when spec and implementation are both in context.
+**Maintenance**: update spec when behavior changes; append new `REQ-*` IDs, never renumber; add test traceability as tests are written; cross-check spec against implementation whenever both are in context and surface drift.
 
 **Retirement**: when a feature is removed, remove or archive its `SPEC.md`. Do not leave stale specs describing deleted behavior.
