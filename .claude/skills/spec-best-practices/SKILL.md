@@ -46,6 +46,8 @@ Specs are freeform markdown. No rigid template, no YAML frontmatter, no required
 
 **Evidence-based**: read code before writing spec content. Do not invent behavior, signatures, or file paths. For retroactive specs, derive requirements from the actual implementation.
 
+**Calibrate claim strength to enforcement**: match absolutist words ("unrepresentable", "cannot", "structurally caught", "any regression trips the check") to what the check actually proves. If a reviewer can construct a counterexample in under 60 seconds (comment decoy, string literal, shadowed binding, computed path), the SPEC is overclaiming. Either tighten the check, narrow the claim (e.g., "closes the literal-spawn regression; comment/string/shadow-binding cases are covered by the companion test"), or record the gap as an open item. Conservative phrasing backed by evidence beats strong phrasing that invites reject cycles.
+
 **Retroactive specs are first-class**: documenting existing behavior is valid and encouraged. Read the implementation, extract requirements from actual behavior, note inconsistencies as open items (not silent omissions), map traceability to existing tests.
 
 **Mutation policy**: do not edit a spec without explicit user direction. When spec/implementation drift is found, surface it immediately. Never silently tolerate or fix drift — the user decides whether to update spec or code.
