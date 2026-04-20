@@ -11,7 +11,7 @@ Claude Code spawns a status-line process on every render tick. The renderer must
 - Surface the information the operator actually glances at mid-loop: where am I (path + branch), what's the agent doing (model, context gauge, cost, time), and what's the loop doing (rl iteration, review verdict / in-flight state).
 - Never crash the rendering pipeline. A bad input, a missing file, or a dead subprocess degrades to a safe fallback (`~`), not a broken prompt.
 
-The rl CLI's 1.0 rewrite moved verdict state from a standalone `.claude/codex-review.local.md` file into `.rl/state.json`, introduced strategy-typed loops (`ralph | review | research`), and added async review workers with `review_in_flight_job_id` / `review_verdict` / `review_verdict_sha` fields. The statusline's old segment still reads the pre-1.0 files and no longer reflects what the loop is actually doing. This spec captures both the preserved behavior and the rl 1.0 alignment.
+The rl CLI's 1.10 release added `rl statusline`, a first-class one-line renderer for loop state. The statusline now delegates that segment to the CLI instead of mirroring `.rl/state.json` or `.rl/jobs/*`. This spec retains the older direct-read requirements for traceability, but the active contract is the delegated 1.10+ path.
 
 ## Non-goals
 
@@ -20,7 +20,7 @@ The rl CLI's 1.0 rewrite moved verdict state from a standalone `.claude/codex-re
 - Not authoritative for any data source. Every data read is best-effort and may return null / empty.
 - Not responsible for the rl loop's decision logic. The Stop hook in `rl` owns verdict gating; the statusline only visualizes state.
 - No network I/O of any kind.
-- No schema migration for stale rl state files. Graceful degrade in `--debug` mode; do not try to repair.
+- No schema migration or repair logic for rl loop state. `rl statusline` owns schema evolution; this renderer only shells out and renders stdout.
 
 ## Domain model
 
@@ -38,7 +38,7 @@ stdin (JSON StatuslineInput)
 │ Segment pipeline (writes into a 1 KiB output buffer) │
 │                                                      │
 │  path + branch + git-status                          │
-│  rl loop segment       (from .rl/state.json)         │
+│  rl loop segment       (from `rl statusline`)        │
 │  zmx session           (from $ZMX_SESSION)           │
 │  model + gauge + usage + cost + duration + lines     │
 │  idle-since            (from ~/.claude/.idle-since-*)│
@@ -54,8 +54,6 @@ stdin (JSON StatuslineInput)
 - `ContextUsage` — `{ percentage, total_tokens }`. Renders a 5-char, 40-step eighth-block gauge with an RGB gradient (green → yellow → red).
 - `ModelType` — `opus | sonnet | haiku | unknown`. Drives the model glyph (`🎭📜🍃?`).
 - `GitStatus` — `{ added, modified, deleted, untracked }`. Parsed from `git status --porcelain`.
-- `RalphState` (pre-1.0) — `{ active, iteration, max_iterations, review_enabled, review_count, max_review_cycles }`. Read from `{git_root}/.rl/state.json`.
-- `CodexReviewState` (deprecated; removed in rl 1.0 alignment) — YAML frontmatter reader for `{git_root}/.claude/codex-review.local.md`.
 
 ### rl 1.0 state schema (source: `~/0xbigboss/rl/SPEC.md:387-418`)
 
@@ -89,7 +87,7 @@ interface LoopState {
 }
 ```
 
-The statusline reads a subset: everything needed to render one segment, nothing more.
+Historical context only. The statusline no longer parses this schema directly; `rl statusline` owns it.
 
 ## Invariants
 
@@ -97,7 +95,7 @@ The statusline reads a subset: everything needed to render one segment, nothing 
 - **I-2 Crash-free.** Any error in any segment must be swallowed into "skip that segment" or, at worst, into the `~\n` fallback. A return code of 0 is always produced (subject to OS limits).
 - **I-3 Sub-process budget.** All `git` subprocess calls run against the workspace `current_dir`. No arbitrary shell. No network. Timeouts are implicit (Claude Code kills slow renders).
 - **I-4 Read-only.** The statusline never writes to state files, rl files, or the repo. Only writes are to `/tmp/statusline-debug.log` when `--debug` is set.
-- **I-5 File reads are bounded.** Every file read caps the byte count (4 KiB for `.rl/state.json`, 512 KiB tail for transcripts).
+- **I-5 File reads are bounded.** Every direct file read caps the byte count (512 KiB tail for transcripts). The delegated rl subprocess caps captured stdout at 1 KiB.
 - **I-6 Unknown fields are ignored.** All JSON parses use `ignore_unknown_fields = true`. Schema additions upstream must not break the statusline.
 - **I-7 Empty segments are hidden.** A segment that has nothing interesting to say emits zero bytes (not even a leading space).
 
@@ -120,153 +118,46 @@ The statusline reads a subset: everything needed to render one segment, nothing 
 
 ### rl loop segment (pre-1.0 — captured for baseline)
 
-- **REQ-SL-020** (pre-1.0): Read `{git_root}/.rl/state.json` as JSON (first 4 KiB) into `RalphState` with `ignore_unknown_fields`. On any failure return the default (inactive) state.
-- **REQ-SL-021** (pre-1.0): When `state.active == false`, emit nothing.
-- **REQ-SL-022** (pre-1.0): When active, emit ` 🔄 {color}{iteration}/{max_iterations}{reset}` where color follows `progressColor` (green <50%, yellow <80%, red ≥80%).
-- **REQ-SL-023** (pre-1.0): When `review_enabled`, additionally emit ` 🔍 {color}{review_count}/{max_review_cycles}{reset}` using the same color rule.
-- **REQ-SL-024** (deprecated, removed in rl 1.0 alignment): Read `{git_root}/.claude/codex-review.local.md` YAML frontmatter for a standalone `🔎` Codex review segment.
+- **REQ-SL-020** (SUPERSEDED by REQ-SL-080; pre-1.0): Read `{git_root}/.rl/state.json` as JSON (first 4 KiB) into `RalphState`.
+- **REQ-SL-021** (SUPERSEDED by REQ-SL-080; pre-1.0): When `state.active == false`, emit nothing.
+- **REQ-SL-022** (SUPERSEDED by REQ-SL-080; pre-1.0): Render an iteration counter from mirrored loop state.
+- **REQ-SL-023** (SUPERSEDED by REQ-SL-080; pre-1.0): Render a review counter from mirrored loop state when reviews are enabled.
+- **REQ-SL-024** (SUPERSEDED by REQ-SL-080; pre-1.0): Read `{git_root}/.claude/codex-review.local.md` for a standalone review segment.
 
 ### rl loop segment (rl 1.0 — initial cut, superseded by REQ-SL-060s)
 
-These requirements shipped with the first rl 1.0 alignment commit and are retained for traceability. REQ-SL-033, REQ-SL-035, REQ-SL-036, and REQ-SL-037 are superseded by the strategy-aware design in the next section. REQ-SL-030…032, 034, 038, 039 carry forward unchanged.
-
-- **REQ-SL-030**: The statusline reads `.rl/state.json` v3 and recognizes the additional fields `strategy`, `review_verdict`, `review_verdict_sha`, `review_verdict_job_id`, `review_in_flight_job_id`, `metric_name`, `metric_direction`, `best_metric_value`. Missing fields default to null/0 and do not break rendering (REQ-SL-001 / I-6).
-- **REQ-SL-031**: When `state.active == false`, the rl segment emits nothing regardless of other fields.
-- **REQ-SL-032** (strategy glyph): When `state.active == true`, the leading glyph is selected from `strategy`:
-  - `ralph` → `🔁`
-  - `review` → `🧪`
-  - `research` → `🔬`
-  - missing/unknown → `🔁` (legacy fallback, matches pre-1.0 default)
-- **REQ-SL-033** (SUPERSEDED by REQ-SL-061): Unconditional iteration counter for ralph + review.
-- **REQ-SL-034** (review counter): For `ralph` and `review` strategies, when `review_enabled == true`, render ` 🔍 {color}{review_count}/{max_review_cycles}{reset}` using `progressColor`. When `review_enabled == false` the review sub-segment is omitted.
-- **REQ-SL-035** (SUPERSEDED by REQ-SL-063): Verdict state glyph precedence without orphan detection or staleness.
-- **REQ-SL-036** (SUPERSEDED by REQ-SL-064): Research rendering without metric direction arrow.
-- **REQ-SL-037** (SUPERSEDED by REQ-SL-063): Staleness hidden from statusline. Reversed because stale verdicts silently lied about the state of HEAD (observed in `~/0xbigboss/rl` and `…/famo-classifier-alignment` on 2026-04-13).
-- **REQ-SL-038** (schema version): The statusline parses `state.version` and, when `--debug` is set and `version` is present but `!= 3`, appends a single diagnostic line to `/tmp/statusline-debug.log`. No visual indication is emitted (I-7 preserves quiet degradation).
-- **REQ-SL-039** (allocator hygiene): `parseRalphStateFromContent` accepts an `Allocator` parameter and uses it for all `std.json.parseFromSlice` allocations. No calls to `std.heap.page_allocator` inside parsing code.
+- **REQ-SL-030** (SUPERSEDED by REQ-SL-080): Parse `.rl/state.json` v3 fields needed for the rl segment.
+- **REQ-SL-031** (SUPERSEDED by REQ-SL-080): Hide the rl segment when `state.active == false`.
+- **REQ-SL-032** (SUPERSEDED by REQ-SL-080): Dispatch the leading glyph from `strategy`.
+- **REQ-SL-033** (SUPERSEDED by REQ-SL-080): Render an unconditional iteration counter for ralph + review.
+- **REQ-SL-034** (SUPERSEDED by REQ-SL-080): Render a review counter for `ralph` / `review` when `review_enabled == true`.
+- **REQ-SL-035** (SUPERSEDED by REQ-SL-080): Render a verdict state glyph from mirrored state.
+- **REQ-SL-036** (SUPERSEDED by REQ-SL-080): Render research metrics from mirrored state.
+- **REQ-SL-037** (SUPERSEDED by REQ-SL-080): Apply HEAD-staleness behavior inside the statusline.
+- **REQ-SL-038** (SUPERSEDED by REQ-SL-080): Parse `state.version` and emit debug drift diagnostics.
+- **REQ-SL-039** (SUPERSEDED by REQ-SL-080): Thread an allocator through rl-state JSON parsing helpers.
 
 ### rl loop segment (rl 1.1 — strategy-aware, orphan-aware)
 
-Authored 2026-04-13 after reading the rl 1.1.0 strategy decision functions in `~/0xbigboss/rl/src/strategies/{ralph,review,research}.ts`. Grounded in the observation that `iteration` / `review_count` / `iteration_start_*` have different semantics per strategy, and that the statusline must mirror rl's own decision logic to stay meaningful. Field schema verified unchanged in 1.1 (`schemas.ts:74-110`) — 1.1 only adds the impl-worker track which does not appear in `state.json`.
+- **REQ-SL-060** (SUPERSEDED by REQ-SL-080): Parse additional loop-state fields (`completion_claimed`, `blocked_claimed`, `metric_direction`, `iteration_start_ms`).
+- **REQ-SL-061** (SUPERSEDED by REQ-SL-080): Dispatch layout by `strategy`.
+- **REQ-SL-062** (SUPERSEDED by REQ-SL-080): Render terminal-state prefixes from mirrored loop flags.
+- **REQ-SL-063** (SUPERSEDED by REQ-SL-080): Resolve verdict glyphs by reading `.rl/jobs/*` and comparing `review_verdict_sha` to `git HEAD`.
+- **REQ-SL-064** (SUPERSEDED by REQ-SL-080): Render research metrics with direction arrows.
+- **REQ-SL-065** (SUPERSEDED by REQ-SL-080): Render loop age from `iteration_start_ms`.
+- **REQ-SL-066** (SUPERSEDED by REQ-SL-080): Read `{git_root}/.rl/jobs/{job_id}.json` to derive job state.
+- **REQ-SL-067** (SUPERSEDED by REQ-SL-080): Probe `git HEAD` for verdict staleness checks.
+- **REQ-SL-068** (SUPERSEDED by REQ-SL-080): Maintain strategy-coupled fixture coverage for mirrored rl logic.
+- **REQ-SL-069** (SUPERSEDED by REQ-SL-080): Maintain rl-specific glyph constants in `src/main.zig`.
+- **REQ-SL-070** (SUPERSEDED by REQ-SL-080): Detect impl workers by scanning `.rl/jobs/` directly.
+- **REQ-SL-071** (SUPERSEDED by REQ-SL-080): Accept workspaces that show an impl glyph without `.rl/state.json`.
 
-#### Counter semantics — truth table derived from rl source
+### rl loop segment (rl 1.10+ — delegated to rl statusline)
 
-| Strategy | `iteration` mutated by hook? | `review_count` mutated? | `iteration_start_*` mutated? |
-|---|---|---|---|
-| `ralph` | yes: every Stop (`ralph.ts:139`) + every confirmed reject (`ralph.ts:245`) | yes: confirmed reject only (`ralph.ts:256`) | no — `emitIterationEnd` is declared (`shared.ts:803`) but never called anywhere in the source tree |
-| `review` | **no** — no branch of `review.ts:decide` touches `iteration` | yes: confirmed reject only (`review.ts:150`) | no — same |
-| `research` | yes: every Stop (`research.ts:114`, `research.ts:130`) | n/a | no — same |
-
-Consequence: `iteration_start_ms` encodes "rl init time", not "current iteration start". The statusline treats it as **loop age**.
-
-#### Requirements
-
-- **REQ-SL-060** (fields parsed): The statusline additionally parses `completion_claimed`, `blocked_claimed`, `metric_direction`, `iteration_start_ms`. All are optional; parse failures return defaults and never break rendering.
-
-- **REQ-SL-061** (strategy-dispatched layout): The rl segment dispatches on `strategy`:
-
-  | Strategy | Layout |
-  |---|---|
-  | `ralph` / unknown | `[prefix]? 🔁 {iter_counter} {review_counter}? {verdict_state}? {age}?` |
-  | `review` | `[prefix]? 🧪 🔍 {review_counter} {verdict_state}? {age}?` (no iteration counter — `iteration` is never touched by the review hook, so displaying it is permanently misleading) |
-  | `research` | `[prefix]? 🔬 {iter_counter} {metric}? {age}?` (no review counter or verdict glyph — research loops do not gate on reviews) |
-
-  Where:
-  - `iter_counter` = ` {progressColor}{iteration}/{max_iterations}{reset}`
-  - `review_counter` = ` {progressColor}{review_count}/{max_review_cycles}{reset}` (ralph: preceded by ` 🔍 ` glyph; review: glyph already leads the layout)
-  - `progressColor` is unchanged: green <50%, yellow <80%, red ≥80%.
-
-- **REQ-SL-062** (terminal-state prefix): When the loop is in a waiting/winding-down state, a terminal-prefix glyph is emitted before the strategy glyph. Precedence: `blocked_claimed > completion_claimed`.
-
-  | Condition | Prefix | Meaning |
-  |---|---|---|
-  | `blocked_claimed == true` | ` 🚧` | Loop marked blocked; next Stop will cleanup. This catches the "`active: true` + `blocked_claimed: true`" anomaly observed in `~/0xbigboss/rl/.rl/state.json` on 2026-04-13. |
-  | `completion_claimed == true` | ` 🏁` | Agent has claimed completion. For ralph: waiting for verdict. For research: waiting for user's `rl done --keep/--discard`. |
-  | neither | *no prefix* | Normal running state. |
-
-- **REQ-SL-063** (verdict state glyph — orphan-aware + staleness-aware): For `ralph` and `review` strategies with `review_enabled == true`, a single trailing verdict glyph is emitted AFTER the review counter, resolved at parse time by the following decision procedure (mirrors `ralph.ts:185-200` / `review.ts:86-98`):
-
-  ```
-  resolveVerdictState(state, git_head):
-    if state.review_in_flight_job_id is non-null:
-      job_status = readJobStatus(git_root, review_in_flight_job_id)
-      if job_status in {"queued", "running"}:
-        return ⏳   # worker actually running
-      # else: orphan marker — fall through as if null
-    if state.review_verdict == "approve"
-       and state.review_verdict_sha != null
-       and state.review_verdict_sha == git_head:
-      return ✅
-    if state.review_verdict == "reject"
-       and state.review_verdict_sha != null
-       and state.review_verdict_sha == git_head:
-      return ❌
-    return blank
-  ```
-
-  This collapses "no verdict", "stale verdict", and "orphaned in-flight marker" into the same blank-glyph bucket — all three mean "no verdict you can trust for your current HEAD". The orphan branch prevents the false-positive ⏳ we hit on 2026-04-13 when the stop hook wrote an in-flight id but the worker never spawned.
-
-  Reading the job file costs one bounded file open + small JSON parse; `git rev-parse HEAD` costs one subprocess call already amortized against the existing git calls in the path/branch segment.
-
-- **REQ-SL-064** (research metric with direction arrow): For `research` strategy, when `best_metric_value != null`, render ` ★{arrow}{value}` where `arrow` is `↑` if `metric_direction == "maximize"`, `↓` if `metric_direction == "minimize"`, empty string otherwise. `value` uses 3 decimal places (`{d:.3}`). Metric name is omitted — the operator's task prompt already establishes what metric is being optimized.
-
-- **REQ-SL-065** (loop age): When `iteration_start_ms` is present and the loop is active, render ` +{age}` after the metric/verdict segment, where `age` is the wall-clock delta from `iteration_start_ms` to now, formatted compactly:
-
-  - `<60s` → `{N}s`
-  - `<60m` → `{N}m`
-  - `<24h` → `{N}h` or `{N}h{M}m` when `M > 0`
-  - `≥24h` → `{N}d` (rounded down)
-
-  Color graded by age: green `<1h`, yellow `1h–4h`, red `≥4h`. Rationale: `iteration_start_ms` is only written at `rl init` in 1.1 (the per-iteration advance path is dead code), so this signal represents "loop age since init" — a "this loop has been open a long time" indicator for spotting forgotten or stuck loops.
-
-- **REQ-SL-066** (job-file reader): `readJobStatus(allocator, git_root, job_id)` reads `{git_root}/.rl/jobs/{job_id}.json`, caps the read at 4 KiB, parses `status` from the top-level object. Returns one of `queued | running | completed | failed | cancelled | missing`. File not found, parse failure, or an unexpected status string all map to `missing` — the caller treats `missing` identically to a terminal status (orphan marker).
-
-- **REQ-SL-067** (git HEAD reader): `getGitHead(allocator, dir)` runs `git rev-parse HEAD` in `dir` and returns the trimmed sha. Any failure returns an empty string; callers treat empty as "HEAD unknown" and the staleness check fails open (verdict glyph is NOT suppressed on an unknowable HEAD — we'd rather show a potentially stale ✅/❌ than hide an actionable signal due to a git glitch).
-
-- **REQ-SL-068** (strategy coupling as contract): Because the statusline mirrors the rl hook's decision logic, test fixtures must cover the exact state shapes produced by each `stateUpdates` block in the rl 1.1 strategy files:
-
-  | rl source | State shape | Expected render |
-  |---|---|---|
-  | `ralph.ts:152-160` (iterate) | iteration++, completion_claimed=false | ` 🔁 N/max` |
-  | `ralph.ts:218-223` (approve) | verdict=approve, sha=HEAD | ` 🏁 🔁 N/max 🔍 K/cap ✅ +age` (if completion_claimed was set in the transition) |
-  | `ralph.ts:252-265` (reject) | iteration++, review_count++, verdict cleared | ` 🔁 (N+1)/max 🔍 (K+1)/cap` (no verdict glyph — worker cleared it) |
-  | `ralph.ts:187-194` (in-flight) | review_in_flight_job_id set, job running | ` 🔁 N/max 🔍 K/cap ⏳` |
-  | `review.ts:162-173` (enqueue) | review_in_flight_job_id set, job running | ` 🧪 🔍 K/cap ⏳` |
-  | `review.ts:144-158` (reject-iterate) | review_count++, verdict cleared | ` 🧪 🔍 (K+1)/cap` (no verdict glyph) |
-  | `research.ts:125-135` (iterate) | iteration++ | ` 🔬 N/max (★±value)? +age` |
-  | `research.ts:79-87` (blocked) | blocked_claimed=true | ` 🚧 🔬 N/max …` |
-
-  When rl adds a new branch or changes an existing `stateUpdates` block, the corresponding fixture must be updated. That turns the implicit coupling into an explicit contract.
-
-- **REQ-SL-069** (glyph namespace additions): `glyphs` gains `completion` (`🏁`), `blocked` (`🚧`), `arrow_up` (`↑`), `arrow_down` (`↓`), `impl` (`🔨`). Existing glyphs unchanged.
-
-- **REQ-SL-070** (impl-worker visibility): `rl implement start` spawns a detached worker that does NOT touch `state.json` and does NOT require an active rl loop — observed against `~/0xbigboss/0xsend/canton-monorepo.worktrees/famo-gas-floor-ratchet` on 2026-04-13, where an impl worker was running against `.rl/jobs/impl-famo-gas-phase-1-schema-repo-tzzyst.json` with no state.json present. The statusline emits a trailing ` 🔨` whenever `hasRunningImplJob(allocator, git_root)` returns true.
-
-  Detection procedure (`hasRunningImplJob`):
-  1. Open `{git_root}/.rl/jobs/` as an iterable directory. Missing directory → return false.
-  2. Iterate entries with a hard cap of 100 (prevents pathological cost in workspaces with many historical jobs).
-  3. For each entry whose name starts with `impl-` AND ends with `.json`:
-     - Read up to 4 KiB from the file
-     - Parse the `status` field via `parseJobStatusFromContent`
-     - If status is `queued` or `running` → return true (short-circuit)
-  4. If no running impl job found → return false.
-
-  The impl glyph renders at the tail of the rl segment area, emitted by a sibling function (`formatImplWorker`) called after `RalphState.format` — deliberately independent of loop state so an impl worker is visible even when no loop is initialized. When the rl segment also renders, the glyphs concatenate naturally:
-
-  ```
-  # rl 1.1 loop + impl worker running
-  🧪 🔍 2/30 ⏳ 🔨 +1h
-
-  # no state.json, just an impl worker
-  ~/foo/bar [main] 🔨
-
-  # ralph loop + impl worker
-  🔁 5/30 🔍 0/10 🔨 +30m
-  ```
-
-  Review-kind jobs (`review-*.json`) are explicitly ignored by the prefix filter — the rl segment already tracks review in-flight via `review_in_flight_job_id`. The impl glyph is strictly for the parallel impl-worker track introduced in rl 1.1.
-
-- **REQ-SL-071** (acceptance: impl glyph renders without state.json): The acceptance contract for REQ-SL-070 explicitly requires that the glyph renders in workspaces that have `.rl/jobs/impl-*.json` but NO `.rl/state.json`. Fixture tests cover this scenario.
+- **REQ-SL-080** (delegation): The rl loop segment is produced by shelling out to `rl statusline --format text --cwd <git_root> [--git-head <sha>]`. The statusline emits the subprocess's stdout verbatim, prefixed by a single space. No parsing, no post-processing, no knowledge of `.rl/state.json` or `.rl/jobs/*` remains in the statusline codebase. Source of truth: `rl` CLI owns the schema, the renderer, and the strategy dispatch. Reference: 0xsend/rl#6.
+- **REQ-SL-081** (fail-open): Missing `rl` binary (PATH lookup failure), spawn failure, non-zero exit, or stderr output MUST all collapse to "emit nothing" (invariants I-2, I-7). No crash, no fallback glyph, no log spam outside `--debug` mode.
+- **REQ-SL-082** (subprocess budget): The rl segment adds exactly one subprocess call per render. Stdout read is capped at 1 KiB. No additional file reads from `.rl/` remain in `src/main.zig`. The git-root discovery and HEAD probe (already present for the path/branch segment) are reused, not duplicated.
+- **REQ-SL-083** (tests): The new rl segment is intentionally left uncovered by design. A fake-PATH integration test would require test-only subprocess environment plumbing larger than the helper itself; the project relies on `zig build`, `zig build test`, and live smoke against the real `rl statusline` contract instead.
 
 ### Other segments (captured for traceability)
 
@@ -304,6 +195,14 @@ rl 1.1 strategy-aware renderer (this change set — 2026-04-13):
 - [ ] Live smoke passes against current `~/0xbigboss/rl` loop and `…/famo-classifier-alignment` loop — rendered segment matches what would be expected given each loop's live `state.json` + HEAD.
 - [ ] All existing non-rl tests remain green (no regression to path/git/model/gauge/cost/idle segments).
 - [x] Impl-worker visibility (REQ-SL-070): `hasRunningImplJob` scans `.rl/jobs/` for `impl-*.json` with status queued/running; renders `🔨` glyph independently of state.json. Tests cover: missing dir, queued/running/completed/failed/cancelled, review-kind job filter, non-json filter, prefix filter.
+
+rl 1.10+ delegation (this change set — 2026-04-20):
+
+- [x] `src/main.zig` loses RalphState, Strategy, MetricDirection, VerdictState, JobStatus, VerdictRaw + their parse/format helpers.
+- [x] `renderRlStatusline` shells out to `rl statusline` with PATH probe and graceful fail-open.
+- [x] SPEC REQ-SL-020..024, REQ-SL-030..039, REQ-SL-060..071 marked SUPERSEDED by REQ-SL-080.
+- [x] New REQ-SL-080..083 describe the delegated contract.
+- [x] `zig build test` passes; line count in `src/main.zig` drops by >= 1000 lines.
 
 ## Risk tags
 
