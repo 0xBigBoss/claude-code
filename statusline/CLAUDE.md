@@ -29,9 +29,7 @@ zig build -Doptimize=ReleaseFast
 ## Data Sources
 
 - Git metadata is read from the current workspace directory.
-- Review gate state files are read from:
-  - `{git_root}/.rl/state.json`
-  - `{git_root}/.claude/codex-review.local.md`
+- Review/loop state is rendered by `rl statusline` (PATH dependency); the statusline does not read `.rl/state.json` directly.
 
 ## Guardrails
 
