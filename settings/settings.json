@@ -4,6 +4,7 @@
     "commit": "",
     "pr": ""
   },
+  "theme": "auto",
   "permissions": {
     "allow": [
       "Edit(~/.handoffs/**)",
