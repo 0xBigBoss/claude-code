@@ -28,6 +28,7 @@ bin/bin/claude-bootstrap --check
 
 # 2) Validate merged settings
 bin/bin/claude-settings-merge --check
+bin/bin/claude-settings-merge --diff   # show what --fix would change
 
 # 3) Validate Claude->Codex sync (commands + skills)
 claude-code/scripts/sync-codex.sh --check
