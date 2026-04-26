@@ -132,16 +132,30 @@
     "gopls-lsp@claude-plugins-official": true,
     "jdtls-lsp@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": true,
-    "codex-reviewer@0xbigboss-plugins": true,
-    "ralph-reviewed@0xbigboss-plugins": true,
+    "swift-lsp@claude-plugins-official": true,
     "recall@0xbigboss-recall": true,
     "silo@0xBigBoss-silo": true,
-    "send-infra@send-infra-plugins": true
+    "send-infra@send-infra-plugins": true,
+    "gh-pulse@gh-pulse-marketplace": true,
+    "rl@0xsend-rl": true,
+    "superpowers@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "agent-sdk-dev@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "posthog@claude-plugins-official": true,
+    "data-engineering@claude-plugins-official": true,
+    "cloudflare@claude-plugins-official": true,
+    "expo@claude-plugins-official": true
   },
   "env": {
     "BASH_ENV": "/Users/allen/code/dotfiles/claude-code/hooks/direnv-bash-env"
   },
   "alwaysThinkingEnabled": true,
+  "effortLevel": "xhigh",
+  "skipDangerousModePermissionPrompt": true,
   "feedbackSurveyState": {
     "lastShownTime": 1754076652911
   }
