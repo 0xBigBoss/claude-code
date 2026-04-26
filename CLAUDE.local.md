@@ -43,7 +43,7 @@ claude-code/scripts/sync-codex.sh
 
 - New command: add `*.md` to `claude-code/commands/` and run `sync-codex.sh`.
 - New skill: add `claude-code/.claude/skills/<skill-name>/SKILL.md` and run `sync-codex.sh`.
-- Plugin/marketplace defaults: update `claude/defaults/plugins.txt` or `claude/defaults/marketplaces.txt` in the parent repo.
+- Plugin and marketplace state: update `claude-code/settings/settings.json`. `enabledPlugins` controls which plugins are turned on, `extraKnownMarketplaces` declares where to fetch them, and `install.sh --claude` derives its idempotent install loop from that file.
 
 ## Review Checklist
 
