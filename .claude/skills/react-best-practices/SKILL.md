@@ -53,7 +53,12 @@ Synchronizing with **external systems**: browser APIs (WebSocket, IntersectionOb
 ## Component Patterns
 
 - Controlled: parent owns state; uncontrolled: component owns state
-- Prefer composition with `children` over prop drilling; use Context only for truly global state
+- Prefer composition with `children` over prop drilling
+- Treat boolean props that switch large component trees (`isEditing`, `isThread`, `hideAttachments`) as a composition smell; prefer separate composed components for distinct use cases
+- For complex reusable UI, prefer compound components with provider-scoped state/actions over monolithic components with many optional props
+- Use Context for scoped component families as well as truly global state, when it defines a local interface consumed by descendants
+- Render JSX directly for UI variation; avoid config-array mini-frameworks unless the config is real domain data
+- Lift the provider boundary when sibling or external controls need access to the same state/actions
 - Use `flushSync` when you need to read the DOM synchronously after a state update
 
 See `react-patterns.md` for code examples and detailed patterns.
