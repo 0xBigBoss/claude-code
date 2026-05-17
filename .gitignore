@@ -12,3 +12,6 @@ __pycache__/
 
 # Local commands (not ready for sharing)
 commands/blog-context.md
+
+# Local skills (not ready for sharing)
+.claude/skills/engagement-algos
