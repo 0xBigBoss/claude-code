@@ -127,7 +127,7 @@
   "extraKnownMarketplaces": {
     "claude-plugins-official": { "source": { "source": "github", "repo": "anthropics/claude-plugins-official" } },
     "0xsend-marketplace": { "source": { "source": "git", "url": "https://github.com/0xsend/claude-code-plugins.git" } },
-    "0xbigboss-recall": { "source": { "source": "github", "repo": "0xbigboss/recall" } },
+    "alleneubank-recall": { "source": { "source": "github", "repo": "alleneubank/recall" } },
     "0xBigBoss-silo": { "source": { "source": "github", "repo": "0xBigBoss/silo" } },
     "send-infra-plugins": { "source": { "source": "github", "repo": "0xsend/infra" } },
     "gh-pulse-marketplace": { "source": { "source": "github", "repo": "0xbigboss/gh-pulse" } },
@@ -137,7 +137,7 @@
   },
   "enabledPlugins": {
     "canton-skills@0xsend-marketplace": true,
-    "recall@0xbigboss-recall": true,
+    "recall@alleneubank-recall": true,
     "send-infra@send-infra-plugins": true,
     "rl@0xsend-rl": true,
     "canton-keycloak-skills@canton-keycloak-providers": true,
