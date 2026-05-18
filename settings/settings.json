@@ -5,6 +5,7 @@
     "pr": ""
   },
   "theme": "auto",
+  "tui": "fullscreen",
   "permissions": {
     "allow": [
       "Edit(~/.handoffs/**)",
