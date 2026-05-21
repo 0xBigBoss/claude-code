@@ -1,3 +1,7 @@
+# Personal/local-only notes (not shared via this repo)
+CLAUDE.local.md
+AGENTS.local.md
+
 # Ralph loop state (managed by hook, not tracked in VCS)
 .rl/
 

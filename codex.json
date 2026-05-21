@@ -1,0 +1,11 @@
+{
+  "$schema": "./codex.schema.json",
+  "_description": "Default Codex CLI configuration used by the codex-reviewer plugin. Symlinked to ~/.claude/codex.json by install.sh. Override locally by editing ~/.claude/codex.json directly or by replacing the symlink with a private copy.",
+  "codex": {
+    "sandbox": "read-only",
+    "approval_policy": "never",
+    "bypass_sandbox": false,
+    "extra_args": [],
+    "timeout_seconds": 1200
+  }
+}
