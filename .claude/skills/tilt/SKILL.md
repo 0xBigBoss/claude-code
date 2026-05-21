@@ -7,15 +7,20 @@ description: Use when checking deployment health, investigating errors, reading 
 
 ## First Action: Check for Errors
 
-Before investigating issues or verifying deployments, check resource health:
+Before investigating issues or verifying deployments, check resource health. Run **errors first**, separately from pending/in-progress — otherwise real failures get buried in 20+ pending lines:
 
 ```bash
-# Find errors and pending resources (primary health check)
-tilt get uiresources -o json | jq -r '.items[] | select(.status.runtimeStatus == "error" or .status.updateStatus == "error" or .status.updateStatus == "pending") | "\(.metadata.name): runtime=\(.status.runtimeStatus) update=\(.status.updateStatus)"'
+# 1. Errors only — surface the buildHistory[0].error so you see WHY, not just THAT
+tilt get uiresources -o json | jq -r '.items[] | select(.status.runtimeStatus == "error" or .status.updateStatus == "error") | "\(.metadata.name): runtime=\(.status.runtimeStatus) update=\(.status.updateStatus)\n  reason: \((.status.buildHistory[0].error // "(no buildHistory error; check tilt logs)") | gsub("\n"; " ") | .[0:240])"'
 
-# Quick status overview
+# 2. In-progress and pending — informational; an in-progress build may flip to error any moment
+tilt get uiresources -o json | jq -r '.items[] | select(.status.updateStatus == "in_progress" or .status.updateStatus == "pending" or .status.runtimeStatus == "pending") | "\(.metadata.name): runtime=\(.status.runtimeStatus) update=\(.status.updateStatus)"'
+
+# 3. Quick status overview
 tilt get uiresources -o json | jq '[.items[].status.updateStatus] | group_by(.) | map({status: .[0], count: length})'
 ```
+
+If a resource is `in_progress` when you check, **re-poll** before declaring it healthy — it can transition straight to `error` with a populated `buildHistory[0].error`. The `updateStatus` field reflects only the *current* build attempt; the last error always lives in `buildHistory[0].error` even when `updateStatus` is `none` or `not_applicable`.
 
 ## Non-Default Ports
 
