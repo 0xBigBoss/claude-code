@@ -736,12 +736,23 @@ Review ${reviewCount + 1}/${maxReviews}. Remember: your response MUST contain <r
 
     codexArgs.push("-o", outputFile);
 
-    // Filter out -o/--output from extra_args to prevent breaking output parsing
+    // Drop any user-supplied output redirection (and the value that follows a
+    // bare flag) so it cannot steer Codex away from `outputFile` — the hook
+    // reads the review verdict back from that exact path.
     if (Array.isArray(codexConfig.extra_args)) {
-      for (const arg of codexConfig.extra_args) {
-        if (typeof arg === "string" && arg !== "-o" && !arg.startsWith("--output")) {
-          codexArgs.push(arg);
+      const extra = codexConfig.extra_args;
+      const consumesNext = ["-o", "--output", "--output-last-message"];
+      for (let i = 0; i < extra.length; i++) {
+        const arg = extra[i];
+        if (typeof arg !== "string") continue;
+        if (consumesNext.includes(arg)) {
+          i++; // also skip the value paired with this flag
+          continue;
         }
+        if (arg.startsWith("--output=") || arg.startsWith("--output-last-message=")) {
+          continue; // inline `--flag=value`
+        }
+        codexArgs.push(arg);
       }
     }
 

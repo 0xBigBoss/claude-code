@@ -32,6 +32,16 @@ const HOOK_VERSION = "2026-03-21T14:00:00Z";
 const HOOK_BUILD = "v3.0.0";
 const STDIN_TIMEOUT_MS = 2000;
 
+// --- Codex timeout bounds ---
+// Must match the Stop hook timeout declared in hooks/hooks.json. If a user-supplied
+// timeout_seconds reaches HOOK_TIMEOUT_SECONDS, Claude kills the hook before it can
+// parse Codex's output and surface a verdict, so the gate falsely reports
+// "No Codex output file created". Clamp to leave BUFFER_SECONDS for hook teardown.
+const HOOK_TIMEOUT_SECONDS = 1800;
+const BUFFER_SECONDS = 120;
+const MIN_CODEX_TIMEOUT_SECONDS = 60;
+const MAX_CODEX_TIMEOUT_SECONDS = HOOK_TIMEOUT_SECONDS - BUFFER_SECONDS; // 1680s
+
 // --- User Config ---
 
 interface CodexConfig {
@@ -369,14 +379,40 @@ Review ${reviewCount + 1}.`;
 
     codexArgs.push("-o", outputFile);
 
+    // Drop any user-supplied output redirection (and the value that follows a
+    // bare flag) so it cannot steer Codex away from `outputFile` — the hook
+    // reads the verdict back from that exact path.
     if (Array.isArray(codexConfig.extra_args)) {
-      for (const arg of codexConfig.extra_args) {
-        if (typeof arg === "string") codexArgs.push(arg);
+      const extra = codexConfig.extra_args;
+      const consumesNext = ["-o", "--output", "--output-last-message"];
+      for (let i = 0; i < extra.length; i++) {
+        const arg = extra[i];
+        if (typeof arg !== "string") continue;
+        if (consumesNext.includes(arg)) {
+          i++; // also skip the value paired with this flag
+          continue;
+        }
+        if (arg.startsWith("--output=") || arg.startsWith("--output-last-message=")) {
+          continue; // inline `--flag=value`
+        }
+        codexArgs.push(arg);
       }
     }
 
-    const timeoutMs = (codexConfig.timeout_seconds || 1200) * 1000;
-    crash(`Codex args: ${JSON.stringify(codexArgs)}, timeout: ${timeoutMs}ms`);
+    // Clamp to a safe range so a misconfigured timeout cannot outlive the hook
+    // itself; if Codex runs past `HOOK_TIMEOUT_SECONDS - BUFFER_SECONDS` Claude
+    // kills the hook before it can parse the output file.
+    const requestedTimeout = codexConfig.timeout_seconds ?? 1200;
+    let effectiveTimeout = Math.min(requestedTimeout, MAX_CODEX_TIMEOUT_SECONDS);
+    effectiveTimeout = Math.max(effectiveTimeout, MIN_CODEX_TIMEOUT_SECONDS);
+    if (requestedTimeout < MIN_CODEX_TIMEOUT_SECONDS) {
+      crash(`WARNING: Clamping timeout from ${requestedTimeout}s to min ${MIN_CODEX_TIMEOUT_SECONDS}s`);
+    }
+    if (requestedTimeout > MAX_CODEX_TIMEOUT_SECONDS) {
+      crash(`WARNING: Clamping timeout from ${requestedTimeout}s to max ${MAX_CODEX_TIMEOUT_SECONDS}s (hook timeout ${HOOK_TIMEOUT_SECONDS}s - buffer ${BUFFER_SECONDS}s)`);
+    }
+    const timeoutMs = effectiveTimeout * 1000;
+    crash(`Codex args: ${JSON.stringify(codexArgs)}, timeout: ${timeoutMs}ms (effective=${effectiveTimeout}s, requested=${requestedTimeout}s, max=${MAX_CODEX_TIMEOUT_SECONDS}s)`);
 
     const result = spawnSync("codex", codexArgs, {
       cwd, encoding: "utf-8", timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, input: reviewPrompt,
