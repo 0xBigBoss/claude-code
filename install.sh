@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Claude Code configuration installer
-# Creates direct symlinks from ~/.claude/ to this repository
+# Claude Code configuration installer.
+# Links this repo's CLAUDE.md, commands/, agents/, skills/, and codex.json into
+# ~/.claude/ so Claude Code picks them up. Idempotent and safe to re-run.
 #
 # Usage:
 #   ./install.sh           # Install symlinks
@@ -110,8 +111,19 @@ main() {
     # CLAUDE.md - user-level instructions (open-source, editable)
     ensure_symlink "$SCRIPT_DIR/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 
-    # codex.json - centralized Codex CLI configuration for all plugins
-    ensure_symlink "$SCRIPT_DIR/../codex/codex.json" "$HOME/.claude/codex.json"
+    # commands/, agents/, skills/ - assets discoverable by Claude Code
+    ensure_symlink "$SCRIPT_DIR/commands" "$HOME/.claude/commands"
+    ensure_symlink "$SCRIPT_DIR/agents" "$HOME/.claude/agents"
+    ensure_symlink "$SCRIPT_DIR/.claude/skills" "$HOME/.claude/skills"
+
+    # codex.json - Codex CLI config consumed by the codex-reviewer plugin.
+    # Prefer a parent dotfiles tree (../codex/codex.json) when present; otherwise
+    # fall back to the in-repo sample so standalone installs still work.
+    local codex_source="$SCRIPT_DIR/codex.json"
+    if [[ -e "$SCRIPT_DIR/../codex/codex.json" ]]; then
+        codex_source="$SCRIPT_DIR/../codex/codex.json"
+    fi
+    ensure_symlink "$codex_source" "$HOME/.claude/codex.json"
 
     # Legacy compatibility cleanup: baseline now loads directly from repository path.
     remove_legacy_settings_base || true
