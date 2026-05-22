@@ -144,9 +144,6 @@
     "canton-keycloak-skills@canton-keycloak-providers": true,
     "typescript-lsp@claude-plugins-official": true
   },
-  "env": {
-    "BASH_ENV": "/Users/allen/code/dotfiles/claude-code/hooks/direnv-bash-env"
-  },
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",
   "skipDangerousModePermissionPrompt": true,
