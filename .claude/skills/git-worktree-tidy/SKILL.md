@@ -25,6 +25,11 @@ User asks to "fetch prune", "clean up stale branches/worktrees", or
 - Use `--ff-only` when updating branches. If ff-only fails, stop and ask.
 - Operate from the `.bare` directory (or repo root) for branch/worktree
   management commands.
+- Never infer "merged/shipped" from `git rev-list origin/main..<branch>` or
+  `git merge-base --is-ancestor` alone. Squash- and rebase-merges land the
+  work under a new SHA, so a fully-shipped branch still shows commits "not in
+  main" and a non-ancestor tip. Verify ship status against the forge's PR
+  merge state (step 3a) before classifying a gone branch as unmerged.
 
 ## Workflow
 
@@ -51,6 +56,37 @@ git branch -vv | grep ': gone]'
 ```
 
 Collect branch names whose upstream is gone.
+
+### 3a) Verify ship status (gone upstream ≠ merged)
+
+A deleted upstream ("gone") does NOT prove the work shipped, and git ancestry
+is unreliable here: squash- and rebase-merges land the work under a new SHA, so
+a fully-shipped branch still shows commits "not in main" and a non-ancestor tip.
+Verify against the forge before deleting — gone-but-unmerged branches are the
+only ones that lose real work.
+
+For each gone-upstream branch (GitHub example; substitute your forge CLI):
+
+```bash
+# Was there a merged PR from this head?
+gh pr list --state all --head <branch> \
+  --json number,state,mergedAt,mergeCommit \
+  --jq '.[] | "#\(.number) \(.state) merged=\(.mergedAt // "no")"'
+
+# If merged, confirm nothing was added to the branch AFTER the merge:
+# the local tip should equal the PR head at merge.
+gh pr view <pr> --json commits --jq '.commits[-1].oid'   # vs: git rev-parse <branch>
+```
+
+Classify each gone branch:
+- **Merged (verified)** — a MERGED PR exists AND its head == local tip → shipped,
+  safe to delete.
+- **At risk** — no merged PR, or the tip has commits dated after the merge
+  (`git show -s --format=%ci <tip>`) → genuine unshipped work. Flag it; do not
+  delete without explicit approval.
+
+If `gh`/the forge CLI is unavailable, say so and treat unverifiable branches as
+**at risk** rather than assuming merged.
 
 ### 4) Discover stale worktrees
 
@@ -80,14 +116,16 @@ Stale worktrees to remove:
   <path> (<branch>) [clean]
   <path> (<branch>) [dirty — N uncommitted changes]
 
-Stale branches to delete:
-  <branch>
+Stale branches:
+  <branch>  [merged — PR #N, safe to delete]
+  <branch>  [AT RISK — no merged PR / commits after merge; review first]
 
 Prunable worktree metadata:
   <entry>
 ```
 
-Wait for user confirmation before proceeding.
+Call out the **at risk** branches explicitly so the user is deciding with the
+ship status in front of them. Wait for user confirmation before proceeding.
 
 ### 6) Remove stale worktrees
 
