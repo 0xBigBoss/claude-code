@@ -128,7 +128,7 @@
   "extraKnownMarketplaces": {
     "claude-plugins-official": { "source": { "source": "github", "repo": "anthropics/claude-plugins-official" } },
     "0xsend-marketplace": { "source": { "source": "git", "url": "https://github.com/0xsend/claude-code-plugins.git" } },
-    "alleneubank-recall": { "source": { "source": "github", "repo": "alleneubank/recall" } },
+    "alleneubank-recall": { "autoUpdate": true, "source": { "source": "github", "repo": "alleneubank/recall" } },
     "0xBigBoss-silo": { "source": { "source": "github", "repo": "0xBigBoss/silo" } },
     "send-infra-plugins": { "source": { "source": "github", "repo": "0xsend/infra" } },
     "gh-pulse-marketplace": { "source": { "source": "github", "repo": "0xbigboss/gh-pulse" } },
