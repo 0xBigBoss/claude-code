@@ -47,14 +47,35 @@ Use this skill when you need to sync a feature branch onto the latest `origin/{b
   - `git rev-list --count --merges origin/{base_branch}..HEAD`
 - If merge commits exist, ask whether to preserve them (`--rebase-merges`) or flatten them (plain rebase).
 
-### 5) Run the rebase (requires confirmation)
-- Print the exact command you intend to run, then wait for confirmation:
-  - Typical:
-    - `git rebase origin/{base_branch}`
-  - With merge preservation:
-    - `git rebase --rebase-merges origin/{base_branch}`
+### 5) Detect stacked branches (will they follow the rebase?)
+Other local branches may point at intermediate commits in the range being rewritten (`origin/{base_branch}..HEAD`) — common with phased `NN-description` stacks. A plain rebase rewrites those commits and **orphans** the stacked branches on the old, pre-rebase commits (along with every open PR built on them). `--update-refs` (the default in step 6) moves them onto the rewritten commits instead. Enumerate them so you can report what the rebase will carry along:
 
-### 6) Conflict handling loop
+```bash
+# Branches pointing into the range being rewritten — these get orphaned by a
+# plain rebase and require --update-refs to follow the rewrite.
+cur=$(git branch --show-current)
+git for-each-ref --format='%(refname:short)' refs/heads | while read -r br; do
+  [ "$br" = "$cur" ] && continue
+  if git merge-base --is-ancestor "$br" HEAD \
+     && ! git merge-base --is-ancestor "$br" origin/{base_branch}; then
+    echo "stacked: $br ($(git rev-parse --short "$br"))"
+  fi
+done
+```
+
+- Report the detected stacked branches to me before rebasing.
+- A branch that is **checked out in another worktree** is skipped by `--update-refs` (git will not move a checked-out branch); flag these so I can verify them manually after the rebase.
+
+### 6) Run the rebase (requires confirmation)
+- Default to `--update-refs` so any stacked branch pointing into the rewritten range follows the rewrite instead of being orphaned.
+- Print the exact command you intend to run, then wait for confirmation:
+  - Default:
+    - `git rebase --update-refs origin/{base_branch}`
+  - With merge preservation:
+    - `git rebase --rebase-merges --update-refs origin/{base_branch}`
+- To make this the permanent default without the flag: `git config --global rebase.updateRefs true`.
+
+### 7) Conflict handling loop
 When conflicts happen:
 1. Collect context:
    - `git status`
@@ -79,15 +100,21 @@ Helpful commands during conflicts:
 - See the commit being replayed: `git show`
 - If you need to back out: `git rebase --abort` (this is safe and should be preferred over destructive resets)
 
-### 7) Post-rebase verification
+### 8) Post-rebase verification
 - Show the new commit range:
   - `git log --oneline --decorate origin/{base_branch}..HEAD`
+- Confirm each stacked branch from step 5 moved onto the rewritten range. `git rebase --update-refs` prints an "Updated the following refs with --update-refs" summary; the moved branch refs should also appear as decorations on the new commits in the log above. Note any that did **not** move (e.g. checked out in another worktree) for manual handling.
 - Run appropriate repo checks (tests, typecheck, lint) if available.
 
-### 8) Push updated branch (requires confirmation)
+### 9) Push updated branch(es) (requires confirmation)
 - If the branch already exists on origin, rebasing rewrites history, so pushing requires force-with-lease.
-- Print the exact command and wait for confirmation:
-  - `git push --force-with-lease origin HEAD:{branch_name}`
+- `--update-refs` only moves **local** refs. A normal `git push` updates the current branch only — each stacked branch (from step 5) that also exists on origin must be force-pushed **individually**.
+- Print the exact command(s) and wait for confirmation:
+  - Current branch:
+    - `git push --force-with-lease origin HEAD:{branch_name}`
+  - Each moved stacked branch that exists on origin (repeat per branch):
+    - `git push --force-with-lease origin {stacked_branch}`
+- Any branch skipped because it is checked out in another worktree was not moved — verify it before pushing.
 
 ## Recovery
 - If something goes wrong, use `{backup_ref}` to restore the pre-rebase state.

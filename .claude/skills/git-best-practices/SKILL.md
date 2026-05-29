@@ -47,6 +47,10 @@ git push --force-with-lease origin feat/my-branch
 
 Always confirm with the user before any force push, regardless of branch.
 
+### Rebasing a Stack
+
+When rebasing a branch that other branches are stacked on (e.g. phased `NN-description` chains), use `git rebase --update-refs` so the stacked branches follow the rewrite instead of being orphaned on the old commits. `--update-refs` moves **local** refs only — each moved branch that also exists on the remote still needs its own `--force-with-lease` push (after confirmation), and any branch checked out in another worktree is skipped. For the full conflict-resolution and safety workflow, use the `git-rebase-sync` skill.
+
 ## Conventional Commits
 
 Format: `type(scope): description`
