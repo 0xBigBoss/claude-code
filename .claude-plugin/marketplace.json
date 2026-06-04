@@ -11,6 +11,18 @@
   },
   "plugins": [
     {
+      "name": "typescript-best-practices",
+      "source": "./.claude/skills/typescript-best-practices",
+      "description": "Use when reading or writing TypeScript or JavaScript files (.ts, .tsx, .js, tsconfig.json)",
+      "version": "1.0.0",
+      "author": {
+        "name": "Allen",
+        "email": "bigboss@metalrodeo.xyz"
+      },
+      "keywords": ["typescript", "javascript", "best-practices"],
+      "category": "languages"
+    },
+    {
       "name": "ralph-reviewed",
       "source": "./plugins/ralph-reviewed",
       "description": "Iterative Ralph loops with Codex CLI review gates at completion",
