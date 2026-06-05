@@ -16,11 +16,18 @@ tilt get uiresources -o json | jq -r '.items[] | select(.status.runtimeStatus ==
 # 2. In-progress and pending — informational; an in-progress build may flip to error any moment
 tilt get uiresources -o json | jq -r '.items[] | select(.status.updateStatus == "in_progress" or .status.updateStatus == "pending" or .status.runtimeStatus == "pending") | "\(.metadata.name): runtime=\(.status.runtimeStatus) update=\(.status.updateStatus)"'
 
-# 3. Quick status overview
+# 3. Docker-compose container health — MISSED by the error filter above.
+#    An `Up (unhealthy)` compose container keeps runtimeStatus=ok/update=ok, so
+#    queries 1-2 never flag it; the red UI badge comes from healthStatus here.
+tilt get uiresources -o json | jq -r '.items[] | select(.status.composeResourceInfo.healthStatus == "unhealthy") | "\(.metadata.name): compose healthStatus=unhealthy (HEALTHCHECK failing — service may still be up)"'
+
+# 4. Quick status overview
 tilt get uiresources -o json | jq '[.items[].status.updateStatus] | group_by(.) | map({status: .[0], count: length})'
 ```
 
 If a resource is `in_progress` when you check, **re-poll** before declaring it healthy — it can transition straight to `error` with a populated `buildHistory[0].error`. The `updateStatus` field reflects only the *current* build attempt; the last error always lives in `buildHistory[0].error` even when `updateStatus` is `none` or `not_applicable`.
+
+**Docker-compose resources are a blind spot.** Their `runtimeStatus`/`updateStatus` reflect only build/up state, NOT the container's docker `HEALTHCHECK` — so a probe-failing container (`docker ps` → `Up (unhealthy)`) reads `runtimeStatus=ok` and slips past queries 1-2, while the Tilt UI still reddens it. The authoritative signal is `.status.composeResourceInfo.healthStatus` (`healthy` / `unhealthy` / absent when the service has no healthcheck), which query 3 catches. These resources also have `k8sResourceInfo: null` (`spec.type == "docker-compose"`); to find *why* a probe fails, drop to docker: `docker inspect <compose-project>-<svc> --format '{{json .State.Health}}'` reads the probe's last exit code + output. A common cause is the healthcheck script invoking a CLI the image doesn't ship (e.g. `curl`/`grpcurl` removed in slimmed images) — the service is fine, the probe is broken.
 
 ## Non-Default Ports
 
