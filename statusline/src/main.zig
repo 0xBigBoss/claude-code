@@ -74,22 +74,26 @@ const ModelType = enum {
     opus,
     sonnet,
     haiku,
+    fable,
     unknown,
 
     fn fromName(name: []const u8) ModelType {
         if (std.mem.indexOf(u8, name, "Opus") != null) return .opus;
         if (std.mem.indexOf(u8, name, "Sonnet") != null) return .sonnet;
         if (std.mem.indexOf(u8, name, "Haiku") != null) return .haiku;
+        if (std.mem.indexOf(u8, name, "Fable") != null) return .fable;
         return .unknown;
     }
 
     /// Emoji representation based on literal meaning
-    /// Opus = grand musical work (theater), Sonnet = poem (scroll), Haiku = nature poem (leaf)
+    /// Opus = grand musical work (theater), Sonnet = poem (scroll), Haiku = nature poem (leaf),
+    /// Fable = animal moral tale (fox, Aesop's storyteller)
     fn emoji(self: ModelType) []const u8 {
         return switch (self) {
             .opus => "🎭",
             .sonnet => "📜",
             .haiku => "🍃",
+            .fable => "🦊",
             .unknown => "?",
         };
     }
@@ -1025,6 +1029,8 @@ test "ModelType detects models correctly" {
     try std.testing.expectEqual(ModelType.sonnet, ModelType.fromName("Sonnet"));
     try std.testing.expectEqual(ModelType.haiku, ModelType.fromName("Claude Haiku"));
     try std.testing.expectEqual(ModelType.haiku, ModelType.fromName("Haiku"));
+    try std.testing.expectEqual(ModelType.fable, ModelType.fromName("Fable 5"));
+    try std.testing.expectEqual(ModelType.fable, ModelType.fromName("Fable"));
     try std.testing.expectEqual(ModelType.unknown, ModelType.fromName("GPT-4"));
 }
 
@@ -1032,6 +1038,7 @@ test "ModelType emoji representations" {
     try std.testing.expectEqualStrings("🎭", ModelType.opus.emoji());
     try std.testing.expectEqualStrings("📜", ModelType.sonnet.emoji());
     try std.testing.expectEqualStrings("🍃", ModelType.haiku.emoji());
+    try std.testing.expectEqualStrings("🦊", ModelType.fable.emoji());
     try std.testing.expectEqualStrings("?", ModelType.unknown.emoji());
 }
 
