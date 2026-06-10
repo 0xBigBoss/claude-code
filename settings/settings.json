@@ -134,7 +134,8 @@
     "gh-pulse-marketplace": { "source": { "source": "github", "repo": "0xbigboss/gh-pulse" } },
     "0xsend-rl": { "source": { "source": "github", "repo": "0xsend/rl" } },
     "linear-cli-marketplace": { "source": { "source": "github", "repo": "0xBigBoss/linear-cli" } },
-    "canton-keycloak-providers": { "source": { "source": "git", "url": "https://github.com/0xsend/canton-keycloak-providers.git" } }
+    "canton-keycloak-providers": { "source": { "source": "git", "url": "https://github.com/0xsend/canton-keycloak-providers.git" } },
+    "sox": { "source": { "source": "github", "repo": "0xsend/sox" } }
   },
   "enabledPlugins": {
     "canton-skills@0xsend-marketplace": true,
@@ -142,7 +143,8 @@
     "send-infra@send-infra-plugins": true,
     "rl@0xsend-rl": true,
     "canton-keycloak-skills@canton-keycloak-providers": true,
-    "typescript-lsp@claude-plugins-official": true
+    "typescript-lsp@claude-plugins-official": true,
+    "sox@sox": true
   },
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",
