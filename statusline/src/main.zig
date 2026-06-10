@@ -502,6 +502,51 @@ fn getLastPathSegment(path: []const u8) []const u8 {
     return path[start..end];
 }
 
+/// How many trailing path segments the branch name covers.
+/// 0 means no match: the branch carries information the path does not,
+/// so it earns its own bracket display. Non-zero means the path already
+/// shows the branch and the bracket can be dropped:
+///   - exact leaf: branch "main" in ".../main" -> 1
+///   - slash-aware: branch "bb/720-x" in ".../bb/720-x" -> 2
+///   - prefix-dropped worktree dir: branch "worktree-prf-x" in ".../prf-x" -> 1
+fn branchPathMatch(branch: []const u8, path: []const u8) usize {
+    if (branch.len == 0 or path.len == 0) return 0;
+
+    // Walk '/'-separated branch parts and path segments backward in lockstep;
+    // a full match means every branch part is mirrored by a trailing segment.
+    var b_it = std.mem.splitBackwardsScalar(u8, branch, '/');
+    var p_it = std.mem.splitBackwardsScalar(u8, path, '/');
+    var matched: usize = 0;
+    var full_match = true;
+    while (b_it.next()) |b_part| {
+        if (b_part.len == 0) {
+            full_match = false;
+            break;
+        }
+        // Skip empty path segments from trailing or doubled slashes
+        const p_part: ?[]const u8 = while (p_it.next()) |p| {
+            if (p.len > 0) break p;
+        } else null;
+        if (p_part == null or !std.mem.eql(u8, b_part, p_part.?)) {
+            full_match = false;
+            break;
+        }
+        matched += 1;
+    }
+    if (full_match) return matched;
+
+    // Worktree dirs often drop a branch prefix (dir "prf-x" for branch
+    // "worktree-prf-x"). Require a separator boundary so leaf "a-leaf"
+    // does not match branch "not-a-leaf"-style accidental suffixes.
+    const leaf = getLastPathSegment(path);
+    if (leaf.len > 0 and branch.len > leaf.len and std.mem.endsWith(u8, branch, leaf)) {
+        const sep = branch[branch.len - leaf.len - 1];
+        if (sep == '-' or sep == '/' or sep == '_') return 1;
+    }
+
+    return 0;
+}
+
 /// Abbreviate a git branch name intelligently
 /// Detects Linear issue format (e.g., SEND-77-description -> SEND-77)
 /// Otherwise uses smart compaction like path segments
@@ -544,7 +589,7 @@ fn abbreviateBranch(allocator: Allocator, branch: []const u8) ![]const u8 {
 /// Abbreviate a path segment intelligently
 fn abbreviateSegment(allocator: Allocator, segment: []const u8) ![]const u8 {
     if (segment.len <= 5) return try allocator.dupe(u8, segment);
-    
+
     // Check if segment contains separators
     if (std.mem.indexOfAny(u8, segment, "-_") == null) {
         // No separators, just take first few characters for very long names
@@ -554,7 +599,7 @@ fn abbreviateSegment(allocator: Allocator, segment: []const u8) ![]const u8 {
             return try allocator.dupe(u8, segment);
         }
     }
-    
+
     var result = try std.ArrayList(u8).initCapacity(allocator, 0);
 
     var parts = std.mem.splitAny(u8, segment, "-_");
@@ -594,13 +639,77 @@ fn formatPath(writer: anytype, path: []const u8) !void {
     }
 }
 
-/// Format path with intelligent shortening for statusline display
-/// If highlight_last is true, the last segment is colored green (indicates it's a branch name)
-fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8, highlight_last: bool) !void {
+/// Worktree plumbing directory names that carry no signal on the status
+/// line; runs of dropped segments collapse into a single "…".
+const plumbing_segments = [_][]const u8{ ".bare", ".claude", "worktrees", ".worktrees" };
+
+/// At most this many real segments render; deeper paths elide middles into
+/// "…". Branch-covered tail segments are never elided.
+const max_path_segments = 5;
+
+/// Backstop cap (display chars) for the zmx session name after leaf dedupe
+const max_zmx_display = 16;
+
+fn isPlumbingSegment(segment: []const u8) bool {
+    for (plumbing_segments) |p| {
+        if (std.mem.eql(u8, segment, p)) return true;
+    }
+    return false;
+}
+
+/// Fish-style compaction for non-leaf path segments: one character per
+/// '-'/'_'-separated part ("code" -> "c", "claude-code" -> "c-c").
+/// Middles are navigation context, not identity, so they crush harder than
+/// abbreviateSegment (which branch display still uses). Exceptions that keep
+/// segments recognizable: "0x" parts keep three chars (0xb, 0xs), a leading
+/// '.'/'_' stays attached to the first letter (.config -> .c, _work -> _w).
+fn fishSegment(allocator: Allocator, segment: []const u8) ![]const u8 {
+    if (segment.len == 0) return try allocator.dupe(u8, segment);
+
+    var result = try std.ArrayList(u8).initCapacity(allocator, 0);
+    errdefer result.deinit(allocator);
+
+    var rest = segment;
+    if (segment[0] == '.' or segment[0] == '_') {
+        try result.append(allocator, segment[0]);
+        rest = segment[1..];
+    }
+
+    var parts = std.mem.splitAny(u8, rest, "-_");
+    var first = true;
+    while (parts.next()) |part| {
+        if (part.len == 0) continue;
+
+        if (!first) try result.append(allocator, '-');
+
+        if (part.len >= 3 and std.mem.eql(u8, part[0..2], "0x")) {
+            try result.appendSlice(allocator, part[0..3]);
+        } else {
+            try result.append(allocator, part[0]);
+        }
+
+        first = false;
+    }
+
+    // Segment was all separators/punctuation; show it rather than nothing
+    if (result.items.len == 0 or rest.len == 0) {
+        result.deinit(allocator);
+        return try allocator.dupe(u8, segment);
+    }
+
+    return try result.toOwnedSlice(allocator);
+}
+
+/// Format path with intelligent shortening for statusline display.
+/// highlight_trailing is the number of trailing segments covered by the git
+/// branch (see branchPathMatch); they render full and green since they stand
+/// in for the branch display. 0 means no branch match (leaf still renders
+/// full, uncolored).
+fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8, highlight_trailing: usize) !void {
     const home = std.posix.getenv("HOME") orelse "";
     var display_path = path;
     var has_home = false;
-    
+
     if (std.mem.startsWith(u8, path, "~/")) {
         display_path = path[1..]; // Remove the "~" but keep the "/"
         has_home = true;
@@ -608,7 +717,7 @@ fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8, high
         display_path = path[home.len..];
         has_home = true;
     }
-    
+
     var segments = try std.ArrayList([]const u8).initCapacity(allocator, 0);
     defer segments.deinit(allocator);
 
@@ -618,41 +727,102 @@ fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8, high
             try segments.append(allocator, part);
         }
     }
-    
-    if (segments.items.len <= 3) {
-        if (has_home) try writer.print("~", .{});
-        // Print all but last segment, then last segment with optional highlight
-        for (segments.items, 0..) |segment, i| {
-            try writer.print("/", .{});
-            if (i == segments.items.len - 1 and highlight_last) {
-                try writer.print("{s}{s}{s}", .{ colors.green, segment, colors.cyan });
-            } else {
-                try writer.print("{s}", .{segment});
+
+    const n = segments.items.len;
+    if (has_home) try writer.print("~", .{});
+    if (n == 0) return;
+
+    // The tail (branch-covered segments, at minimum the leaf) always renders
+    // full and is exempt from plumbing/depth elision.
+    const keep_tail = @min(@max(highlight_trailing, 1), n);
+    const tail_start = n - keep_tail;
+
+    var keep = try allocator.alloc(bool, n);
+    defer allocator.free(keep);
+    @memset(keep, true);
+
+    // Short paths render untouched; elision only pays off at depth.
+    if (n > 3) {
+        for (segments.items[0..tail_start], 0..) |segment, i| {
+            if (isPlumbingSegment(segment)) keep[i] = false;
+        }
+
+        var kept: usize = 0;
+        for (keep) |k| kept += @intFromBool(k);
+
+        // Depth cap: drop middles oldest-first, but never the first segment
+        // (anchors where the path lives) or the tail.
+        if (kept > max_path_segments) {
+            var to_drop = kept - max_path_segments;
+            var i: usize = 1;
+            while (to_drop > 0 and i < tail_start) : (i += 1) {
+                if (keep[i]) {
+                    keep[i] = false;
+                    to_drop -= 1;
+                }
             }
         }
-        return;
     }
 
-    if (has_home) try writer.print("~", .{});
-
+    var elided = false;
     for (segments.items, 0..) |segment, i| {
+        if (!keep[i]) {
+            // Coalesce consecutive dropped segments into one ellipsis
+            if (!elided) try writer.print("/…", .{});
+            elided = true;
+            continue;
+        }
+        elided = false;
         try writer.print("/", .{});
 
-        if (i == segments.items.len - 1) {
-            // Last segment: full name, optionally highlighted
-            if (highlight_last) {
+        if (i >= tail_start) {
+            if (highlight_trailing > 0) {
                 try writer.print("{s}{s}{s}", .{ colors.green, segment, colors.cyan });
             } else {
                 try writer.print("{s}", .{segment});
             }
-        } else if (i == 0 and segment.len <= 10) {
+        } else if (n <= 3) {
             try writer.print("{s}", .{segment});
         } else {
-            const abbreviated = try abbreviateSegment(allocator, segment);
+            const abbreviated = try fishSegment(allocator, segment);
             defer allocator.free(abbreviated);
             try writer.print("{s}", .{abbreviated});
         }
     }
+}
+
+/// Strip a leading or trailing occurrence of the directory leaf (plus its
+/// joining separator) from a zmx session name. Session names are typically
+/// derived from the worktree directory, so the leaf is already on the line.
+/// Returns a slice of `session`; empty slice means the whole name was
+/// redundant. Middle occurrences are left alone (would need allocation).
+fn dedupeZmxSession(session: []const u8, leaf: []const u8) []const u8 {
+    if (leaf.len == 0 or session.len < leaf.len) return session;
+    if (std.mem.eql(u8, session, leaf)) return session[0..0];
+
+    // Separator boundary required so leaf "send-connect" does not eat into
+    // an unrelated session like "send-connector-x"
+    if (std.mem.startsWith(u8, session, leaf)) {
+        const sep = session[leaf.len];
+        if (sep == '-' or sep == '_' or sep == '.' or sep == ':') {
+            return session[leaf.len + 1 ..];
+        }
+    }
+    if (std.mem.endsWith(u8, session, leaf)) {
+        const sep = session[session.len - leaf.len - 1];
+        if (sep == '-' or sep == '_' or sep == '.' or sep == ':') {
+            return session[0 .. session.len - leaf.len - 1];
+        }
+    }
+    return session;
+}
+
+/// Truncate to at most max_len bytes without splitting a UTF-8 sequence
+fn truncateUtf8(s: []const u8, max_len: usize) []const u8 {
+    if (s.len <= max_len) return s;
+    var end = max_len;
+    while (end > 0 and (s[end] & 0xC0) == 0x80) end -= 1;
+    return s[0..end];
 }
 
 /// Check if directory is a git repository
@@ -868,29 +1038,29 @@ pub fn main() !void {
     if (current_dir == null) {
         try writer.print("~{s}", .{colors.reset});
     } else {
-        // Check git status first to determine if we should highlight the last path segment
+        // Check git status first to determine if we should highlight trailing path segments
         const is_git = isGitRepo(allocator, current_dir.?);
-        var branch_matches_path = false;
+        var branch_match: usize = 0;
         var branch: []const u8 = "";
         var owns_branch = false;
 
         if (is_git) {
             branch = try getGitBranch(allocator, current_dir.?);
             owns_branch = true;
-            const last_segment = getLastPathSegment(current_dir.?);
-            branch_matches_path = std.mem.eql(u8, branch, last_segment);
+            branch_match = branchPathMatch(branch, current_dir.?);
         }
         defer if (owns_branch) allocator.free(branch);
 
-        // Format path, highlighting last segment green if it matches branch name
-        try formatPathShort(allocator, writer, current_dir.?, branch_matches_path);
+        // Format path; branch-covered trailing segments render green in place
+        // of a bracket display
+        try formatPathShort(allocator, writer, current_dir.?, branch_match);
 
         // Handle git status display
         if (is_git) {
             const git_status = try getGitStatus(allocator, current_dir.?);
 
             // Determine what to show in brackets
-            const show_branch = !branch_matches_path and branch.len > 0;
+            const show_branch = branch_match == 0 and branch.len > 0;
             const has_status = !git_status.isEmpty();
 
             // Only show brackets if there's something to display
@@ -926,10 +1096,20 @@ pub fn main() !void {
         }
     }
 
-    // zmx session indicator
+    // zmx session indicator; session names usually embed the worktree leaf,
+    // which the path already shows, so strip it and cap what remains
     if (std.posix.getenv("ZMX_SESSION")) |zmx_session| {
         if (zmx_session.len > 0) {
-            try writer.print(" {s}zmx:{s}{s}", .{ colors.gray, zmx_session, colors.reset });
+            const leaf = if (current_dir) |dir| getLastPathSegment(dir) else "";
+            const deduped = dedupeZmxSession(zmx_session, leaf);
+            if (deduped.len == 0) {
+                // Whole name was the leaf; bare marker still signals "in a session"
+                try writer.print(" {s}zmx{s}", .{ colors.gray, colors.reset });
+            } else if (deduped.len > max_zmx_display) {
+                try writer.print(" {s}zmx:{s}…{s}", .{ colors.gray, truncateUtf8(deduped, max_zmx_display - 1), colors.reset });
+            } else {
+                try writer.print(" {s}zmx:{s}{s}", .{ colors.gray, deduped, colors.reset });
+            }
         }
     }
 
@@ -1268,7 +1448,7 @@ test "formatPathShort with long path" {
     var stream = std.io.fixedBufferStream(&buf);
     const writer = stream.writer();
 
-    try formatPathShort(allocator, writer, "/Users/test/0xbigboss/canton-network/canton-foundation/decentralized-canton-sync/token-standard", false);
+    try formatPathShort(allocator, writer, "/Users/test/0xbigboss/canton-network/canton-foundation/decentralized-canton-sync/token-standard", 0);
 
     const result = stream.getWritten();
     try std.testing.expect(result.len < 50);
@@ -1281,7 +1461,7 @@ test "formatPathShort with short path" {
     var stream = std.io.fixedBufferStream(&buf);
     const writer = stream.writer();
 
-    try formatPathShort(allocator, writer, "/home/user/project", false);
+    try formatPathShort(allocator, writer, "/home/user/project", 0);
     try std.testing.expectEqualStrings("/home/user/project", stream.getWritten());
 }
 
@@ -1291,11 +1471,171 @@ test "formatPathShort with highlighted last segment" {
     var stream = std.io.fixedBufferStream(&buf);
     const writer = stream.writer();
 
-    try formatPathShort(allocator, writer, "/home/user/feature-branch", true);
+    try formatPathShort(allocator, writer, "/home/user/feature-branch", 1);
     const result = stream.getWritten();
     // Should contain green color code before "feature-branch"
     try std.testing.expect(std.mem.indexOf(u8, result, colors.green) != null);
     try std.testing.expect(std.mem.indexOf(u8, result, "feature-branch") != null);
+}
+
+test "formatPathShort drops worktree plumbing segments" {
+    const allocator = std.testing.allocator;
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    // Real layout: <repo>.worktrees/.bare/.claude/worktrees/<leaf>
+    // The .bare/.claude/worktrees run coalesces into a single ellipsis
+    try formatPathShort(allocator, writer, "/Users/test/0xsend/canton-monorepo.worktrees/.bare/.claude/worktrees/prf-onboarding-hardening", 0);
+    try std.testing.expectEqualStrings("/U/t/0xs/c-m/…/prf-onboarding-hardening", stream.getWritten());
+}
+
+test "formatPathShort caps segment depth" {
+    const allocator = std.testing.allocator;
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    // 7 real segments, no plumbing: middles drop oldest-first to the cap,
+    // keeping the first segment as anchor
+    try formatPathShort(allocator, writer, "/Users/test/0xbigboss/canton-network/canton-foundation/decentralized-canton-sync/token-standard", 0);
+    try std.testing.expectEqualStrings("/U/…/c-n/c-f/d-c-s/token-standard", stream.getWritten());
+}
+
+test "formatPathShort highlights branch-covered tail segments" {
+    const allocator = std.testing.allocator;
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    // Branch "bb/720-testnet-enablement" covers the last two segments; both
+    // render full and green (no abbreviation of the branch display)
+    try formatPathShort(allocator, writer, "/Users/test/canton-data-api.worktrees/bb/720-testnet-enablement", 2);
+    const result = stream.getWritten();
+    const expected = "/U/t/c-d-a/" ++ colors.green ++ "bb" ++ colors.cyan ++ "/" ++ colors.green ++ "720-testnet-enablement" ++ colors.cyan;
+    try std.testing.expectEqualStrings(expected, result);
+}
+
+test "formatPathShort fish-style middles" {
+    const allocator = std.testing.allocator;
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const writer = stream.writer();
+
+    // Deep paths crush every middle to one char per part; leaf stays full
+    try formatPathShort(allocator, writer, "/0xbigboss/0xsend/some-repo/sub/leaf-dir", 0);
+    try std.testing.expectEqualStrings("/0xb/0xs/s-r/s/leaf-dir", stream.getWritten());
+}
+
+test "fishSegment function" {
+    const allocator = std.testing.allocator;
+
+    {
+        const result = try fishSegment(allocator, "code");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("c", result);
+    }
+
+    {
+        const result = try fishSegment(allocator, "claude-code");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("c-c", result);
+    }
+
+    // 0x prefix keeps three chars for recognizability
+    {
+        const result = try fishSegment(allocator, "0xbigboss");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("0xb", result);
+    }
+
+    {
+        const result = try fishSegment(allocator, "0xsend");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("0xs", result);
+    }
+
+    // Leading punctuation stays attached to the first letter
+    {
+        const result = try fishSegment(allocator, "_work");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("_w", result);
+    }
+
+    {
+        const result = try fishSegment(allocator, ".config");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings(".c", result);
+    }
+
+    // Dot is not a separator: suffix noise like ".worktrees" drops away
+    {
+        const result = try fishSegment(allocator, "canton-monorepo.worktrees");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("c-m", result);
+    }
+
+    // Degenerate all-separator segment passes through rather than vanishing
+    {
+        const result = try fishSegment(allocator, "_");
+        defer allocator.free(result);
+        try std.testing.expectEqualStrings("_", result);
+    }
+}
+
+test "branchPathMatch" {
+    // Exact leaf match
+    try std.testing.expectEqual(@as(usize, 1), branchPathMatch("main", "/home/user/main"));
+
+    // Slash-aware: branch covers trailing segments
+    try std.testing.expectEqual(@as(usize, 2), branchPathMatch("bb/720-testnet-enablement", "/u/r/bb/720-testnet-enablement"));
+
+    // Prefix-dropped worktree dir: branch ends with leaf at '-' boundary
+    try std.testing.expectEqual(@as(usize, 1), branchPathMatch("worktree-prf-onboarding-hardening", "/u/r/prf-onboarding-hardening"));
+
+    // No match: unrelated branch
+    try std.testing.expectEqual(@as(usize, 0), branchPathMatch("main", "/u/r/send-connect"));
+
+    // No match: slash parts diverge
+    try std.testing.expectEqual(@as(usize, 0), branchPathMatch("feature/x", "/u/feature/y"));
+
+    // Suffix without separator boundary is not a match
+    try std.testing.expectEqual(@as(usize, 0), branchPathMatch("xprf-onboarding", "/u/prf-onboarding"));
+
+    // Trailing slash on path is tolerated
+    try std.testing.expectEqual(@as(usize, 1), branchPathMatch("main", "/home/user/main/"));
+
+    // Empty inputs
+    try std.testing.expectEqual(@as(usize, 0), branchPathMatch("", "/u/r/x"));
+    try std.testing.expectEqual(@as(usize, 0), branchPathMatch("main", ""));
+}
+
+test "dedupeZmxSession" {
+    // Leaf at end: keep the prefix
+    try std.testing.expectEqualStrings("cm", dedupeZmxSession("cm-prf-onboarding-hardening", "prf-onboarding-hardening"));
+
+    // Leaf at start: keep the unique tail (disambiguates multiple sessions)
+    try std.testing.expectEqualStrings("dbe1-0", dedupeZmxSession("send-connect-dbe1-0", "send-connect"));
+
+    // Whole name is the leaf: nothing left
+    try std.testing.expectEqualStrings("", dedupeZmxSession("send-connect", "send-connect"));
+
+    // Boundary required: "send-connector" must not match leaf "send-connect"
+    try std.testing.expectEqualStrings("send-connector-x", dedupeZmxSession("send-connector-x", "send-connect"));
+
+    // Unrelated session name passes through
+    try std.testing.expectEqualStrings("other-session", dedupeZmxSession("other-session", "send-connect"));
+
+    // Empty leaf passes through
+    try std.testing.expectEqualStrings("any-session", dedupeZmxSession("any-session", ""));
+}
+
+test "truncateUtf8" {
+    try std.testing.expectEqualStrings("short", truncateUtf8("short", 16));
+    try std.testing.expectEqualStrings("exactly-16-chars", truncateUtf8("exactly-16-chars", 16));
+    try std.testing.expectEqualStrings("abcde", truncateUtf8("abcdefgh", 5));
+    // Multibyte: "héllo" is h(1) é(2) l l o — cutting at byte 2 would split é
+    try std.testing.expectEqualStrings("h", truncateUtf8("héllo", 2));
 }
 
 test "calculateContextUsageFromApi with API values" {
