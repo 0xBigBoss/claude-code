@@ -283,6 +283,16 @@ is_skill_dir() {
     [[ -f "$dir/SKILL.md" || -f "$dir/skill.md" ]]
 }
 
+# Skills with a Codex override are owned end-to-end by sync_codex_override_skills:
+# it copies, checks, and marks them synced. Upstream phases must skip them —
+# otherwise --check compares the override-shadowed destination against the
+# upstream source and reports perpetual false drift (the override exists
+# precisely to differ from upstream).
+has_codex_override() {
+    local skill_name="$1"
+    is_skill_dir "$CODEX_OVERRIDE_SKILLS_DIR/$skill_name"
+}
+
 sync_user_skills() {
     info "=== Syncing user skills ==="
 
@@ -299,6 +309,11 @@ sync_user_skills() {
 
         [[ "$skill_name" == "node_modules" ]] && continue
         [[ "$skill_name" == .* ]] && continue
+
+        if has_codex_override "$skill_name"; then
+            log "Skipping $skill_name (Codex override wins)"
+            continue
+        fi
 
         copy_dir "$skill_dir" "$CODEX_SKILLS_DIR/$skill_name"
         mark_synced_skill "$skill_name"
@@ -392,6 +407,10 @@ sync_plugin_skills() {
 
     while IFS=$'\t' read -r skill_name skill_dir; do
         [[ -n "$skill_name" && -n "$skill_dir" ]] || continue
+        if has_codex_override "$skill_name"; then
+            log "Skipping $skill_name (Codex override wins)"
+            continue
+        fi
         copy_dir "$skill_dir" "$CODEX_SKILLS_DIR/$skill_name"
         mark_synced_skill "$skill_name"
         count=$((count + 1))
