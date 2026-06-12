@@ -214,6 +214,39 @@ remove_path() {
     info "Removed: $path"
 }
 
+# Remove single-line Claude-only keys (allowed-tools) from the YAML frontmatter
+# block; Codex skill frontmatter does not support them. Only the block between
+# the leading "---" fences is touched, so body text mentioning allowed-tools
+# survives. Extend the pattern here if upstream adopts multi-line YAML lists.
+strip_claude_frontmatter() {
+    local file="$1"
+    local tmp
+    tmp="$(mktemp "${TMPDIR:-/tmp}/sync-codex-fm.XXXXXX")"
+    awk '
+        NR == 1 && $0 == "---"     { in_fm = 1; print; next }
+        in_fm && $0 == "---"       { in_fm = 0; print; next }
+        in_fm && /^allowed-tools:/ { next }
+        { print }
+    ' "$file" > "$tmp"
+    # cat-into rather than mv so the destination keeps its inode and mode bits
+    cat "$tmp" > "$file"
+    rm -f "$tmp"
+}
+
+# Copy a skill dir and apply the Codex frontmatter transform. All skill copies
+# go through here so --check can stage the same result and diff against it —
+# the transform can never drift between copy and check modes.
+stage_skill_dir() {
+    local src="$1"
+    local dest="$2"
+    cp -R "$src" "$dest"
+    local md
+    for md in "$dest/SKILL.md" "$dest/skill.md"; do
+        [[ -f "$md" ]] || continue
+        strip_claude_frontmatter "$md"
+    done
+}
+
 copy_dir() {
     local src="$1"
     local dest="$2"
@@ -226,11 +259,17 @@ copy_dir() {
             return 0
         fi
 
-        if ! diff -qr "$src" "$dest" >/dev/null 2>&1; then
+        # Stage the transformed copy and diff that, not the raw source —
+        # otherwise every skill with stripped frontmatter reads as drift.
+        local staged
+        staged="$(mktemp -d "${TMPDIR:-/tmp}/sync-codex-stage.XXXXXX")"
+        stage_skill_dir "$src" "$staged/skill"
+        if ! diff -qr "$staged/skill" "$dest" >/dev/null 2>&1; then
             mark_drift "directory content differs: $dest (source: $src)"
         else
             log "Up-to-date: $name"
         fi
+        rm -rf "$staged"
         return 0
     fi
 
@@ -242,7 +281,7 @@ copy_dir() {
     fi
 
     rm -rf "$dest"
-    cp -R "$src" "$dest"
+    stage_skill_dir "$src" "$dest"
     info "Copied: $name"
 }
 
