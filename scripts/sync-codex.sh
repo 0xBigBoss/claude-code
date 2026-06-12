@@ -239,7 +239,10 @@ strip_claude_frontmatter() {
 stage_skill_dir() {
     local src="$1"
     local dest="$2"
-    cp -R "$src" "$dest"
+    # -L dereferences symlinks: plugins ship docs as relative symlinks into a
+    # shared docs/ dir outside the skill, which would dangle once copied into
+    # the codex tree (and GNU diff flags the broken pair as perpetual drift).
+    cp -RL "$src" "$dest"
     local md
     for md in "$dest/SKILL.md" "$dest/skill.md"; do
         [[ -f "$md" ]] || continue
