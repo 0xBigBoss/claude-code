@@ -78,6 +78,7 @@ Best-practices skills in `.claude/skills/` are auto-loaded when the file context
 |-------|----------|
 | `atlas-best-practices` | Editing `atlas.hcl`, schema HCL/SQL, or planning Atlas migrations |
 | `axe-ios-simulator` | Driving the iOS Simulator via AXe (screenshots, accessibility, automation) |
+| `brief-best-practices` | Creating, reviewing, or updating `BRIEF.md` (the quality law for a surface) |
 | `canton-network-repos` | Working with Canton Network participants, Daml, or Splice |
 | `e2e` | Running, debugging, or fixing e2e tests |
 | `electrobun-best-practices` | Building Electrobun desktop apps |
