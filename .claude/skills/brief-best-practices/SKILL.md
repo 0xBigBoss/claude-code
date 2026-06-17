@@ -17,14 +17,14 @@ Author or update a brief when work will **loop** (you'll iterate against it more
 
 Always `BRIEF.md`, colocated with the surface it governs: root for project scope, `apps/foo/BRIEF.md`, `packages/bar/BRIEF.md`, or a docs subtree (e.g. `docs/toys/BRIEF.md`). Dated working memory lives **beside** the brief, never inside it — e.g. `DELTA.md` (per-round gaps, ranked) and `DEVIATIONS.md` (infeasible → nearest-feasible, logged). The brief is present-tense law; git is the changelog.
 
-## The seven slots (fixed shape, adaptable content)
+## The seven slots (required concerns, adaptable shape)
 
-The shape is the contract. Every brief has exactly these seven, in order. The *content* adapts to the domain (a payments flow, an indexer, a CLI, a 3D toy); the *slots* never change. Resist adding an eighth — every candidate addition folds into one of these.
+The contract is that all seven *concerns* are present, in this order — not a fixed `##`-count. The *content* adapts to the domain (a payments flow, an indexer, a CLI, a 3D toy); the *concerns* never change. A domain may split a concern across sections, or close with a culminating **"Final acceptance"** coda: one whole-surface test that restates the Boundary as a gate ("then the human ships it; the real gate is a user who…"). That coda is a framing of Boundary + Oracle, not an illegal eighth slot. The rule is *don't drop a concern* — not *don't add a heading*; still, keep sections as few as the content allows. **Absent a house dialect (see Authoring rules), these seven are the skeleton.**
 
 1. **Bar** — one sentence: what "shippable" means for this surface. The north-star "done."
 2. **Dimensions** — the few axes "good" decomposes into (correctness, idempotency, auditability, security, latency, recognizability…). Keep it short; these are the quality factors, not a feature list.
 3. **Floors** — the minimum on each dimension *with how it's measured* (a floor without a measurement method is useless: "p95 < 200ms, measured via X"). The gate, **not the ceiling** — passing the floor licenses ship, not perfection.
-4. **Oracle** — the independent verifier: what runs, who judges, and **why it can't be gamed** (maker ≠ judge; property tests; a fresh-context reviewer; a staging run against forked state). For live systems the oracle extends past ship into **telemetry** — the prod signals that confirm it stays good.
+4. **Oracle** — the independent verifier: what runs, who judges, and **why it can't be gamed** (maker ≠ judge). Pick the pattern that fits the surface: property tests or a staging run against forked state (objective surfaces); a **deterministic simulator over fixed golden/archetypal inputs** whose emitted trajectory a domain expert reads (pure engines — the inputs are fixed, so tuning to flatter one case visibly shifts the others); a **blind human-judge quorum** — fresh-context judges, ideally across vendors, naming the artifact with no context (subjective/taste surfaces, where no automated check can decide). For live systems the oracle extends past ship into **telemetry** — the prod signals that confirm it stays good.
 5. **Never** — outcomes that are always a fail regardless of everything else (the safety invariants / "never events"). Concrete and absolute.
 6. **Decisions** — calls already made, the **tradeoff/priority policy** ("security > latency; security can force a redesign, latency cannot"), and assumptions, so the agent never re-asks. This section **grows**: every answered question becomes a permanent entry. This is where mid-loop questions go to die.
 7. **Boundary** — what requires the human: publish, biometric, live secrets, and genuine unknowns. Naming it tells the agent exactly what it may and may not do unattended.
@@ -39,6 +39,7 @@ Open every brief with a one-line law statement, e.g.:
 
 ## Authoring rules
 
+- **Match the house first.** If the repo already has ratified briefs, copy *their* shape — section names, voice, any closing coda — over this skeleton. Consistency across the brief set beats the generic template; the seven concerns are the fallback when no house dialect exists yet. A reviewer judges a brief against the house dialect, and must not reject it for matching the repo's own law.
 - **Evidence-based.** Ground Dimensions and Floors in the real surface; cite reference exemplars. Do not invent thresholds, signals, or behaviors.
 - **The oracle must be independent.** Maker ≠ judge for any subjective dimension. Name *why* it can't be gamed — without independence the gate is theater.
 - **Floors are gates, not ceilings.** A passing artifact may still owe refinement; say so. Never weaken a floor to pass a gate — an infeasible item gets the nearest-feasible alternative plus a `DEVIATIONS.md` entry, and the gap stays on record.
@@ -63,5 +64,5 @@ The brief is inert until it runs:
 
 ## References
 
-- `template.md` — the blank seven-slot skeleton, copy-paste ready.
-- `example-payments.md` — a filled brief for a money-transfer flow, showing the seven slots on a high-stakes non-visual surface.
+- `template.md` — the blank seven-concern skeleton, copy-paste ready *when no house dialect exists yet*; if the repo already has briefs, mirror those instead.
+- `example-payments.md` — a filled brief for a money-transfer flow: the **objective** archetype, where floors are machine-checkable and the oracle is property tests + staging. The **subjective/taste** archetype — a visual or design surface whose bar is "elegant, calm, recognizable" and whose oracle is a blind human-judge quorum (maker ≠ judge) closing on a culminating "Final acceptance" frame — is the harder, more common product case; build its oracle from the blind-judge pattern in the Oracle slot.
