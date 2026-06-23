@@ -825,6 +825,69 @@ fn truncateUtf8(s: []const u8, max_len: usize) []const u8 {
     return s[0..end];
 }
 
+/// Strip the domain from a hostname: everything before the first dot
+/// (aem5.local -> aem5, host.lan.example -> host, build-7 -> build-7). Pure so
+/// the syscall wrapper below stays trivially testable.
+fn shortHostname(full: []const u8) []const u8 {
+    const dot = std.mem.indexOfScalar(u8, full, '.') orelse return full;
+    return full[0..dot];
+}
+
+/// Short hostname for the location prefix, backed by the gethostname(2) syscall
+/// (no subprocess cost, fits the low-latency guardrail). Returns "" on failure;
+/// callers treat an empty host as "skip the host token". `buf` must outlive the
+/// returned slice — it borrows from it.
+fn getShortHostname(buf: *[std.posix.HOST_NAME_MAX]u8) []const u8 {
+    const full = std.posix.gethostname(buf) catch return "";
+    return shortHostname(full);
+}
+
+/// Write the shell-prompt-style location prefix `host/session@` that sits in
+/// front of the path. Host is cyan (the machine must be unmistakable), the zmx
+/// session and the `@` joiner are gray. Pure formatting (no env / syscalls) so
+/// it is unit-testable. host=="" skips the host token; session=="" skips the
+/// session token (the leaf-dedupe collapsed it); the `/` separator only appears
+/// when a host precedes the session. The trailing gray `@` always joins to the
+/// path that follows. `truncated` appends an ellipsis to a capped session.
+/// Emits nothing when there is neither a host nor a session.
+fn writeLocationPrefix(writer: anytype, host: []const u8, session: []const u8, truncated: bool) !void {
+    if (host.len == 0 and session.len == 0) return;
+
+    if (host.len > 0) try writer.print("{s}{s}", .{ colors.cyan, host });
+    if (session.len > 0) {
+        const sep = if (host.len > 0) "/" else "";
+        try writer.print("{s}{s}{s}", .{ colors.gray, sep, session });
+        if (truncated) try writer.print("…", .{});
+    }
+    try writer.print("{s}@{s}", .{ colors.gray, colors.reset });
+}
+
+/// Resolve host + zmx session and render the location prefix. The zmx session
+/// is leaf-deduped against the worktree name already shown on the path (a
+/// session that just repeats the leaf collapses to nothing, leaving `host@`)
+/// and capped at max_zmx_display.
+fn renderLocationPrefix(writer: anytype, current_dir: ?[]const u8) !void {
+    var host_buf: [std.posix.HOST_NAME_MAX]u8 = undefined;
+    const host = getShortHostname(&host_buf);
+
+    var session: []const u8 = "";
+    var truncated = false;
+    if (std.posix.getenv("ZMX_SESSION")) |zmx| {
+        if (zmx.len > 0) {
+            const leaf = if (current_dir) |dir| getLastPathSegment(dir) else "";
+            const deduped = dedupeZmxSession(zmx, leaf);
+            if (deduped.len > max_zmx_display) {
+                session = truncateUtf8(deduped, max_zmx_display - 1);
+                truncated = true;
+            } else {
+                session = deduped;
+            }
+        }
+    }
+
+    try writeLocationPrefix(writer, host, session, truncated);
+}
+
 /// Check if directory is a git repository
 fn isGitRepo(allocator: Allocator, dir: []const u8) bool {
     var buf: [256]u8 = undefined;
@@ -1031,10 +1094,17 @@ pub fn main() !void {
     const writer = output_stream.writer();
 
     // Build statusline directly into the buffer
-    try writer.print("{s}", .{colors.cyan});
 
     // Handle workspace directory
     const current_dir = if (input.workspace) |ws| ws.current_dir else null;
+
+    // Shell-prompt-style location prefix `host/session@` in front of the path:
+    // host cyan (the machine you must not mistake), zmx session + `@` joiner
+    // gray. Folds "which host" and "which zmx session" into the location token.
+    try renderLocationPrefix(writer, current_dir);
+
+    // Path renders cyan, continuing from the prefix's reset.
+    try writer.print("{s}", .{colors.cyan});
     if (current_dir == null) {
         try writer.print("~{s}", .{colors.reset});
     } else {
@@ -1092,23 +1162,6 @@ pub fn main() !void {
                 defer allocator.free(git_root);
                 const git_head = getGitHead(allocator, current_dir.?);
                 try renderRlStatusline(allocator, writer, git_root, git_head);
-            }
-        }
-    }
-
-    // zmx session indicator; session names usually embed the worktree leaf,
-    // which the path already shows, so strip it and cap what remains
-    if (std.posix.getenv("ZMX_SESSION")) |zmx_session| {
-        if (zmx_session.len > 0) {
-            const leaf = if (current_dir) |dir| getLastPathSegment(dir) else "";
-            const deduped = dedupeZmxSession(zmx_session, leaf);
-            if (deduped.len == 0) {
-                // Whole name was the leaf; bare marker still signals "in a session"
-                try writer.print(" {s}zmx{s}", .{ colors.gray, colors.reset });
-            } else if (deduped.len > max_zmx_display) {
-                try writer.print(" {s}zmx:{s}…{s}", .{ colors.gray, truncateUtf8(deduped, max_zmx_display - 1), colors.reset });
-            } else {
-                try writer.print(" {s}zmx:{s}{s}", .{ colors.gray, deduped, colors.reset });
             }
         }
     }
@@ -1636,6 +1689,67 @@ test "truncateUtf8" {
     try std.testing.expectEqualStrings("abcde", truncateUtf8("abcdefgh", 5));
     // Multibyte: "héllo" is h(1) é(2) l l o — cutting at byte 2 would split é
     try std.testing.expectEqualStrings("h", truncateUtf8("héllo", 2));
+}
+
+test "shortHostname strips domain" {
+    try std.testing.expectEqualStrings("aem5", shortHostname("aem5.local"));
+    try std.testing.expectEqualStrings("host", shortHostname("host.lan.example.com"));
+    // No dot: passes through unchanged
+    try std.testing.expectEqualStrings("build-7", shortHostname("build-7"));
+    try std.testing.expectEqualStrings("", shortHostname(""));
+    // Leading dot: nothing before it
+    try std.testing.expectEqualStrings("", shortHostname(".local"));
+}
+
+test "writeLocationPrefix" {
+    var buf: [256]u8 = undefined;
+
+    // host + session: host cyan, /session and @ gray, path-bound reset
+    {
+        var stream = std.io.fixedBufferStream(&buf);
+        try writeLocationPrefix(stream.writer(), "aem5", "sox-1", false);
+        try std.testing.expectEqualStrings(
+            colors.cyan ++ "aem5" ++ colors.gray ++ "/sox-1" ++ colors.gray ++ "@" ++ colors.reset,
+            stream.getWritten(),
+        );
+    }
+
+    // host only (session collapsed by leaf-dedupe): host@ with no slash
+    {
+        var stream = std.io.fixedBufferStream(&buf);
+        try writeLocationPrefix(stream.writer(), "aem5", "", false);
+        try std.testing.expectEqualStrings(
+            colors.cyan ++ "aem5" ++ colors.gray ++ "@" ++ colors.reset,
+            stream.getWritten(),
+        );
+    }
+
+    // session only (hostname unavailable): no leading slash before the session
+    {
+        var stream = std.io.fixedBufferStream(&buf);
+        try writeLocationPrefix(stream.writer(), "", "sox-1", false);
+        try std.testing.expectEqualStrings(
+            colors.gray ++ "sox-1" ++ colors.gray ++ "@" ++ colors.reset,
+            stream.getWritten(),
+        );
+    }
+
+    // truncated session gets a trailing ellipsis (no extra color reissue)
+    {
+        var stream = std.io.fixedBufferStream(&buf);
+        try writeLocationPrefix(stream.writer(), "aem5", "verylongsession", true);
+        try std.testing.expectEqualStrings(
+            colors.cyan ++ "aem5" ++ colors.gray ++ "/verylongsession" ++ "…" ++ colors.gray ++ "@" ++ colors.reset,
+            stream.getWritten(),
+        );
+    }
+
+    // neither host nor session: emits nothing
+    {
+        var stream = std.io.fixedBufferStream(&buf);
+        try writeLocationPrefix(stream.writer(), "", "", false);
+        try std.testing.expectEqualStrings("", stream.getWritten());
+    }
 }
 
 test "calculateContextUsageFromApi with API values" {
