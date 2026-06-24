@@ -286,8 +286,12 @@ fn execCommand(allocator: Allocator, io: Io, command: []const u8, cwd: ?[]const 
     const result = try std.process.run(allocator, io, .{
         .argv = &argv,
         .cwd = if (cwd) |dir| .{ .path = dir } else .inherit,
-        .stdout_limit = .limited(4096),
-        .stderr_limit = .limited(4096),
+        // Unbounded capture matches the pre-0.16 readAllAlloc behavior: `git status
+        // --porcelain` in a large worktree easily exceeds a few KiB, and a total cap
+        // turns into error.StreamTooLong -> dropped git indicators (REQ-SL-015). The
+        // separate `rl statusline` call keeps its own 1 KiB cap (REQ-SL-082).
+        .stdout_limit = .unlimited,
+        .stderr_limit = .unlimited,
     });
     defer allocator.free(result.stdout);
     defer allocator.free(result.stderr);
