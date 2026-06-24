@@ -960,14 +960,20 @@ fn renderRlStatusline(
         argc += 1;
     }
 
+    // Capture stdout unbounded, then truncate the *emit* to 1 KiB (REQ-SL-082). A
+    // `.limited(1024)` stdout cap makes std.process.run return error.StreamTooLong, and
+    // the `catch return` then drops the ENTIRE rl segment whenever `rl statusline` emits
+    // more than 1 KiB. The pre-0.16 reader instead kept the first 1 KiB and drained the
+    // rest; this restores that "truncate, don't drop" behavior.
     const result = std.process.run(allocator, io, .{
         .argv = argv_buf[0..argc],
-        .stdout_limit = .limited(1024),
+        .stdout_limit = .unlimited,
         .stderr_limit = .limited(1024),
     }) catch return;
     defer allocator.free(result.stdout);
     defer allocator.free(result.stderr);
 
+    // Any stderr / non-zero exit collapses to "emit nothing" (REQ-SL-081).
     if (result.stderr.len != 0) return;
     switch (result.term) {
         .exited => |code| if (code != 0) return,
@@ -975,8 +981,19 @@ fn renderRlStatusline(
     }
     if (result.stdout.len == 0) return;
 
-    try writer.writeByte(' ');
-    try writer.writeAll(result.stdout);
+    // The whole statusline shares one fixed 1 KiB output buffer and the rl segment is
+    // the only unbounded one. Emit as much as fits, reserving room for the bounded
+    // trailing segments (zmx / model / gauge / cost / idle), so a large `rl statusline`
+    // payload renders truncated instead of being dropped wholesale (the prior
+    // error.StreamTooLong bug) or overrunning the buffer (error.WriteFailed). Writes are
+    // best-effort: a full line must never fail the whole render (I-2).
+    const trailing_reserve = 256;
+    const room = writer.unusedCapacityLen();
+    if (room <= trailing_reserve + 1) return;
+    const budget = room - trailing_reserve - 1; // -1 for the leading space
+    const emit = result.stdout[0..@min(result.stdout.len, budget)];
+    writer.writeByte(' ') catch return;
+    writer.writeAll(emit) catch return;
 }
 
 pub fn main(init: std.process.Init) !void {
