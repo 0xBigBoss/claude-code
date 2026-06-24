@@ -6,6 +6,8 @@
 const std = @import("std");
 const json = std.json;
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
+const Environ = std.process.Environ;
 
 /// ANSI color codes as a namespace
 const colors = struct {
@@ -273,27 +275,24 @@ fn readAllAlloc(allocator: Allocator, reader: *std.Io.Reader) ![]u8 {
     return aw.toOwnedSlice();
 }
 
+fn envValue(environ_map: ?*const Environ.Map, name: []const u8) []const u8 {
+    const map = environ_map orelse return "";
+    return map.get(name) orelse "";
+}
+
 /// Execute a shell command and return trimmed output
-fn execCommand(allocator: Allocator, command: [:0]const u8, cwd: ?[]const u8) ![]const u8 {
-    const argv = [_][:0]const u8{ "sh", "-c", command };
+fn execCommand(allocator: Allocator, io: Io, command: []const u8, cwd: ?[]const u8) ![]const u8 {
+    const argv = [_][]const u8{ "sh", "-c", command };
+    const result = try std.process.run(allocator, io, .{
+        .argv = &argv,
+        .cwd = if (cwd) |dir| .{ .path = dir } else .inherit,
+        .stdout_limit = .limited(4096),
+        .stderr_limit = .limited(4096),
+    });
+    defer allocator.free(result.stdout);
+    defer allocator.free(result.stderr);
 
-    var child = std.process.Child.init(&argv, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-    if (cwd) |dir| child.cwd = dir;
-
-    try child.spawn();
-
-    const stdout = child.stdout.?;
-    var stdout_buffer: [4096]u8 = undefined;
-    var stdout_reader = stdout.readerStreaming(&stdout_buffer);
-    const reader = &stdout_reader.interface;
-    const raw_output = try readAllAlloc(allocator, reader);
-    defer allocator.free(raw_output);
-
-    _ = try child.wait();
-
-    const trimmed = std.mem.trim(u8, raw_output, " \t\n\r");
+    const trimmed = std.mem.trim(u8, result.stdout, " \t\n\r");
     return allocator.dupe(u8, trimmed);
 }
 
@@ -326,26 +325,26 @@ fn calculateContextUsageFromApi(input: StatuslineInput) ContextUsage {
 /// Calculate context usage percentage from transcript file
 /// Parses the last assistant message to get current token counts
 /// Accounts for 22.5% autocompact buffer in effective context size
-fn calculateContextUsage(allocator: Allocator, transcript_path: ?[]const u8, context_window_size: ?i64) !ContextUsage {
+fn calculateContextUsage(allocator: Allocator, io: Io, transcript_path: ?[]const u8, context_window_size: ?i64) !ContextUsage {
     if (transcript_path == null) return ContextUsage{ .percentage = 0.0 };
 
-    var file = std.fs.cwd().openFile(transcript_path.?, .{}) catch {
+    var file = Io.Dir.cwd().openFile(io, transcript_path.?, .{}) catch {
         return ContextUsage{ .percentage = 0.0 };
     };
-    defer file.close();
+    defer file.close(io);
 
     // Get file size and seek to read only the last 512KB (enough for ~50 lines of JSON)
-    const stat = file.stat() catch return ContextUsage{ .percentage = 0.0 };
+    const stat = file.stat(io) catch return ContextUsage{ .percentage = 0.0 };
     const file_size = stat.size;
     const read_size: u64 = 512 * 1024; // 512KB should be plenty for last 50 lines
 
+    var file_buffer: [8192]u8 = undefined;
+    var file_reader = file.readerStreaming(io, &file_buffer);
     if (file_size > read_size) {
-        file.seekTo(file_size - read_size) catch return ContextUsage{ .percentage = 0.0 };
+        file_reader.seekTo(file_size - read_size) catch return ContextUsage{ .percentage = 0.0 };
     }
 
-    const content = file.readToEndAlloc(allocator, read_size + 1024) catch {
-        return ContextUsage{ .percentage = 0.0 };
-    };
+    const content = readAllAlloc(allocator, &file_reader.interface) catch return ContextUsage{ .percentage = 0.0 };
     defer allocator.free(content);
 
     // Find last assistant message with usage data (scan from end)
@@ -464,19 +463,20 @@ fn formatLinesChanged(input: StatuslineInput, writer: anytype) !bool {
 /// Read idle-since file for this session and write the indicator directly.
 /// Reads and formats in one call to avoid returning a dangling stack slice.
 /// Returns true if indicator was written, false if not idle or file missing.
-fn formatIdleSince(writer: anytype, session_id: ?[]const u8) !bool {
+fn formatIdleSince(io: Io, environ_map: ?*const Environ.Map, writer: anytype, session_id: ?[]const u8) !bool {
     const sid = session_id orelse return false;
     if (sid.len == 0) return false;
-    const home = std.posix.getenv("HOME") orelse return false;
+    const home = envValue(environ_map, "HOME");
+    if (home.len == 0) return false;
     var path_buf: [512]u8 = undefined;
     const path = std.fmt.bufPrint(&path_buf, "{s}/.claude/.idle-since-{s}", .{ home, sid }) catch return false;
 
-    const file = std.fs.cwd().openFile(path, .{}) catch return false;
-    defer file.close();
+    const file = Io.Dir.cwd().openFile(io, path, .{}) catch return false;
+    defer file.close(io);
 
     // File contains a short time string like "14:45\n"
     var buf: [32]u8 = undefined;
-    const bytes_read = file.read(&buf) catch return false;
+    const bytes_read = file.readStreaming(io, &.{&buf}) catch return false;
     if (bytes_read == 0) return false;
 
     const trimmed = std.mem.trim(u8, buf[0..bytes_read], " \t\n\r");
@@ -630,8 +630,7 @@ fn abbreviateSegment(allocator: Allocator, segment: []const u8) ![]const u8 {
 }
 
 /// Format path with home directory abbreviation and intelligent shortening
-fn formatPath(writer: anytype, path: []const u8) !void {
-    const home = std.posix.getenv("HOME") orelse "";
+fn formatPath(writer: anytype, path: []const u8, home: []const u8) !void {
     if (home.len > 0 and std.mem.startsWith(u8, path, home)) {
         try writer.print("~{s}", .{path[home.len..]});
     } else {
@@ -705,8 +704,7 @@ fn fishSegment(allocator: Allocator, segment: []const u8) ![]const u8 {
 /// branch (see branchPathMatch); they render full and green since they stand
 /// in for the branch display. 0 means no branch match (leaf still renders
 /// full, uncolored).
-fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8, highlight_trailing: usize) !void {
-    const home = std.posix.getenv("HOME") orelse "";
+fn formatPathShort(allocator: Allocator, writer: anytype, path: []const u8, home: []const u8, highlight_trailing: usize) !void {
     var display_path = path;
     var has_home = false;
 
@@ -866,22 +864,21 @@ fn writeLocationPrefix(writer: anytype, host: []const u8, session: []const u8, t
 /// is leaf-deduped against the worktree name already shown on the path (a
 /// session that just repeats the leaf collapses to nothing, leaving `host@`)
 /// and capped at max_zmx_display.
-fn renderLocationPrefix(writer: anytype, current_dir: ?[]const u8) !void {
+fn renderLocationPrefix(environ_map: ?*const Environ.Map, writer: anytype, current_dir: ?[]const u8) !void {
     var host_buf: [std.posix.HOST_NAME_MAX]u8 = undefined;
     const host = getShortHostname(&host_buf);
 
     var session: []const u8 = "";
     var truncated = false;
-    if (std.posix.getenv("ZMX_SESSION")) |zmx| {
-        if (zmx.len > 0) {
-            const leaf = if (current_dir) |dir| getLastPathSegment(dir) else "";
-            const deduped = dedupeZmxSession(zmx, leaf);
-            if (deduped.len > max_zmx_display) {
-                session = truncateUtf8(deduped, max_zmx_display - 1);
-                truncated = true;
-            } else {
-                session = deduped;
-            }
+    const zmx = envValue(environ_map, "ZMX_SESSION");
+    if (zmx.len > 0) {
+        const leaf = if (current_dir) |dir| getLastPathSegment(dir) else "";
+        const deduped = dedupeZmxSession(zmx, leaf);
+        if (deduped.len > max_zmx_display) {
+            session = truncateUtf8(deduped, max_zmx_display - 1);
+            truncated = true;
+        } else {
+            session = deduped;
         }
     }
 
@@ -889,53 +886,29 @@ fn renderLocationPrefix(writer: anytype, current_dir: ?[]const u8) !void {
 }
 
 /// Check if directory is a git repository
-fn isGitRepo(allocator: Allocator, dir: []const u8) bool {
-    var buf: [256]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buf);
-    const temp_alloc = fba.allocator();
-
-    const cmd = temp_alloc.dupeZ(u8, "git rev-parse --is-inside-work-tree") catch return false;
-
-    const result = execCommand(allocator, cmd, dir) catch return false;
+fn isGitRepo(allocator: Allocator, io: Io, dir: []const u8) bool {
+    const result = execCommand(allocator, io, "git rev-parse --is-inside-work-tree", dir) catch return false;
     defer allocator.free(result);
 
     return std.mem.eql(u8, result, "true");
 }
 
 /// Get current git branch name
-fn getGitBranch(allocator: Allocator, dir: []const u8) ![]const u8 {
-    var buf: [256]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buf);
-    const temp_alloc = fba.allocator();
-
-    const cmd = try temp_alloc.dupeZ(u8, "git symbolic-ref -q --short HEAD || git describe --tags --exact-match");
-
-    return execCommand(allocator, cmd, dir) catch try allocator.dupe(u8, "");
+fn getGitBranch(allocator: Allocator, io: Io, dir: []const u8) ![]const u8 {
+    return execCommand(allocator, io, "git symbolic-ref -q --short HEAD || git describe --tags --exact-match", dir) catch try allocator.dupe(u8, "");
 }
 
 /// Get git status information
-fn getGitStatus(allocator: Allocator, dir: []const u8) !GitStatus {
-    var buf: [256]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buf);
-    const temp_alloc = fba.allocator();
-
-    const cmd = try temp_alloc.dupeZ(u8, "git status --porcelain");
-
-    const output = execCommand(allocator, cmd, dir) catch return GitStatus{};
+fn getGitStatus(allocator: Allocator, io: Io, dir: []const u8) !GitStatus {
+    const output = execCommand(allocator, io, "git status --porcelain", dir) catch return GitStatus{};
     defer allocator.free(output);
 
     return GitStatus.parse(output);
 }
 
 /// Get git repository root directory
-fn getGitRoot(allocator: Allocator, dir: []const u8) !?[]const u8 {
-    var buf: [256]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buf);
-    const temp_alloc = fba.allocator();
-
-    const cmd = temp_alloc.dupeZ(u8, "git rev-parse --show-toplevel") catch return null;
-
-    const result = execCommand(allocator, cmd, dir) catch return null;
+fn getGitRoot(allocator: Allocator, io: Io, dir: []const u8) !?[]const u8 {
+    const result = execCommand(allocator, io, "git rev-parse --show-toplevel", dir) catch return null;
     if (result.len == 0) {
         allocator.free(result);
         return null;
@@ -946,12 +919,8 @@ fn getGitRoot(allocator: Allocator, dir: []const u8) !?[]const u8 {
 /// Run `git rev-parse HEAD` in `dir`. Returns empty string on any failure.
 /// Caller receives an allocator-owned slice; free with `allocator.free` or rely on arena.
 /// Callers treat empty-string as "HEAD unknown" and omit `--git-head`.
-fn getGitHead(allocator: Allocator, dir: []const u8) []const u8 {
-    var buf: [256]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buf);
-    const temp_alloc = fba.allocator();
-    const cmd = temp_alloc.dupeZ(u8, "git rev-parse HEAD") catch return "";
-    return execCommand(allocator, cmd, dir) catch "";
+fn getGitHead(allocator: Allocator, io: Io, dir: []const u8) []const u8 {
+    return execCommand(allocator, io, "git rev-parse HEAD", dir) catch "";
 }
 
 /// Delegate the rl loop segment to `rl statusline`.
@@ -961,6 +930,7 @@ fn getGitHead(allocator: Allocator, dir: []const u8) []const u8 {
 /// contract is verified against the real `rl` CLI, and the renderer stays fail-open.
 fn renderRlStatusline(
     allocator: Allocator,
+    io: Io,
     writer: anytype,
     git_root: []const u8,
     git_head: []const u8,
@@ -986,56 +956,40 @@ fn renderRlStatusline(
         argc += 1;
     }
 
-    var child = std.process.Child.init(argv_buf[0..argc], allocator);
-    child.stdin_behavior = .Ignore;
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
-    child.spawn() catch |err| switch (err) {
-        error.FileNotFound => return,
+    const result = std.process.run(allocator, io, .{
+        .argv = argv_buf[0..argc],
+        .stdout_limit = .limited(1024),
+        .stderr_limit = .limited(1024),
+    }) catch return;
+    defer allocator.free(result.stdout);
+    defer allocator.free(result.stderr);
+
+    if (result.stderr.len != 0) return;
+    switch (result.term) {
+        .exited => |code| if (code != 0) return,
         else => return,
-    };
-    errdefer _ = child.kill() catch {};
-
-    const stdout = child.stdout orelse {
-        _ = child.wait() catch {};
-        return;
-    };
-
-    var stdout_buf: [1024]u8 = undefined;
-    var stdout_len: usize = 0;
-    while (stdout_len < stdout_buf.len) {
-        const bytes_read = stdout.read(stdout_buf[stdout_len..]) catch break;
-        if (bytes_read == 0) break;
-        stdout_len += bytes_read;
     }
-
-    if (stdout_len == stdout_buf.len) {
-        var discard_buf: [256]u8 = undefined;
-        while (true) {
-            const bytes_read = stdout.read(&discard_buf) catch break;
-            if (bytes_read == 0) break;
-        }
-    }
-
-    _ = child.wait() catch {};
-    if (stdout_len == 0) return;
+    if (result.stdout.len == 0) return;
 
     try writer.writeByte(' ');
-    try writer.writeAll(stdout_buf[0..stdout_len]);
+    try writer.writeAll(result.stdout);
 }
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+
     // Use ArenaAllocator for better performance - free everything at once
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
     // Parse command line arguments
-    const args = try std.process.argsAlloc(allocator);
-    // No need to free - arena handles it
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, allocator);
+    defer args.deinit();
+    _ = args.skip();
 
     var debug_mode = false;
-    for (args[1..]) |arg| {
+    while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--debug")) {
             debug_mode = true;
         }
@@ -1043,19 +997,19 @@ pub fn main() !void {
 
     // Read and parse JSON input
     var stdin_buffer: [8192]u8 = undefined;
-    var stdin_reader = std.fs.File.stdin().readerStreaming(&stdin_buffer);
+    var stdin_reader = Io.File.stdin().readerStreaming(io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
     const input_json = try readAllAlloc(allocator, stdin);
 
     // Debug logging
     if (debug_mode) {
-        const debug_file = std.fs.cwd().createFile("/tmp/statusline-debug.log", .{ .truncate = false }) catch null;
+        const debug_file = Io.Dir.cwd().createFile(io, "/tmp/statusline-debug.log", .{ .truncate = false }) catch null;
         if (debug_file) |file| {
-            defer file.close();
-            file.seekFromEnd(0) catch {};
-            const timestamp = std.time.timestamp();
+            defer file.close(io);
+            const timestamp = Io.Clock.real.now(io).toSeconds();
             var file_buffer: [1024]u8 = undefined;
-            var file_writer = file.writerStreaming(&file_buffer);
+            var file_writer = file.writerStreaming(io, &file_buffer);
+            if (file.stat(io)) |stat| file_writer.seekTo(stat.size) catch {} else |_| {}
             const debug_writer = &file_writer.interface;
             debug_writer.print("[{d}] Input JSON: {s}\n", .{ timestamp, input_json }) catch {};
             debug_writer.flush() catch {};
@@ -1066,20 +1020,20 @@ pub fn main() !void {
         .ignore_unknown_fields = true,
     }) catch |err| {
         if (debug_mode) {
-            const debug_file = std.fs.cwd().createFile("/tmp/statusline-debug.log", .{ .truncate = false }) catch null;
+            const debug_file = Io.Dir.cwd().createFile(io, "/tmp/statusline-debug.log", .{ .truncate = false }) catch null;
             if (debug_file) |file| {
-                defer file.close();
-                file.seekFromEnd(0) catch {};
-                const timestamp = std.time.timestamp();
+                defer file.close(io);
+                const timestamp = Io.Clock.real.now(io).toSeconds();
                 var file_buffer: [1024]u8 = undefined;
-                var file_writer = file.writerStreaming(&file_buffer);
+                var file_writer = file.writerStreaming(io, &file_buffer);
+                if (file.stat(io)) |stat| file_writer.seekTo(stat.size) catch {} else |_| {}
                 const debug_writer = &file_writer.interface;
                 debug_writer.print("[{d}] Parse error: {any}\n", .{ timestamp, err }) catch {};
                 debug_writer.flush() catch {};
             }
         }
         var stdout_buffer: [256]u8 = undefined;
-        var stdout_writer_wrapper = std.fs.File.stdout().writer(&stdout_buffer);
+        var stdout_writer_wrapper = Io.File.stdout().writer(io, &stdout_buffer);
         const stdout = &stdout_writer_wrapper.interface;
         stdout.print("{s}~{s}\n", .{ colors.cyan, colors.reset }) catch {};
         stdout.flush() catch {};
@@ -1090,8 +1044,8 @@ pub fn main() !void {
 
     // Use a single buffer for the entire output
     var output_buf: [1024]u8 = undefined;
-    var output_stream = std.io.fixedBufferStream(&output_buf);
-    const writer = output_stream.writer();
+    var output_stream = Io.Writer.fixed(&output_buf);
+    const writer = &output_stream;
 
     // Build statusline directly into the buffer
 
@@ -1101,7 +1055,7 @@ pub fn main() !void {
     // Shell-prompt-style location prefix `host/session@` in front of the path:
     // host cyan (the machine you must not mistake), zmx session + `@` joiner
     // gray. Folds "which host" and "which zmx session" into the location token.
-    try renderLocationPrefix(writer, current_dir);
+    try renderLocationPrefix(init.environ_map, writer, current_dir);
 
     // Path renders cyan, continuing from the prefix's reset.
     try writer.print("{s}", .{colors.cyan});
@@ -1109,13 +1063,13 @@ pub fn main() !void {
         try writer.print("~{s}", .{colors.reset});
     } else {
         // Check git status first to determine if we should highlight trailing path segments
-        const is_git = isGitRepo(allocator, current_dir.?);
+        const is_git = isGitRepo(allocator, io, current_dir.?);
         var branch_match: usize = 0;
         var branch: []const u8 = "";
         var owns_branch = false;
 
         if (is_git) {
-            branch = try getGitBranch(allocator, current_dir.?);
+            branch = try getGitBranch(allocator, io, current_dir.?);
             owns_branch = true;
             branch_match = branchPathMatch(branch, current_dir.?);
         }
@@ -1123,11 +1077,11 @@ pub fn main() !void {
 
         // Format path; branch-covered trailing segments render green in place
         // of a bracket display
-        try formatPathShort(allocator, writer, current_dir.?, branch_match);
+        try formatPathShort(allocator, writer, current_dir.?, envValue(init.environ_map, "HOME"), branch_match);
 
         // Handle git status display
         if (is_git) {
-            const git_status = try getGitStatus(allocator, current_dir.?);
+            const git_status = try getGitStatus(allocator, io, current_dir.?);
 
             // Determine what to show in brackets
             const show_branch = branch_match == 0 and branch.len > 0;
@@ -1158,10 +1112,10 @@ pub fn main() !void {
 
         // Add rl loop segment if active (only in git repos)
         if (is_git) {
-            if (try getGitRoot(allocator, current_dir.?)) |git_root| {
+            if (try getGitRoot(allocator, io, current_dir.?)) |git_root| {
                 defer allocator.free(git_root);
-                const git_head = getGitHead(allocator, current_dir.?);
-                try renderRlStatusline(allocator, writer, git_root, git_head);
+                const git_head = getGitHead(allocator, io, current_dir.?);
+                try renderRlStatusline(allocator, io, writer, git_root, git_head);
             }
         }
     }
@@ -1186,7 +1140,7 @@ pub fn main() !void {
                 }
                 // Fall back to transcript parsing for older Claude Code versions
                 const context_size = if (input.context_window) |ctx| ctx.context_window_size else null;
-                break :blk try calculateContextUsage(allocator, input.transcript_path, context_size);
+                break :blk try calculateContextUsage(allocator, io, input.transcript_path, context_size);
             };
 
             // Gauge + model emoji (e.g., "██░ 🎭")
@@ -1228,20 +1182,20 @@ pub fn main() !void {
     }
 
     // Idle-since indicator (visible only when agent is waiting for input)
-    _ = try formatIdleSince(writer, input.session_id);
+    _ = try formatIdleSince(io, init.environ_map, writer, input.session_id);
 
     // Output the complete statusline at once
-    const output = output_stream.getWritten();
+    const output = output_stream.buffered();
 
     // Debug logging
     if (debug_mode) {
-        const debug_file = std.fs.cwd().createFile("/tmp/statusline-debug.log", .{ .truncate = false }) catch null;
+        const debug_file = Io.Dir.cwd().createFile(io, "/tmp/statusline-debug.log", .{ .truncate = false }) catch null;
         if (debug_file) |file| {
-            defer file.close();
-            file.seekFromEnd(0) catch {};
-            const timestamp = std.time.timestamp();
+            defer file.close(io);
+            const timestamp = Io.Clock.real.now(io).toSeconds();
             var file_buffer: [1024]u8 = undefined;
-            var file_writer = file.writerStreaming(&file_buffer);
+            var file_writer = file.writerStreaming(io, &file_buffer);
+            if (file.stat(io)) |stat| file_writer.seekTo(stat.size) catch {} else |_| {}
             const debug_writer = &file_writer.interface;
             debug_writer.print("[{d}] Output: {s}\n", .{ timestamp, output }) catch {};
             debug_writer.flush() catch {};
@@ -1249,7 +1203,7 @@ pub fn main() !void {
     }
 
     var stdout_buffer: [256]u8 = undefined;
-    var stdout_writer_wrapper = std.fs.File.stdout().writer(&stdout_buffer);
+    var stdout_writer_wrapper = Io.File.stdout().writer(io, &stdout_buffer);
     const stdout = &stdout_writer_wrapper.interface;
     stdout.print("{s}\n", .{output}) catch {};
     stdout.flush() catch {};
@@ -1335,11 +1289,10 @@ test "GitStatus empty" {
 
 test "formatPath basic functionality" {
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
-    try formatPath(writer, "/tmp/test/project");
-    try std.testing.expectEqualStrings("/tmp/test/project", stream.getWritten());
+    try formatPath(&writer, "/tmp/test/project", "");
+    try std.testing.expectEqualStrings("/tmp/test/project", writer.buffered());
 }
 
 test "JSON parsing with fixture data" {
@@ -1498,12 +1451,11 @@ test "getLastPathSegment function" {
 test "formatPathShort with long path" {
     const allocator = std.testing.allocator;
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
-    try formatPathShort(allocator, writer, "/Users/test/0xbigboss/canton-network/canton-foundation/decentralized-canton-sync/token-standard", 0);
+    try formatPathShort(allocator, &writer, "/Users/test/0xbigboss/canton-network/canton-foundation/decentralized-canton-sync/token-standard", "", 0);
 
-    const result = stream.getWritten();
+    const result = writer.buffered();
     try std.testing.expect(result.len < 50);
     try std.testing.expect(std.mem.indexOf(u8, result, "token-standard") != null);
 }
@@ -1511,21 +1463,19 @@ test "formatPathShort with long path" {
 test "formatPathShort with short path" {
     const allocator = std.testing.allocator;
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
-    try formatPathShort(allocator, writer, "/home/user/project", 0);
-    try std.testing.expectEqualStrings("/home/user/project", stream.getWritten());
+    try formatPathShort(allocator, &writer, "/home/user/project", "", 0);
+    try std.testing.expectEqualStrings("/home/user/project", writer.buffered());
 }
 
 test "formatPathShort with highlighted last segment" {
     const allocator = std.testing.allocator;
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
-    try formatPathShort(allocator, writer, "/home/user/feature-branch", 1);
-    const result = stream.getWritten();
+    try formatPathShort(allocator, &writer, "/home/user/feature-branch", "", 1);
+    const result = writer.buffered();
     // Should contain green color code before "feature-branch"
     try std.testing.expect(std.mem.indexOf(u8, result, colors.green) != null);
     try std.testing.expect(std.mem.indexOf(u8, result, "feature-branch") != null);
@@ -1534,37 +1484,34 @@ test "formatPathShort with highlighted last segment" {
 test "formatPathShort drops worktree plumbing segments" {
     const allocator = std.testing.allocator;
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
     // Real layout: <repo>.worktrees/.bare/.claude/worktrees/<leaf>
     // The .bare/.claude/worktrees run coalesces into a single ellipsis
-    try formatPathShort(allocator, writer, "/Users/test/0xsend/canton-monorepo.worktrees/.bare/.claude/worktrees/prf-onboarding-hardening", 0);
-    try std.testing.expectEqualStrings("/U/t/0xs/c-m/…/prf-onboarding-hardening", stream.getWritten());
+    try formatPathShort(allocator, &writer, "/Users/test/0xsend/canton-monorepo.worktrees/.bare/.claude/worktrees/prf-onboarding-hardening", "", 0);
+    try std.testing.expectEqualStrings("/U/t/0xs/c-m/…/prf-onboarding-hardening", writer.buffered());
 }
 
 test "formatPathShort caps segment depth" {
     const allocator = std.testing.allocator;
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
     // 7 real segments, no plumbing: middles drop oldest-first to the cap,
     // keeping the first segment as anchor
-    try formatPathShort(allocator, writer, "/Users/test/0xbigboss/canton-network/canton-foundation/decentralized-canton-sync/token-standard", 0);
-    try std.testing.expectEqualStrings("/U/…/c-n/c-f/d-c-s/token-standard", stream.getWritten());
+    try formatPathShort(allocator, &writer, "/Users/test/0xbigboss/canton-network/canton-foundation/decentralized-canton-sync/token-standard", "", 0);
+    try std.testing.expectEqualStrings("/U/…/c-n/c-f/d-c-s/token-standard", writer.buffered());
 }
 
 test "formatPathShort highlights branch-covered tail segments" {
     const allocator = std.testing.allocator;
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
     // Branch "bb/720-testnet-enablement" covers the last two segments; both
     // render full and green (no abbreviation of the branch display)
-    try formatPathShort(allocator, writer, "/Users/test/canton-data-api.worktrees/bb/720-testnet-enablement", 2);
-    const result = stream.getWritten();
+    try formatPathShort(allocator, &writer, "/Users/test/canton-data-api.worktrees/bb/720-testnet-enablement", "", 2);
+    const result = writer.buffered();
     const expected = "/U/t/c-d-a/" ++ colors.green ++ "bb" ++ colors.cyan ++ "/" ++ colors.green ++ "720-testnet-enablement" ++ colors.cyan;
     try std.testing.expectEqualStrings(expected, result);
 }
@@ -1572,12 +1519,11 @@ test "formatPathShort highlights branch-covered tail segments" {
 test "formatPathShort fish-style middles" {
     const allocator = std.testing.allocator;
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
     // Deep paths crush every middle to one char per part; leaf stays full
-    try formatPathShort(allocator, writer, "/0xbigboss/0xsend/some-repo/sub/leaf-dir", 0);
-    try std.testing.expectEqualStrings("/0xb/0xs/s-r/s/leaf-dir", stream.getWritten());
+    try formatPathShort(allocator, &writer, "/0xbigboss/0xsend/some-repo/sub/leaf-dir", "", 0);
+    try std.testing.expectEqualStrings("/0xb/0xs/s-r/s/leaf-dir", writer.buffered());
 }
 
 test "fishSegment function" {
@@ -1706,49 +1652,49 @@ test "writeLocationPrefix" {
 
     // host + session: host cyan, /session and @ gray, path-bound reset
     {
-        var stream = std.io.fixedBufferStream(&buf);
-        try writeLocationPrefix(stream.writer(), "aem5", "sox-1", false);
+        var writer = Io.Writer.fixed(&buf);
+        try writeLocationPrefix(&writer, "aem5", "sox-1", false);
         try std.testing.expectEqualStrings(
             colors.cyan ++ "aem5" ++ colors.gray ++ "/sox-1" ++ colors.gray ++ "@" ++ colors.reset,
-            stream.getWritten(),
+            writer.buffered(),
         );
     }
 
     // host only (session collapsed by leaf-dedupe): host@ with no slash
     {
-        var stream = std.io.fixedBufferStream(&buf);
-        try writeLocationPrefix(stream.writer(), "aem5", "", false);
+        var writer = Io.Writer.fixed(&buf);
+        try writeLocationPrefix(&writer, "aem5", "", false);
         try std.testing.expectEqualStrings(
             colors.cyan ++ "aem5" ++ colors.gray ++ "@" ++ colors.reset,
-            stream.getWritten(),
+            writer.buffered(),
         );
     }
 
     // session only (hostname unavailable): no leading slash before the session
     {
-        var stream = std.io.fixedBufferStream(&buf);
-        try writeLocationPrefix(stream.writer(), "", "sox-1", false);
+        var writer = Io.Writer.fixed(&buf);
+        try writeLocationPrefix(&writer, "", "sox-1", false);
         try std.testing.expectEqualStrings(
             colors.gray ++ "sox-1" ++ colors.gray ++ "@" ++ colors.reset,
-            stream.getWritten(),
+            writer.buffered(),
         );
     }
 
     // truncated session gets a trailing ellipsis (no extra color reissue)
     {
-        var stream = std.io.fixedBufferStream(&buf);
-        try writeLocationPrefix(stream.writer(), "aem5", "verylongsession", true);
+        var writer = Io.Writer.fixed(&buf);
+        try writeLocationPrefix(&writer, "aem5", "verylongsession", true);
         try std.testing.expectEqualStrings(
             colors.cyan ++ "aem5" ++ colors.gray ++ "/verylongsession" ++ "…" ++ colors.gray ++ "@" ++ colors.reset,
-            stream.getWritten(),
+            writer.buffered(),
         );
     }
 
     // neither host nor session: emits nothing
     {
-        var stream = std.io.fixedBufferStream(&buf);
-        try writeLocationPrefix(stream.writer(), "", "", false);
-        try std.testing.expectEqualStrings("", stream.getWritten());
+        var writer = Io.Writer.fixed(&buf);
+        try writeLocationPrefix(&writer, "", "", false);
+        try std.testing.expectEqualStrings("", writer.buffered());
     }
 }
 
@@ -1798,57 +1744,55 @@ test "calculateContextUsageFromApi with API values" {
 
 test "calculateContextUsage returns zero with no transcript" {
     const allocator = std.testing.allocator;
-    const usage = try calculateContextUsage(allocator, null, 200000);
+    const usage = try calculateContextUsage(allocator, std.testing.io, null, 200000);
     try std.testing.expectEqual(@as(f64, 0.0), usage.percentage);
 }
 
 test "formatCost function with rounding" {
     var buf: [64]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
     // Test < $1: shows 2 decimals
     const input_low = StatuslineInput{
         .cost = .{ .total_cost_usd = 0.45 },
     };
-    _ = try formatCost(input_low, writer);
-    try std.testing.expectEqualStrings("$0.45", stream.getWritten());
+    _ = try formatCost(input_low, &writer);
+    try std.testing.expectEqualStrings("$0.45", writer.buffered());
 
     // Test $1-$10: shows 1 decimal
-    stream.reset();
+    writer.end = 0;
     const input_mid = StatuslineInput{
         .cost = .{ .total_cost_usd = 5.67 },
     };
-    _ = try formatCost(input_mid, writer);
-    try std.testing.expectEqualStrings("$5.7", stream.getWritten());
+    _ = try formatCost(input_mid, &writer);
+    try std.testing.expectEqualStrings("$5.7", writer.buffered());
 
     // Test >= $10: rounds to whole dollars
-    stream.reset();
+    writer.end = 0;
     const input_high = StatuslineInput{
         .cost = .{ .total_cost_usd = 54.16 },
     };
-    _ = try formatCost(input_high, writer);
-    try std.testing.expectEqualStrings("$54", stream.getWritten());
+    _ = try formatCost(input_high, &writer);
+    try std.testing.expectEqualStrings("$54", writer.buffered());
 
     // Test negligible cost returns false
-    stream.reset();
+    writer.end = 0;
     const input_negligible = StatuslineInput{
         .cost = .{ .total_cost_usd = 0.0001 },
     };
-    const result_negligible = try formatCost(input_negligible, writer);
+    const result_negligible = try formatCost(input_negligible, &writer);
     try std.testing.expect(!result_negligible);
 
     // Test no cost returns false
-    stream.reset();
+    writer.end = 0;
     const input_no_cost = StatuslineInput{};
-    const result_no_cost = try formatCost(input_no_cost, writer);
+    const result_no_cost = try formatCost(input_no_cost, &writer);
     try std.testing.expect(!result_no_cost);
 }
 
 test "formatLinesChanged function" {
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
     // Test with both added and removed
     const input_both = StatuslineInput{
@@ -1857,28 +1801,28 @@ test "formatLinesChanged function" {
             .total_lines_removed = 25,
         },
     };
-    const result = try formatLinesChanged(input_both, writer);
+    const result = try formatLinesChanged(input_both, &writer);
     try std.testing.expect(result);
     // Should contain +150 and -25 with color codes
-    const output = stream.getWritten();
+    const output = writer.buffered();
     try std.testing.expect(std.mem.indexOf(u8, output, "+150") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "-25") != null);
 
     // Test with zeros
-    stream.reset();
+    writer.end = 0;
     const input_zeros = StatuslineInput{
         .cost = .{
             .total_lines_added = 0,
             .total_lines_removed = 0,
         },
     };
-    const result_zeros = try formatLinesChanged(input_zeros, writer);
+    const result_zeros = try formatLinesChanged(input_zeros, &writer);
     try std.testing.expect(!result_zeros);
 
     // Test with no cost
-    stream.reset();
+    writer.end = 0;
     const input_no_cost = StatuslineInput{};
-    const result_no_cost = try formatLinesChanged(input_no_cost, writer);
+    const result_no_cost = try formatLinesChanged(input_no_cost, &writer);
     try std.testing.expect(!result_no_cost);
 }
 
@@ -2021,25 +1965,23 @@ test "current_usage field fallback when missing" {
 
 test "formatIdleSince returns false without session_id" {
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
-    const result_null = try formatIdleSince(writer, null);
+    const result_null = try formatIdleSince(std.testing.io, null, &writer, null);
     try std.testing.expect(!result_null);
-    try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
+    try std.testing.expectEqual(@as(usize, 0), writer.buffered().len);
 
-    const result_empty = try formatIdleSince(writer, "");
+    const result_empty = try formatIdleSince(std.testing.io, null, &writer, "");
     try std.testing.expect(!result_empty);
-    try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
+    try std.testing.expectEqual(@as(usize, 0), writer.buffered().len);
 }
 
 test "formatIdleSince returns false for missing file" {
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const writer = stream.writer();
+    var writer = Io.Writer.fixed(&buf);
 
     // Nonexistent session ID -> file won't exist -> returns false
-    const result = try formatIdleSince(writer, "nonexistent-session-id-12345");
+    const result = try formatIdleSince(std.testing.io, null, &writer, "nonexistent-session-id-12345");
     try std.testing.expect(!result);
-    try std.testing.expectEqual(@as(usize, 0), stream.getWritten().len);
+    try std.testing.expectEqual(@as(usize, 0), writer.buffered().len);
 }
