@@ -960,26 +960,61 @@ fn renderRlStatusline(
         argc += 1;
     }
 
-    // Capture stdout unbounded, then truncate the *emit* to 1 KiB (REQ-SL-082). A
-    // `.limited(1024)` stdout cap makes std.process.run return error.StreamTooLong, and
-    // the `catch return` then drops the ENTIRE rl segment whenever `rl statusline` emits
-    // more than 1 KiB. The pre-0.16 reader instead kept the first 1 KiB and drained the
-    // rest; this restores that "truncate, don't drop" behavior.
-    const result = std.process.run(allocator, io, .{
+    var child = std.process.spawn(io, .{
         .argv = argv_buf[0..argc],
-        .stdout_limit = .unlimited,
-        .stderr_limit = .limited(1024),
+        .stdin = .ignore,
+        .stdout = .pipe,
+        .stderr = .pipe,
     }) catch return;
-    defer allocator.free(result.stdout);
-    defer allocator.free(result.stderr);
+    defer child.kill(io);
+
+    const stdout = child.stdout orelse return;
+    const stderr = child.stderr orelse return;
+
+    var multi_reader_buffer: Io.File.MultiReader.Buffer(2) = undefined;
+    var multi_reader: Io.File.MultiReader = undefined;
+    multi_reader.init(allocator, io, multi_reader_buffer.toStreams(), &.{ stdout, stderr });
+    defer multi_reader.deinit();
+
+    const stdout_reader = multi_reader.reader(0);
+    const stderr_reader = multi_reader.reader(1);
+
+    // Bound the rl capture itself to 1 KiB (I-5 / REQ-SL-082). Keep the first bytes,
+    // then keep draining both pipes so oversized stdout truncates instead of
+    // deadlocking or allocating in proportion to child output.
+    var stdout_buf: [1024]u8 = undefined;
+    var stdout_len: usize = 0;
+    var saw_stderr = false;
+    while (multi_reader.fill(1, .none)) |_| {
+        const stdout_buffered = stdout_reader.buffered();
+        if (stdout_buffered.len > 0) {
+            const available = stdout_buf.len - stdout_len;
+            const n = @min(stdout_buffered.len, available);
+            if (n > 0) {
+                @memcpy(stdout_buf[stdout_len..][0..n], stdout_buffered[0..n]);
+                stdout_len += n;
+            }
+            stdout_reader.tossBuffered();
+        }
+
+        if (stderr_reader.buffered().len > 0) {
+            saw_stderr = true;
+            stderr_reader.tossBuffered();
+        }
+    } else |err| switch (err) {
+        error.EndOfStream => {},
+        else => return,
+    }
+    multi_reader.checkAnyError() catch return;
 
     // Any stderr / non-zero exit collapses to "emit nothing" (REQ-SL-081).
-    if (result.stderr.len != 0) return;
-    switch (result.term) {
+    if (saw_stderr) return;
+    const term = child.wait(io) catch return;
+    switch (term) {
         .exited => |code| if (code != 0) return,
         else => return,
     }
-    if (result.stdout.len == 0) return;
+    if (stdout_len == 0) return;
 
     // The whole statusline shares one fixed 1 KiB output buffer and the rl segment is
     // the only unbounded one. Emit as much as fits, reserving room for the bounded
@@ -991,7 +1026,7 @@ fn renderRlStatusline(
     const room = writer.unusedCapacityLen();
     if (room <= trailing_reserve + 1) return;
     const budget = room - trailing_reserve - 1; // -1 for the leading space
-    const emit = result.stdout[0..@min(result.stdout.len, budget)];
+    const emit = stdout_buf[0..@min(stdout_len, budget)];
     writer.writeByte(' ') catch return;
     writer.writeAll(emit) catch return;
 }
