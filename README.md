@@ -156,7 +156,7 @@ zig build -Doptimize=ReleaseFast
 # binary lands at statusline/zig-out/bin/statusline
 ```
 
-Point Claude Code at it by setting `statusLine.command` in `~/.claude/settings.json` (the baseline already does this). Minimum Zig: `0.15.1`. See `statusline/CLAUDE.md` and `statusline/SPEC.md` for build, runtime contract, and design notes.
+Point Claude Code at it by setting `statusLine.command` in `~/.claude/settings.json` (the baseline already does this). Minimum Zig: `0.16.0`. See `statusline/CLAUDE.md` and `statusline/SPEC.md` for build, runtime contract, and design notes.
 
 ## Scripts
 

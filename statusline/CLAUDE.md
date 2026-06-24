@@ -39,5 +39,5 @@ zig build -Doptimize=ReleaseFast
 
 ## Environment
 
-- Minimum Zig version: `0.15.1`
+- Minimum Zig version: `0.16.0`
 - No external runtime dependencies beyond POSIX shell tooling already used by the code.

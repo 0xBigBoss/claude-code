@@ -267,7 +267,7 @@ const GitStatus = struct {
     }
 };
 
-/// Read all content from a reader (replacement for readAllAlloc in Zig 0.15.1)
+/// Read all content from a reader (replacement for readAllAlloc, removed in Zig 0.16)
 fn readAllAlloc(allocator: Allocator, reader: *std.Io.Reader) ![]u8 {
     var aw: std.Io.Writer.Allocating = .init(allocator);
     defer aw.deinit();
